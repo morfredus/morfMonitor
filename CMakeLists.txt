@@ -29,6 +29,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # --- Qt : generation automatique du moc (classes QObject) -----------------
 set(CMAKE_AUTOMOC ON)
+# AUTORCC : compile resources/web.qrc (assets de l'interface Web) dans le
+# binaire. Fourni par Qt Core — n'introduit aucune dependance Qt Widgets.
+set(CMAKE_AUTORCC ON)
 
 # Core + Network : serveur HTTP entrant, client HTTP sortant, JSON. Ajouter
 # ici les modules Qt dont le METIER a besoin (SerialPort, Sql, ...).
@@ -46,6 +49,7 @@ endif()
 # --- Bibliotheque ---------------------------------------------------------
 # >>> A ADAPTER : ajouter/retirer ici les sources de VOS modules metier. <<<
 add_library(morfMonitor STATIC
+    resources/web.qrc                     # interface Web (assets embarques)
     src/ModuleRegistry.cpp
     src/HttpServer.cpp
     src/Service.cpp

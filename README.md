@@ -33,6 +33,42 @@ Plus the framework routes: `GET /status` (morfBeacon-compatible), `/healthz`,
 The API is deliberately independent of any interface: it serves a TFT screen, a
 browser, a Qt application and an ESP32 equally well.
 
+## Web interface
+
+morfMonitor serves a web interface at `/`, on the **same port as the API**.
+
+It is not a second service, and not a second collection: it is a **second view
+of the same data**. The page is served as inert assets — no server-side
+templating, no injected values — and fetches `/api/all` and `/status` exactly
+like any other client. RaspberryDashboard and the browser read the same routes.
+
+| Page | Question it answers |
+|---|---|
+| État général | Machine identity, uptime, service health, anomaly summary |
+| Ressources | CPU, memory, load, swap, storage, processes |
+| Réseau | Interfaces, IPv4/IPv6, MAC, link state |
+| Services morfSystem | systemd units and network probes being supervised |
+| Écosystème | Services discovered over morfBeacon, with version and last heartbeat |
+| Diagnostic | Detected anomalies, last reboot cause, shared configuration state |
+
+The two interfaces answer different questions, which is why both exist:
+
+> The OLED screen answers **"is everything alright?"**. The web interface
+> answers **"why?"**, and gives access to everything needed to diagnose it.
+
+Set `"web_enabled": false` to serve the JSON routes only.
+
+**Exposure.** The interface inherits `bind_address`, which defaults to
+`0.0.0.0` — every network interface on the machine. On a multi-homed or exposed
+host, set the LAN address instead. There is no authentication: the trust model
+is the local network, consistent with the ecosystem's LAN-only design.
+
+The diagnostic page deliberately exposes **no raw log viewer**. It reports
+anomalies derived from data the API already returns. Surfacing journald output
+would broaden the exposure profile well beyond metrics — log lines can quote
+paths, configuration values and, in error messages, credentials handled by other
+services. That remains a separate decision.
+
 ## Shared configuration
 
 morfMonitor and RaspberryDashboard read **the same file**,

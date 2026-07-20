@@ -19,8 +19,18 @@
 #include <QJsonParseError>
 #include <QDateTime>
 #include <QUrl>
+#include <QFile>
 
 #include <utility>
+
+// Les ressources Qt embarquees dans une bibliotheque STATIQUE ne s'enregistrent
+// pas toutes seules : l'editeur de liens ecarte l'initialiseur global de
+// qrc_web.cpp puisque rien ne le reference. Sans cet appel explicite, le binaire
+// compile et demarre normalement, mais ":/web/index.html" reste introuvable et
+// l'interface Web repond 500. L'appel doit vivre hors de tout namespace projet.
+static void morfmonitorInitWebResources() {
+    Q_INIT_RESOURCE(web);
+}
 
 namespace morfmonitor {
 
@@ -46,6 +56,7 @@ HttpServer::HttpServer(ServiceConfig config, ModuleRegistry* registry, QObject* 
       m_config(std::move(config)),
       m_registry(registry),
       m_server(new QTcpServer(this)) {
+    morfmonitorInitWebResources();
     connect(m_server, &QTcpServer::newConnection, this, &HttpServer::onNewConnection);
 }
 
@@ -171,6 +182,9 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
         const QJsonObject o = m_registry ? m_registry->moduleJson(id, &found) : QJsonObject{};
         if (found) { out = toJson(o); }
         else { code = 404; reason = "Not Found"; out = "{\"error\":\"module not found\"}"; }
+    } else if (serveWebAsset(sock, path)) {
+        // Interface Web servie : la reponse est deja partie.
+        return;
     } else {
         code = 404; reason = "Not Found";
         out = "{\"error\":\"not found\"}";
@@ -206,10 +220,40 @@ QByteArray HttpServer::buildStatusJson() const {
     return toJson(o);
 }
 
-void HttpServer::reply(QTcpSocket* sock, int code, const QByteArray& reason, const QByteArray& body) {
+bool HttpServer::serveWebAsset(QTcpSocket* sock, const QByteArray& path) {
+    if (!m_config.webEnabled)
+        return false;
+
+    // Table close : seuls ces trois chemins sont servis. Pas de traversee de
+    // repertoire possible, puisque rien n'est construit a partir de l'URL.
+    struct Asset { const char* route; const char* file; const char* type; };
+    static const Asset kAssets[] = {
+        { "/",           ":/web/index.html", "text/html; charset=utf-8" },
+        { "/index.html", ":/web/index.html", "text/html; charset=utf-8" },
+        { "/styles.css", ":/web/styles.css", "text/css; charset=utf-8" },
+        { "/app.js",     ":/web/app.js",     "application/javascript; charset=utf-8" },
+    };
+
+    for (const Asset& a : kAssets) {
+        if (path != a.route)
+            continue;
+        QFile f(QString::fromLatin1(a.file));
+        if (!f.open(QIODevice::ReadOnly)) {
+            reply(sock, 500, "Internal Server Error",
+                  "{\"error\":\"asset embarque illisible\"}");
+            return true;
+        }
+        reply(sock, 200, "OK", f.readAll(), a.type);
+        return true;
+    }
+    return false;
+}
+
+void HttpServer::reply(QTcpSocket* sock, int code, const QByteArray& reason, const QByteArray& body,
+                       const QByteArray& contentType) {
     QByteArray resp;
     resp += "HTTP/1.1 " + QByteArray::number(code) + " " + reason + "\r\n";
-    resp += "Content-Type: application/json; charset=utf-8\r\n";
+    resp += "Content-Type: " + contentType + "\r\n";
     resp += "Content-Length: " + QByteArray::number(body.size()) + "\r\n";
     resp += "Access-Control-Allow-Origin: *\r\n";
     resp += "Connection: close\r\n\r\n";

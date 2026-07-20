@@ -1,0 +1,22 @@
+<!--
+  Assets de l'interface Web, embarques dans le binaire.
+
+  Le service est un demon systemd deploye par copie : embarquer evite un
+  repertoire d'assets a installer, a versionner et a maintenir synchronise avec
+  l'executable. Qt Core suffit (aucune dependance Qt Widgets n'est introduite),
+  ce qui preserve la garantie « morfMonitor n'affiche rien » au niveau du build.
+
+  Les sources vivent dans web_src/, conformement a la convention de l'ecosysteme
+  (GatewayLab, MeteoHub) : web_src/ contient ce qui est ECRIT, web/ ce qui est
+  GENERE. Le .gitignore exclut d'ailleurs web/ — y placer les sources les
+  ferait disparaitre au premier clone. morfMonitor n'a pas d'etape de
+  minification : il n'y a donc pas de web/ du tout, et le .qrc lit directement
+  les sources.
+-->
+<RCC>
+  <qresource prefix="/web">
+    <file alias="index.html">../web_src/index.html</file>
+    <file alias="styles.css">../web_src/styles.css</file>
+    <file alias="app.js">../web_src/app.js</file>
+  </qresource>
+</RCC>

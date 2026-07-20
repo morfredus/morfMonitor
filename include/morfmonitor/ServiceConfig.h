@@ -42,6 +42,11 @@ struct ServiceConfig {
     quint16 httpPort    = 8790;                      // 0 => pas de serveur HTTP
     QString bindAddress = QStringLiteral("0.0.0.0");
 
+    // Interface Web (seconde vue des memes donnees, servie sur le meme port).
+    // A false, seules les routes JSON repondent : le service redevient une API
+    // pure, sans qu'aucune autre configuration ne change.
+    bool    webEnabled  = true;
+
     // Annonce de presence sur le LAN via morfBeacon.
     bool    beaconEnabled    = true;
     quint16 beaconUdpPort    = 45454;                // port du parc morfSystem
@@ -56,6 +61,7 @@ struct ServiceConfig {
         if (root.contains("instance_id"))  c.instanceId  = root.value("instance_id").toString();
         if (root.contains("http_port"))    c.httpPort    = static_cast<quint16>(root.value("http_port").toInt(c.httpPort));
         if (root.contains("bind_address")) c.bindAddress = root.value("bind_address").toString(c.bindAddress);
+        if (root.contains("web_enabled"))  c.webEnabled  = root.value("web_enabled").toBool(c.webEnabled);
 
         const QJsonObject beacon = root.value("beacon").toObject();
         if (beacon.contains("enabled"))     c.beaconEnabled    = beacon.value("enabled").toBool(c.beaconEnabled);

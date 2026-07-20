@@ -5,6 +5,48 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
+### Ajouté
+
+- **Interface Web, servie à la racine sur le même port que l'API.** L'ajout de
+  services à l'écosystème dépasse ce qu'un écran embarqué peut montrer :
+  RaspberryDashboard reste la vue synthétique, l'interface Web devient la vue
+  détaillée. Six pages organisées par domaine — état général, ressources,
+  réseau, services morfSystem, écosystème, diagnostic — plutôt qu'une liste de
+  métriques sans structure.
+
+  L'écran OLED répond à « est-ce que tout va bien ? ». L'interface Web répond à
+  « pourquoi ? ».
+
+- **La vue Web est un client de l'API publique, pas un initié.** Les pages sont
+  servies comme des fichiers inertes : aucun gabarit, aucune donnée injectée
+  côté serveur. Elles lisent `/api/all` et `/status` exactement comme le fait
+  RaspberryDashboard.
+
+  Cette contrainte n'est pas cosmétique. morfMonitor annonce « il n'affiche
+  rien » : sa responsabilité est de collecter et d'exposer. Tant que la vue Web
+  reste cliente de l'API, elle n'est qu'une **seconde vue** — extractible vers
+  un projet séparé sans réécriture, si elle devait un jour le devenir. Le jour
+  où elle lirait `MonitorModule` directement, cette propriété serait perdue en
+  silence.
+
+- Drapeau `web_enabled` (défaut `true`). À `false`, seules les routes JSON
+  répondent : le service redevient une API pure sans autre changement.
+
+- Les métriques absentes d'une plateforme (CPU, mémoire, charge et température
+  viennent de `/proc` et `/sys`, donc de Linux) affichent un message nommant
+  **ce qui manque et pourquoi**, au lieu d'une case vide ou d'un `0` qui se
+  lirait comme une mesure.
+
+### Corrigé
+
+- **La configuration d'exemple déclarait un module `example`, inconnu de la
+  fabrique de morfMonitor** — un résidu du gabarit, jamais adapté au clonage.
+  Seul le type `monitor` est reconnu. Toute personne copiant
+  `morfmonitor.example.json` obtenait donc un service qui démarre normalement,
+  annonce sa présence sur le LAN, mais dont **chaque route `/api/` répond 503
+  « aucun module de supervision actif »**. Le défaut se manifestait à
+  l'exécution seulement, et le service paraissait sain vu de l'extérieur.
+
 ### Modifié
 
 - **Le plan d'adressage du parc quitte ce projet.** Le champ `_comment_port` de

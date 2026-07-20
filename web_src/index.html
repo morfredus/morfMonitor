@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<!--
+  morfMonitor - interface Web
+  Copyright (C) 2026 morfredus
+  SPDX-License-Identifier: GPL-3.0-only
+
+  Page INERTE : aucune donnee n'est injectee ici par le serveur. Tout le contenu
+  est recupere par app.js depuis les routes /api/ publiques, exactement comme le
+  ferait RaspberryDashboard ou n'importe quel autre client.
+-->
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>morfMonitor</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="site-hdr">
+    <span class="site-name">morfMonitor</span>
+    <span class="site-ver" id="hdr-version">…</span>
+    <span class="site-tag" id="hdr-host">…</span>
+    <span class="badge badge-off" id="conn-state">connexion…</span>
+  </header>
+
+  <nav id="nav">
+    <button data-page="etat"       class="active">État général</button>
+    <button data-page="ressources">Ressources</button>
+    <button data-page="reseau">Réseau</button>
+    <button data-page="services">Services morfSystem</button>
+    <button data-page="ecosysteme">Écosystème</button>
+    <button data-page="diagnostic">Diagnostic</button>
+  </nav>
+
+  <!-- « Est-ce que tout va bien ? » — la meme question que l'ecran OLED,
+       avec la place d'y repondre en detail. -->
+  <section class="page active" id="page-etat">
+    <div class="grid">
+      <div class="card" id="c-machine"></div>
+      <div class="card" id="c-sante"></div>
+      <div class="card" id="c-apercu"></div>
+    </div>
+  </section>
+
+  <section class="page" id="page-ressources">
+    <div class="grid" id="c-ressources"></div>
+  </section>
+
+  <section class="page" id="page-reseau">
+    <div class="grid">
+      <div class="card span-all" id="c-interfaces"></div>
+    </div>
+  </section>
+
+  <section class="page" id="page-services">
+    <div class="grid">
+      <div class="card span-all" id="c-systemd"></div>
+      <div class="card span-all" id="c-probes"></div>
+    </div>
+  </section>
+
+  <section class="page" id="page-ecosysteme">
+    <div class="grid">
+      <div class="card span-all" id="c-beacon"></div>
+    </div>
+  </section>
+
+  <!-- « Pourquoi ? » — la question a laquelle l'ecran embarque ne peut pas
+       repondre faute de place. -->
+  <section class="page" id="page-diagnostic">
+    <div class="grid">
+      <div class="card span-all" id="c-anomalies"></div>
+      <div class="card" id="c-reboot"></div>
+      <div class="card" id="c-config"></div>
+    </div>
+  </section>
+
+  <footer>
+    <span>morfMonitor — supervision de la machine et des services morfSystem</span>
+    <span>Vue Web des mêmes données que <a href="/api/all">/api/all</a></span>
+    <span id="foot-refresh">—</span>
+  </footer>
+
+</div>
+<script src="/app.js"></script>
+</body>
+</html>
