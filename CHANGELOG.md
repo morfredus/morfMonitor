@@ -3,6 +3,12 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [Non publié]
+
+### Modifié
+
+- Guide de création de service mis à jour avec les noms canoniques des projets.
+
 ## [0.1.0] – 2026-07-20
 
 ### Corrigé

@@ -10,7 +10,7 @@
         powershell -ExecutionPolicy Bypass -File scripts\new-service.ps1 <nom> <NomCamel> [dest]
     Exemple :
         ... new-service.ps1 morfwatch morfWatch
-          -> cree ..\morfWatch
+          -> cree ..\morfWatch_travail
 #>
 param(
     [Parameter(Mandatory=$true)][string]$Lower,
@@ -21,7 +21,7 @@ $ErrorActionPreference = "Stop"
 $Upper = $Lower.ToUpper()
 
 $root = Split-Path -Parent $PSScriptRoot
-if (-not $Dest) { $Dest = Join-Path (Split-Path -Parent $root) "${Camel}" }
+if (-not $Dest) { $Dest = Join-Path (Split-Path -Parent $root) "${Camel}_travail" }
 if (Test-Path $Dest) { throw "Destination deja existante : $Dest" }
 
 Write-Host "Template : $root"

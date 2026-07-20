@@ -12,7 +12,7 @@
 #     scripts/new-service.sh <nom> <NomCamel> [dossier_destination]
 # Exemple :
 #     scripts/new-service.sh morfwatch morfWatch
-#       -> cree ../morfWatch, pret a compiler, ou coder le metier.
+#       -> cree ../morfWatch_travail, pret a compiler, ou coder le metier.
 
 set -euo pipefail
 
@@ -26,7 +26,7 @@ UPPER="$(echo "$LOWER" | tr '[:lower:]' '[:upper:]')"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-DEST="${3:-$(cd "$ROOT/.." && pwd)/${CAMEL}}"
+DEST="${3:-$(cd "$ROOT/.." && pwd)/${CAMEL}_travail}"
 
 if [[ -e "$DEST" ]]; then
     echo "Destination deja existante : $DEST" >&2

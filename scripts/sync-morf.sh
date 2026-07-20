@@ -25,11 +25,11 @@ sync_one() {
 }
 
 # morfMonitor n'embarque que morfBeacon. Le dépôt source peut s'appeler
-# « morfBeacon » ou « morfBeacon » : on prend le premier trouvé.
+# « morfBeacon » ou « morfBeacon_travail » : on prend le premier trouvé.
 if [ -d "$SRC_BASE/morfBeacon" ]; then
   BEACON_SRC="$SRC_BASE/morfBeacon"
 else
-  BEACON_SRC="$SRC_BASE/morfBeacon"
+  BEACON_SRC="$SRC_BASE/morfBeacon_travail"
 fi
 
 sync_one morfBeacon "$BEACON_SRC" "$ROOT/third_party/morf/beacon"
