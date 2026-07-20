@@ -111,6 +111,27 @@ if [[ $NO_CONFIG -eq 0 && -f "$EXAMPLE_FILE" ]]; then
         else
             rm -f "$BACKUP"
         fi
+
+        # La fusion ajoute ce qui MANQUE ; elle ne corrige pas une valeur deja
+        # presente devenue invalide. Un module dont le type a disparu de la
+        # fabrique reste donc en place, et le service demarre sans rien
+        # superviser. Cette verification ne modifie rien : elle constate, pour
+        # que la mise a jour ne laisse pas derriere elle un service muet.
+        if [[ -f "$SCRIPT_DIR/check-config.py" ]]; then
+            echo
+            if python3 "$SCRIPT_DIR/check-config.py" "$CONFIG_FILE" \
+                    --binary "$APP_DIR/morfmonitor" --example "$EXAMPLE_FILE"; then
+                :
+            else
+                echo
+                echo "La configuration deployee ne permettra pas au service de collecter."
+                echo "Inspecter puis corriger :"
+                echo "    sudo $SCRIPT_DIR/config-tool.sh diff"
+                echo "    sudo $SCRIPT_DIR/config-tool.sh reset"
+                echo "La mise a jour se poursuit : ce diagnostic ne modifie rien."
+            fi
+            echo
+        fi
     else
         echo "python3 absent : configuration non completee (voir $EXAMPLE_FILE)." >&2
     fi

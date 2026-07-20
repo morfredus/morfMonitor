@@ -37,6 +37,36 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
   **ce qui manque et pourquoi**, au lieu d'une case vide ou d'un `0` qui se
   lirait comme une mesure.
 
+### Ajouté
+
+- **`scripts/linux/config-tool.sh` : gestion à la demande de la configuration
+  déployée.** L'installation et la mise à jour ne remplacent jamais
+  `morfmonitor.json` — il porte des réglages locaux irrécupérables. C'est la
+  bonne règle, mais elle laissait un angle mort : `merge-config.py` ajoute les
+  clés apparues depuis l'installation, il ne corrige pas une valeur **déjà
+  présente devenue invalide**.
+
+  C'est précisément ce qui s'est produit : la configuration déployée déclarait
+  encore un module `example`, la clé `modules` existait donc la fusion n'y
+  touchait pas, et le service tournait en répondant 503 partout. Le nouveau
+  binaire était bien copié ; la configuration, elle, restait figée.
+
+  Réconcilier une valeur existante ne peut pas être automatique — seul
+  l'utilisateur sait si une valeur est un réglage voulu ou un résidu. L'outil
+  rend donc l'opération explicite : `status`, `check`, `diff`, `merge`
+  (ajout seul), `reset` (remplacement, confirmation requise). Toute écriture est
+  précédée d'une sauvegarde datée. Vocabulaire aligné sur
+  `morfTools/shared-config.sh`.
+
+- **`scripts/linux/check-config.py` : diagnostic d'une configuration déployée.**
+  Il interroge le binaire lui-même (`--list-types`) plutôt que de coder en dur
+  les types valides : la vérification reste juste quand la fabrique évolue. Il
+  signale un type de module inconnu, une absence totale de module exploitable,
+  les clés manquantes et l'exposition réseau. Il ne modifie rien.
+
+  `update-service.sh` l'exécute après chaque mise à jour : une configuration
+  périmée s'annonce désormais au lieu d'être découverte par un service muet.
+
 ### Corrigé
 
 - **Les avertissements et les erreurs n'atteignaient jamais le journal.**

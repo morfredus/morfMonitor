@@ -79,6 +79,38 @@ precisely so that neither C++ nor Python is privileged.
 It replaces the `SERVICE_LABELS`, `NETWORK_SERVICES` and `BEACON_APPS`
 structures previously hard-coded in the Dashboard.
 
+## Managing the deployed configuration
+
+Installing and updating **never overwrite** the deployed `morfmonitor.json` — it
+holds local settings that cannot be reconstructed. `update-service.sh` adds keys
+that appeared since installation, without changing any existing value.
+
+That rule leaves one blind spot: a value that is **already present but has
+become invalid** is never corrected. A module whose type disappeared from the
+factory stays in place, and the service then starts, listens and announces
+itself on the LAN while supervising nothing — every `/api/` route answering 503.
+
+Reconciling an existing value cannot be automatic: only the operator knows
+whether a value is a deliberate setting or a leftover. `config-tool.sh` makes it
+explicit instead, and every write is preceded by a dated backup.
+
+```bash
+./scripts/linux/config-tool.sh status      # where it is, and is it usable
+./scripts/linux/config-tool.sh check       # detailed diagnosis
+./scripts/linux/config-tool.sh diff        # deployed vs repository example
+sudo ./scripts/linux/config-tool.sh merge  # add missing keys only
+sudo ./scripts/linux/config-tool.sh reset  # replace entirely (confirmation required)
+```
+
+`check` asks the binary itself which module types are valid (`--list-types`), so
+the diagnosis stays correct as the factory evolves. It reports rather than
+repairs, and `update-service.sh` runs it after every update so a stale
+configuration announces itself instead of being discovered through a silent
+service.
+
+`merge` is the safe default. `reset` discards local settings and asks for
+explicit confirmation; use `--yes` only for scripted reprovisioning.
+
 ## Reboot cause
 
 Not all reboots are alike: a power cut does not call for the same reaction as an
