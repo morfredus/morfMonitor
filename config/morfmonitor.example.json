@@ -1,0 +1,24 @@
+{
+  "_comment": "Configuration morfMonitor. Copier en 'morfmonitor.json' et adapter. Le service la lit via --config, ou la cherche dans le dossier courant, a cote du binaire, ou dans /etc/morfmonitor/.",
+
+  "app_name": "morfMonitor",
+  "_comment_port": "Port HTTP de morfMonitor. 8799 appartient a morfAnalytics : ne pas le reprendre. Ports du parc : 8080 morfSync, 8788 morfSensor, 8790 morfMonitor, 8799 morfAnalytics.",
+  "http_port": 8790,
+  "bind_address": "0.0.0.0",
+
+  "beacon": {
+    "_comment": "Annonce de presence sur le LAN (protocole morfBeacon, port du parc).",
+    "enabled": true,
+    "udp_port": 45454,
+    "interval_ms": 15000
+  },
+
+  "modules": [
+    {
+      "_comment": "Module de demonstration (a remplacer par vos modules metier).",
+      "type": "example",
+      "id": "example-1",
+      "period_ms": 5000
+    }
+  ]
+}

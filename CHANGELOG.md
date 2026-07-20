@@ -1,0 +1,108 @@
+# Journal des versions — morfMonitor
+
+Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
+et du [versionnage sémantique](https://semver.org/lang/fr/).
+
+## [0.1.0] – 2026-07-20
+
+### Corrigé
+
+- **Collision de port avec morfAnalytics.** Le clone avait hérité du port
+  **8799** du modèle, déjà attribué à morfAnalytics. Une fois morfMonitor
+  installé en service, il prenait le port au démarrage et morfAnalytics ne
+  pouvait plus écouter : il sortait en erreur et systemd le relançait en
+  boucle — **249 redémarrages** constatés. morfMonitor écoute désormais sur
+  **8790**, et le fichier d'exemple rappelle l'attribution des ports du parc
+  (8080 morfSync, 8788 morfSensor, 8790 morfMonitor, 8799 morfAnalytics).
+- **Réglages fantômes dans la configuration partagée.** `monitor.http_port`,
+  `monitor.bind_address` et `monitor.cache_ttl_ms` y étaient lus mais **jamais
+  utilisés** : le port réel vient de la configuration propre au service. Ils
+  affichaient 8790 alors que le service écoutait sur 8799, ce qui a masqué la
+  collision. Un réglage qui ne règle rien est pire qu'un réglage absent : ils
+  sont supprimés, et le fichier partagé décrit désormais uniquement **ce qui est
+  supervisé**, pas la manière dont chaque service écoute.
+- **La configuration n'était lue qu'au démarrage.** Un service lancé avant que
+  `/etc/morfsystem/morfsystem.json` existe — ordre de démarrage, installation en
+  cours — restait aveugle jusqu'à son prochain redémarrage : il répondait
+  correctement, mais ne supervisait rien, ce qui est le pire des deux mondes.
+  Le chargement est désormais retenté tant qu'il n'a pas abouti, et les caches
+  bâtis sur une configuration vide sont invalidés dès qu'elle arrive.
+
+  Constaté en conditions réelles : le service avait démarré à 04:00, le fichier
+  partagé a été créé à 04:13, et morfMonitor ne l'a jamais vu.
+
+### Ajouté
+
+- **Première version de morfMonitor**, la source unique de vérité sur l'état
+  d'une machine. Il collecte, maintient en cache et expose en JSON ; il
+  n'affiche rien. Créé à partir de morfTemplateService, dont il ne subsiste
+  aucune référence.
+- **Collecte système** (`GET /api/system`) : nom d'hôte, OS, noyau,
+  architecture, modèle de machine, uptime, heure de démarrage.
+- **Collecte des ressources** (`GET /api/resources`) : taux et fréquence CPU,
+  charge, mémoire, swap, disque, températures CPU et GPU, et **bits de bridage**
+  du Raspberry Pi (sous-tension, limite thermique) — le diagnostic le plus utile
+  d'une machine instable, absent partout ailleurs.
+- **Collecte réseau** (`GET /api/network`) : interfaces, IPv4, IPv6, adresse
+  MAC, état. Les adresses lien-local sont écartées : elles encombrent sans
+  informer.
+- **Supervision** (`GET /api/services`) : services systemd, sondes TCP des
+  équipements non-systemd (un ESP32 ne répond pas à `systemctl`), et
+  applications découvertes par heartbeat morfBeacon. Les applications entendues
+  mais **non déclarées** sont listées et marquées comme telles : c'est un outil
+  de découverte qui indique quoi ajouter à la configuration.
+- **Cause du dernier redémarrage** (`GET /api/reboot`) : distingue redémarrage
+  demandé, mise à jour, coupure d'alimentation, panique noyau, chien de garde et
+  démarrage propre, en croisant les traces d'arrêt du journal précédent, le
+  journal de paquets et les messages du noyau. Chaque réponse porte un degré de
+  **confiance** et l'**indice** retenu ; quand rien ne tranche, la réponse est
+  `unknown` plutôt qu'un « démarrage normal » affirmé par défaut, qui masquerait
+  une coupure.
+- **Configuration partagée** `/etc/morfsystem/morfsystem.json`, lue par
+  morfMonitor (C++) **et** RaspberryDashboard (Python). Source unique de vérité
+  des composants supervisés : ajouter un service, une sonde ou une application
+  ne demande que d'éditer ce fichier. Remplace `SERVICE_LABELS`,
+  `NETWORK_SERVICES` et `BEACON_APPS`, autrefois codés dans le Dashboard.
+- **Cache par catégorie**, avec une fraîcheur propre à chacune. Lire
+  `/proc/meminfo` est instantané, lancer `systemctl` coûte un processus, sonder
+  un ESP32 peut prendre une seconde : leur imposer la même cadence gaspillerait
+  d'un côté et ferait attendre de l'autre. Sans cache, dix clients rafraîchissant
+  chaque seconde provoqueraient dix lectures système par seconde — l'inverse du
+  but recherché, qui est de soulager la machine en centralisant.
+
+### Choix de conception
+
+- **Le service démarre même sans configuration.** Un superviseur qui refuse de
+  démarrer parce que son fichier manque est inutile au moment précis où on en a
+  besoin. Il sert alors ce qu'il peut et signale le problème dans `/status`.
+- **Aucun collecteur n'échoue bruyamment.** Une donnée indisponible (capteur
+  absent, commande manquante) est omise ; le reste continue d'être servi.
+- **La mesure CPU est amorcée au démarrage.** `/proc/stat` ne donne que des
+  compteurs cumulés : sans une première lecture d'amorçage, la toute première
+  requête renverrait un CPU absent, que les clients afficheraient comme 0 % —
+  une valeur fausse, et non « inconnue ».
+
+### Vérifié sur le matériel
+
+Compilé et exécuté sur le Raspberry Pi 4 cible (Debian 13, noyau 6.18, aarch64,
+Qt 6) : les sept routes répondent avec des valeurs correctes, la sonde réseau
+atteint MeteoHub en 194 ms, les cinq services systemd sont correctement
+rapportés, et la découverte beacon a repéré morfNotify, morfAnalytics et
+morfSensor comme non déclarés.
+
+### Limitations connues
+
+- Le service **n'est pas encore installé en unité systemd** sur la machine
+  cible : il a été validé en exécution directe.
+- L'écart de comptage entre les deux modes du Dashboard (9 pastilles via
+  morfMonitor, 8 en mode local) n'est pas résorbé : en mode local, une sonde
+  réseau n'apparaît que si sa clé figure aussi dans `SERVICE_LABELS`, contrainte
+  héritée de l'implémentation d'origine.
+- Les notifications de redémarrage enrichies sont câblées **côté Dashboard**,
+  qui enrichit son envoi existant avec la cause fournie par `/api/reboot`.
+  Contrepartie assumée : morfMonitor n'émet lui-même aucune notification, donc
+  si le Dashboard est arrêté, aucune notification de redémarrage ne part. Un
+  second émetteur dans morfMonitor en aurait produit deux par redémarrage.
+- L'indicateur visuel de source (« ✓ morfMonitor » / « ⚠ mode local ») n'est pas
+  encore dessiné à l'écran : la donnée est disponible (`info["source"]`), son
+  affichage reste à faire.
