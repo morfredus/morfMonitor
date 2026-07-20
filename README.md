@@ -61,9 +61,17 @@ cmake --build build
 curl http://127.0.0.1:8790/api/all
 ```
 
-The in-depth documentation is currently **French only**: see
-[README.fr.md](README.fr.md) for the reboot-cause detection, the Dashboard
-fallback mode and the design rationale.
+## Documentation
+
+| Document | What it covers |
+| --- | --- |
+| [docs/en/README.md](docs/en/README.md) | English documentation index. |
+| [docs/fr/README.md](docs/fr/README.md) | Index de la documentation (français). |
+| [docs/fr/ARCHITECTURE.md](docs/fr/ARCHITECTURE.md) *(FR)* | Classes, module `monitor`, HTTP routes and threading. |
+| [README.fr.md](README.fr.md) *(FR)* | Reboot-cause detection, Dashboard fallback mode, design rationale. |
+
+The in-depth documentation is currently **French only**; translations are
+welcome (see [CONTRIBUTING.md](CONTRIBUTING.md)).
 
 ## License
 

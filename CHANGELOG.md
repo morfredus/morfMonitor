@@ -5,9 +5,28 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
-### Modifié
+## [0.1.1] – 2026-07-20
 
-- Guide de création de service mis à jour avec les noms canoniques des projets.
+### Corrigé
+
+- **La documentation décrivait morfTemplateService, pas morfMonitor.** L'index
+  présentait le dépôt comme un « squelette réutilisable », `ARCHITECTURE.md`
+  documentait `ExampleModule` (inexistant) en affirmant que le projet ne
+  contenait aucun métier, et `CONTRIBUTING.md` annonçait aux contributeurs
+  qu'ils modifiaient le template commun. Ces documents décrivent maintenant
+  `MonitorModule`, les collecteurs et l'API `/api/…` réelle.
+- **`README.md` ne référençait jamais son dossier `docs/`** : la documentation
+  existait mais restait inatteignable. Une section Documentation a été ajoutée.
+- `ROADMAP.md` réécrit pour morfMonitor (il énonçait la feuille de route du
+  template et, en non-objectif, l'absence de toute logique métier).
+
+### Supprimé
+
+- `docs/fr/INTEGRATION.md` et `scripts/new-service.{sh,ps1}` : artefacts de
+  morfTemplateService hérités à la création du dépôt. morfMonitor n'est pas un
+  template ; ces fichiers proposaient de le cloner en un « nouveau service ».
+  L'entrée « Guide de création de service mis à jour » de cette même section
+  devient sans objet et disparaît avec eux.
 
 ## [0.1.0] – 2026-07-20
 
