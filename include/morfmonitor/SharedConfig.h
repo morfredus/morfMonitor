@@ -14,7 +14,8 @@ namespace morfmonitor {
 // -----------------------------------------------------------------------------
 // SharedConfig : la configuration PARTAGEE de l'ecosysteme morfSystem.
 //
-// Un seul fichier (/etc/morfsystem/morfsystem.json) decrit les composants
+// Un seul fichier de plateforme (/etc/morfsystem/morfsystem.json sous Linux,
+// %ProgramData%/morfSystem/morfsystem.json sous Windows) decrit les composants
 // supervises, et il est lu par DEUX programmes ecrits dans deux langages :
 // morfMonitor (C++), qui collecte, et RaspberryDashboard (Python), qui affiche.
 //
@@ -56,8 +57,9 @@ class SharedConfig {
 public:
     // Chemins cherches, dans l'ordre. Le premier trouve gagne :
     //   1. $MORFSYSTEM_CONFIG (surcharge explicite, pratique pour les tests)
-    //   2. /etc/morfsystem/morfsystem.json (emplacement d'installation)
-    //   3. ./morfsystem.json (execution depuis un clone, sans installation)
+    //   2. %ProgramData%/morfSystem/morfsystem.json (installation Windows)
+    //   3. /etc/morfsystem/morfsystem.json (installation Linux)
+    //   4. ./morfsystem.json (execution depuis un clone, sans installation)
     static QStringList searchPaths();
 
     // Charge la configuration. En cas d'absence ou d'erreur de syntaxe, renvoie

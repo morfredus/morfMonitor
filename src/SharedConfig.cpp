@@ -6,6 +6,7 @@
 
 #include "morfmonitor/SharedConfig.h"
 
+#include <QDir>
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonArray>
@@ -20,6 +21,10 @@ QStringList SharedConfig::searchPaths() {
                             .value(QStringLiteral("MORFSYSTEM_CONFIG"));
     if (!env.isEmpty())
         paths << env;
+    const QString programData = QProcessEnvironment::systemEnvironment()
+                                    .value(QStringLiteral("ProgramData"));
+    if (!programData.isEmpty())
+        paths << QDir(programData).filePath(QStringLiteral("morfSystem/morfsystem.json"));
     paths << QStringLiteral("/etc/morfsystem/morfsystem.json")
           << QStringLiteral("morfsystem.json");
     return paths;
