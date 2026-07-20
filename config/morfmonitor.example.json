@@ -2,7 +2,7 @@
   "_comment": "Configuration morfMonitor. Copier en 'morfmonitor.json' et adapter. Le service la lit via --config, ou la cherche dans le dossier courant, a cote du binaire, ou dans /etc/morfmonitor/.",
 
   "app_name": "morfMonitor",
-  "_comment_port": "Port HTTP de morfMonitor. 8799 appartient a morfAnalytics : ne pas le reprendre. Ports du parc : 8080 morfSync, 8788 morfSensor, 8790 morfMonitor, 8799 morfAnalytics.",
+  "_comment_port": "Port HTTP de morfMonitor, attribue par le registre d'adressage : 'ports.allocations' dans morfTools/ecosystem.json. Ce fichier ne decrit plus le plan du parc — il en etait une copie partielle, donc fausse. Consulter et modifier le registre, jamais ce commentaire. 'morf doctor' verifie que la valeur ci-dessous correspond au registre.",
   "http_port": 8790,
   "bind_address": "0.0.0.0",
 

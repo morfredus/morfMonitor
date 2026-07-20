@@ -5,6 +5,21 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
+### Modifié
+
+- **Le plan d'adressage du parc quitte ce projet.** Le champ `_comment_port` de
+  `config/morfmonitor.example.json` était le seul endroit de l'écosystème où le
+  plan des ports était écrit — alors que morfMonitor n'a aucune autorité sur les
+  autres composants. Cette copie partielle d'un fait valable pour tout le parc
+  était déjà incomplète : elle omettait 8789 (morfNotify) et 8787 (défaut du
+  serveur de statut morfBeacon). Un développeur la consultant pour choisir un
+  port libre obtenait une information fausse sans aucun moyen de le savoir.
+
+  Le registre vit désormais dans `ports.allocations` de
+  `morfTools/ecosystem.json`, seul artefact ayant autorité sur l'ensemble, et
+  `morf doctor` vérifie que la valeur déclarée ici lui correspond. Le port
+  d'écoute de morfMonitor (8790) est inchangé ; seul le commentaire l'est.
+
 ## [0.1.1] – 2026-07-20
 
 ### Corrigé
