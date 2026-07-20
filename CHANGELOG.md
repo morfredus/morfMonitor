@@ -39,6 +39,32 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
 
 ### Corrigé
 
+- **Les avertissements et les erreurs n'atteignaient jamais le journal.**
+  `err()` était un `QTextStream` sur `stderr` qui n'était jamais vidé — seul
+  `out()` l'était. Un démon systemd ne se terminant pas, tout ce qui passait
+  par `err()` restait dans le tampon : type de module inconnu, configuration
+  introuvable, échec d'écoute du port. `journalctl -u morfmonitor` ne montrait
+  rien, et le service paraissait sain alors qu'il annonçait sa panne.
+
+  C'est ce silence qui rendait les deux défauts ci-dessous indiagnosticables :
+  ils étaient signalés, mais personne ne pouvait le voir. Les écritures passent
+  désormais par `errLine()`, qui vide le flux à chaque appel.
+
+- **Sans configuration, le service démarrait avec un module `example` inconnu
+  de sa propre fabrique** — donc 0 module actif et 503 sur toutes les routes
+  `/api/`. Le repli produisait un service qui *avait l'air* vivant : il
+  démarrait, écoutait, annonçait sa présence sur le LAN, mais ne supervisait
+  rien. Il déclare maintenant un module `monitor`, la configuration partagée
+  étant facultative : la machine reste supervisée même sans `morfsystem.json`.
+
+- **L'interface Web confondait « injoignable » et « joignable mais sans
+  données ».** Sur un 503, elle levait une exception avant de lire le corps de
+  la réponse, si bien que le message explicatif prévu pour ce cas était
+  inatteignable. Elle affichait « injoignable » pour un service qui répondait
+  parfaitement — envoyant chercher une panne réseau là où il s'agissait d'une
+  configuration. Les deux cas sont désormais distingués, et le corps de la
+  réponse 503 est lu et affiché avec la marche à suivre.
+
 - **La configuration d'exemple déclarait un module `example`, inconnu de la
   fabrique de morfMonitor** — un résidu du gabarit, jamais adapté au clonage.
   Seul le type `monitor` est reconnu. Toute personne copiant

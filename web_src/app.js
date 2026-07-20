@@ -332,23 +332,57 @@ function setConn(kind, text) {
   c.textContent = text;
 }
 
+// « Le service ne repond pas » et « le service repond mais n'a rien a dire »
+// sont deux pannes differentes, avec deux causes et deux remedes differents.
+// Les confondre sous un meme « injoignable » envoie chercher un probleme reseau
+// la ou il s'agit d'une configuration — c'est le contraire du diagnostic.
+function showServiceProblem(title, detail) {
+  const block = header('Diagnostic') + unavailable(title, detail);
+  ['c-machine', 'c-interfaces', 'c-systemd', 'c-beacon', 'c-anomalies'].forEach((id) => {
+    const node = el(id);
+    if (node) node.innerHTML = block;
+  });
+  ['c-sante', 'c-apercu', 'c-probes', 'c-reboot', 'c-config'].forEach((id) => {
+    const node = el(id);
+    if (node) node.innerHTML = '';
+  });
+  el('c-ressources').innerHTML = `<div class="card span-all">${block}</div>`;
+}
+
 async function refresh() {
   try {
     const [allR, statusR] = await Promise.all([fetch('/api/all'), fetch('/status')]);
-    if (!allR.ok) throw new Error(`/api/all : HTTP ${allR.status}`);
-    const all = await allR.json();
     const status = statusR.ok ? await statusR.json() : {};
 
-    // Le service repond mais aucun module de supervision n'est actif : cas
-    // distinct d'une panne reseau, et il a une cause precise.
-    if (all.error) {
-      setConn('err', 'sans données');
-      el('c-machine').innerHTML = header('Machine') +
-        unavailable(all.error,
-          'Le service tourne mais aucun module de type « monitor » n’est déclaré ' +
-          'dans sa configuration. Vérifier la section modules de morfmonitor.json.');
+    // 503 : le service tourne (il a repondu), mais aucun module de supervision
+    // n'est actif. Le corps porte la raison — le lire plutot que de traiter
+    // tout code != 200 comme une injoignabilite.
+    if (!allR.ok) {
+      let apiMsg = `HTTP ${allR.status}`;
+      try { apiMsg = (await allR.json()).error || apiMsg; } catch (_) { /* corps non JSON */ }
+
+      if (statusR.ok) {
+        el('hdr-version').textContent = status.version ? `v${status.version}` : '';
+        el('hdr-host').textContent = status.host || '';
+        setConn('warn', 'sans données');
+        showServiceProblem(
+          `morfMonitor répond, mais ne collecte rien — ${apiMsg}.`,
+          'Le service tourne et annonce sa présence, mais aucun module de type ' +
+          '« monitor » n’est actif : les routes /api/ n’ont donc rien à renvoyer. ' +
+          'Vérifier la section « modules » de morfmonitor.json — seul le type ' +
+          '« monitor » est reconnu. Si aucune configuration n’est trouvée, le ' +
+          'service consigne la raison au démarrage (journalctl -u morfmonitor).');
+      } else {
+        setConn('err', 'injoignable');
+        showServiceProblem(`Service injoignable — ${apiMsg}.`,
+          'Ni /api/all ni /status ne répondent.');
+      }
+      el('foot-refresh').textContent =
+        `Dernière tentative à ${new Date().toLocaleTimeString('fr-FR')}`;
       return;
     }
+
+    const all = await allR.json();
 
     el('hdr-version').textContent = status.version ? `v${status.version}` : '';
     el('hdr-host').textContent = (all.system && all.system.hostname) || status.host || '';
@@ -364,7 +398,11 @@ async function refresh() {
     el('foot-refresh').textContent =
       `Actualisé à ${new Date().toLocaleTimeString('fr-FR')} · toutes les ${REFRESH_MS / 1000} s`;
   } catch (e) {
+    // Vraie panne de transport : le service n'a pas repondu du tout.
     setConn('err', 'injoignable');
+    showServiceProblem('Service injoignable.',
+      `Aucune réponse de morfMonitor (${e.message}). Le service est arrêté, ` +
+      'le port est filtré, ou la machine est hors ligne.');
     el('foot-refresh').textContent = `Échec de l’actualisation : ${e.message}`;
   }
 }
