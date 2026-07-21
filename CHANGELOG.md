@@ -5,6 +5,87 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
+## [0.3.9] – 2026-07-21
+
+### Documentation
+
+- **Section « Le système ne fait pas ce que j'attends »**, dans les deux README.
+  Un tableau part du **symptôme** et non du concept, parce que quelqu'un de
+  perdu arrive avec un symptôme : routes en 503, listes vides, entrée ajoutée
+  qui n'apparaît pas, application signalée en permanence, équipement absent de
+  l'écosystème.
+
+  Chaque ligne donne la cause et la commande. Les neuf cas listés sont ceux qui
+  ont réellement fait perdre du temps pendant le développement.
+
+- **L'avertissement est aussi dans les fichiers que l'on édite.** L'en-tête des
+  deux exemples dit désormais que le fichier n'est **pas** lu tel quel, où il
+  est déployé, et que le modifier ne change rien tant que le déploiement n'a pas
+  été lancé — la cause la plus fréquente de « j'ai pourtant corrigé ça ».
+
+  Celui de `morfmonitor.example.json` était **trompeur** : il citait
+  `/etc/morfmonitor/` sans jamais mentionner `/opt/morfmonitor/`, l'emplacement
+  où le fichier finit réellement.
+
+- Les deux règles qui expliquent la plupart des surprises sont énoncées
+  explicitement : **déclarer, c'est s'attendre** (`enabled: true` transforme une
+  absence en anomalie) et **le fichier réel gagne sur l'exemple**.
+
+## [0.3.8] – 2026-07-21
+
+### Corrigé
+
+- **`install` et `update` ignoraient votre configuration réelle.** Tous deux
+  codaient `morfmonitor.example.json` en dur, alors que `deploy` préférait déjà
+  `config/morfmonitor.json`. Une mise à jour comparait donc votre installation à
+  un **modèle** plutôt qu'à votre propre référence. Les trois appliquent
+  désormais la même règle : le fichier réel du dépôt s'il existe, l'exemple
+  sinon.
+
+  `install` ne recopie plus la configuration lui-même, il **délègue** à
+  `deploy-config.sh --if-absent`. Une seule implémentation de la règle, au lieu
+  de trois copies qui auraient fini par diverger.
+
+- **`install` et `update` ne traitaient pas `morfsystem.json` du tout.** Une
+  installation neuve plaçait la configuration du service mais pas celle du parc :
+  morfMonitor démarrait et ne supervisait **rien**, sans raison apparente. Et un
+  paramètre apparu dans la description du parc n'atteignait jamais une
+  installation existante — exactement le défaut que `update` corrigeait déjà
+  pour l'autre fichier.
+
+  Les deux configurations sont désormais traitées par les trois commandes.
+
+### Ajouté
+
+- `deploy-config.sh --if-absent` : ne place que les fichiers manquants, sans
+  jamais écraser. C'est ce dont l'installation a besoin — produire un système
+  qui fonctionne sans effacer les réglages d'une installation précédente.
+
+### Note
+
+`update` ajoute les **clés** nouvelles, jamais les **entrées de liste** : un
+service ajouté à `systemd_services` ou une application ajoutée à `beacon_apps`
+n'arrive pas par cette voie, car ce serait activer une surveillance non
+demandée. `deploy-config.sh` écrase et les apporte.
+
+## [0.3.7] – 2026-07-21
+
+### Modifié
+
+- **Les applications de bureau passent à `enabled: false` dans
+  `morfsystem.example.json`.** `enabled` signifie « je m'attends à ce que cette
+  application tourne » : depuis la 0.3.2, une application déclarée, activée et
+  absente devient une **anomalie**.
+
+  ComponentHub et SiteWatch sont lancées de temps en temps sur un poste de
+  bureau. Les marquer attendues les faisait signaler en panne dès leur
+  fermeture — un bruit permanent qui finit par masquer les vraies pannes,
+  exactement ce que la correction de la 0.3.2 cherchait à éviter.
+
+  Un commentaire explique désormais quand mettre `true` : ce qui tourne en
+  permanence, et rien d'autre. MeteoHub reste à `true` — un capteur météo qui
+  s'arrête est une panne.
+
 ## [0.3.6] – 2026-07-21
 
 ### Ajouté

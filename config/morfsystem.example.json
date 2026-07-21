@@ -1,5 +1,5 @@
 {
-  "_comment": "Configuration PARTAGEE de l'ecosysteme morfSystem. Installee dans /etc/morfsystem/morfsystem.json, elle est lue par morfMonitor (qui collecte) ET par RaspberryDashboard (qui affiche). C'est la source unique de verite des composants supervises : ajouter un composant ne demande QUE de modifier ce fichier, jamais de toucher au code.",
+  "_comment": "ATTENTION : ce fichier n'est PAS lu tel quel. Il est deploye vers /etc/morfsystem/morfsystem.json par ./scripts/linux/deploy-config.sh, et c'est CETTE copie que lisent morfMonitor (qui collecte) ET RaspberryDashboard (qui affiche). Modifier ce fichier ne change rien tant que le deploiement n'a pas ete lance. C'est la source unique de verite de ce qui est SUPERVISE : ajouter un service, une sonde ou une application ne demande QUE d'editer ce fichier, sans toucher au code d'aucun des deux programmes. Rappel : 'update' ajoute les CLES nouvelles mais jamais les ENTREES de liste -- une application ajoutee ici n'arrivera que par un deploiement. Si vous creez un config/morfsystem.json a cote, c'est LUI qui sera deploye.",
 
   "_comment_refresh": "Cadences de rafraichissement, en millisecondes. Les ressources bougent vite et coutent peu a lire ; les services systemd et les sondes reseau coutent cher et changent rarement.",
   "refresh": {
@@ -31,9 +31,10 @@
     "offline_after_s": 60
   },
   "_comment_beacon_apps": "Applications ATTENDUES sur le LAN. Declarer n'est pas la meme chose qu'entendre : une application declaree est toujours listee, meme jamais entendue, donc son absence se voit. Une application non declaree n'apparait que si elle s'annonce -- si elle ne demarre jamais, personne ne l'apprend. Ne declarer que ce dont l'absence doit alerter.",
+  "_comment_enabled": "'enabled' signifie « je m'attends a ce que cette application tourne ». A true, son absence devient une ANOMALIE : elle apparait en rouge et remonte dans le diagnostic et sur l'ecran. Reserver true a ce qui tourne en permanence. Une application de BUREAU, lancee de temps en temps, doit rester a false : sinon elle est signalee en panne des qu'elle est fermee, et ce bruit permanent finit par masquer les vraies pannes.",
   "beacon_apps": [
-    { "app": "ComponentHub", "label": "ComponentHub", "enabled": true },
-    { "app": "SiteWatch",    "label": "SiteWatch",    "enabled": true },
+    { "app": "ComponentHub", "label": "ComponentHub", "enabled": false },
+    { "app": "SiteWatch",    "label": "SiteWatch",    "enabled": false },
     { "app": "MeteoHub S3",  "label": "MeteoHub",     "enabled": true }
   ],
 

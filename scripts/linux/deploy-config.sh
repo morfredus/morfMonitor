@@ -28,6 +28,7 @@
 #   ./scripts/linux/deploy-config.sh --service      # seulement /opt
 #   ./scripts/linux/deploy-config.sh --shared       # seulement /etc
 #   ./scripts/linux/deploy-config.sh --no-restart   # sans redemarrer
+#   ./scripts/linux/deploy-config.sh --if-absent    # ne placer que ce qui manque
 #
 # Pour AJOUTER les nouvelles cles sans ecraser vos reglages, voir
 # update-service.sh ; pour diagnostiquer une configuration deployee, voir
@@ -53,14 +54,19 @@ SUDO="${MT_SUDO-sudo}"
 RESTART=1
 DO_SERVICE=1
 DO_SHARED=1
+# --if-absent : ne rien ecraser, ne placer que les fichiers manquants. C'est ce
+# dont l'installation a besoin -- elle doit produire un systeme qui fonctionne
+# sans jamais effacer les reglages d'une installation precedente.
+IF_ABSENT=0
 
 for arg in "$@"; do
     case "$arg" in
         --no-restart) RESTART=0 ;;
+        --if-absent)  IF_ABSENT=1 ;;
         --service)    DO_SHARED=0 ;;
         --shared)     DO_SERVICE=0 ;;
         -h|--help)    sed -n '3,34p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
-        *) echo "Option inconnue : $arg  (--service | --shared | --no-restart)" >&2; exit 2 ;;
+        *) echo "Option inconnue : $arg  (--service | --shared | --no-restart | --if-absent)" >&2; exit 2 ;;
     esac
 done
 
@@ -81,6 +87,13 @@ pick_source() {
 # geste a fait ce qu'il croyait.
 deploy_one() {
     local src="$1" dest="$2" label="$3"
+
+    if (( IF_ABSENT )) && $SUDO test -f "$dest"; then
+        echo "── $label"
+        echo "   deja present, conserve : $dest"
+        echo
+        return 0
+    fi
 
     echo "── $label"
     echo "   source      : $src"
@@ -117,7 +130,7 @@ if (( DO_SERVICE )); then
     SRC="$(pick_source morfmonitor)"
     if [[ -z "$SRC" ]]; then
         echo "Aucune configuration de service dans $REPO_ROOT/config/" >&2; exit 1
-    elif [[ ! -d "$APP_DIR" ]]; then
+    elif [[ ! -d "$APP_DIR" ]] && (( ! IF_ABSENT )); then
         echo "Service non installe : $APP_DIR absent." >&2
         echo "Lancer d'abord : ./scripts/linux/install-service.sh" >&2
         exit 1

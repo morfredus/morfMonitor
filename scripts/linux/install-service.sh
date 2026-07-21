@@ -65,13 +65,17 @@ systemctl stop "$SERVICE_NAME" 2>/dev/null || true
 mkdir -p "$APP_DIR"
 install -m 0755 "$BIN" "$APP_DIR/morfmonitor"
 
-# La config n'est PAS ecrasee si elle existe deja (reglages locaux preserves).
-if [[ ! -f "$APP_DIR/morfmonitor.json" ]]; then
-    install -m 0644 "$REPO_ROOT/config/morfmonitor.example.json" "$APP_DIR/morfmonitor.json"
-    echo "Config initiale copiee : $APP_DIR/morfmonitor.json (a adapter)."
-else
-    echo "Config existante conservee : $APP_DIR/morfmonitor.json"
-fi
+# Les configurations sont placees par deploy-config.sh, en mode --if-absent :
+# rien n'est ecrase, seuls les fichiers manquants sont crees. Deleguer plutot
+# que recopier ici garantit une SEULE regle de choix de source -- le fichier
+# reel du depot s'il existe, l'exemple sinon -- au lieu de trois copies de cette
+# regle qui finiraient par diverger.
+#
+# Les DEUX fichiers sont places : sans morfsystem.json, le service demarre mais
+# ne supervise rien, et une installation neuve paraissait muette sans raison
+# apparente.
+MT_APP_DIR="$APP_DIR" MT_SUDO="" \
+    "$SCRIPT_DIR/deploy-config.sh" --if-absent --no-restart
 chown -R "$RUN_USER:$RUN_USER" "$APP_DIR"
 
 # --- 4. Installer et demarrer le service ---------------------------------

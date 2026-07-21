@@ -2,7 +2,7 @@
 
 *Read in another language: **English** (this document) · [Français](README.fr.md).*
 
-[![Version](https://img.shields.io/badge/version-0.3.6-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.3.9-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![License](https://img.shields.io/badge/License-GPL--3.0--only-blue)
@@ -69,6 +69,45 @@ would broaden the exposure profile well beyond metrics — log lines can quote
 paths, configuration values and, in error messages, credentials handled by other
 services. That remains a separate decision.
 
+## The system does not do what I expect
+
+Nearly every surprise comes from the **same misunderstanding**: the service never
+reads the repository files. It reads the **deployed** ones.
+
+```
+    config/morfmonitor.json   ──deploy──>   /opt/morfmonitor/morfmonitor.json   ← read
+    config/morfsystem.json    ──deploy──>   /etc/morfsystem/morfsystem.json     ← read
+```
+
+Editing a repository file changes **nothing** until `deploy-config.sh` has run.
+That is the most common cause of "but I already fixed that".
+
+| What I see | Why | What to do |
+|---|---|---|
+| I edited a file in `config/` and nothing changed | The service reads `/opt` and `/etc` | `./scripts/linux/deploy-config.sh` |
+| Every `/api/` route answers **503** | No module of type `monitor` is declared | `./scripts/linux/config-tool.sh check` |
+| The services / probes / apps lists are **empty** | `morfsystem.json` is not deployed | `./scripts/linux/deploy-config.sh --shared` |
+| I added an entry to `systemd_services` or `beacon_apps` and it does not show | `update` adds **keys**, never **list entries** | `./scripts/linux/deploy-config.sh` (it overwrites) |
+| I edited the `.example.json` but the other one is deployed | The **real** file wins | Edit `config/morfsystem.json` |
+| An application is permanently **flagged** | `enabled: true` on an app that runs occasionally | Set it to `false` |
+| An application shows **"désactivé"** | `enabled: false` | Set it to `true` if its absence should alert |
+| A device never appears under **Écosystème** | It emits no heartbeat, or UDP broadcast is filtered | `python3 tools/check-protocol.py` from morfBeacon |
+| A **stopped** service raised no alert | It was not **declared**: nobody promised it would run | Add it to `beacon_apps` with `enabled: true` |
+
+### The two rules to remember
+
+**Declaring means expecting.** An application in `beacon_apps` with
+`enabled: true` is *expected*: its absence becomes an anomaly, in red, on the
+screen and in the diagnosis. An undeclared application that stops triggers
+nothing — nobody said it should be running. Reserve `true` for what runs
+continuously.
+
+**The real file wins over the example.** `install`, `update` and `deploy` use
+`config/morfsystem.json` when it exists, `config/morfsystem.example.json`
+otherwise. The examples hold a complete, working configuration: if it suits you,
+do not create a real file. If you do create one, **it** is what gets deployed and
+the example stops being consulted.
+
 ## Shared configuration
 
 morfMonitor and RaspberryDashboard read **the same file**,
@@ -125,6 +164,18 @@ that gets deployed.
 `check` asks the binary itself which module types are valid (`--list-types`), so
 the diagnosis stays correct as the factory evolves, and `update-service.sh` runs
 it after every update.
+
+**`install` and `update` follow the same source rule** as `deploy`: your real
+file when it exists, the example otherwise. All three now handle **both**
+configurations — `install` used to place only the service one, so a fresh
+install started up supervising nothing.
+
+`install` never replaces an existing file: it only puts down what is missing.
+
+**One limit worth knowing**: `update` adds new **keys**, never new **list
+entries**. A service added to `systemd_services`, or an application added to
+`beacon_apps`, will not arrive through `update` — that would switch on
+monitoring you never asked for. Use `deploy-config.sh`, which overwrites.
 
 From morfTools, `./morfTools/config.sh deploy morfMonitor` calls the very same
 script — useful to drive several projects from one place, pointless if you are

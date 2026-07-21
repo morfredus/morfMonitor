@@ -81,59 +81,87 @@ if [[ -f "$SCRIPT_DIR/morfmonitor.service" ]]; then
     rm -f "$NEW_UNIT"
 fi
 
-# --- Completer la configuration ------------------------------------------
-# Les valeurs deja en place ne sont JAMAIS modifiees, mais les parametres
-# APPARUS depuis l'installation sont ajoutes. Sans cela, une version
-# introduisant un parametre le laissait absent indefiniment et la fonction
-# correspondante ne s'activait jamais, en silence.
-CONFIG_FILE="$APP_DIR/morfmonitor.json"
-EXAMPLE_FILE="$REPO_ROOT/config/morfmonitor.example.json"
-if [[ $NO_CONFIG -eq 0 && -f "$EXAMPLE_FILE" ]]; then
-    if [[ ! -f "$CONFIG_FILE" ]]; then
-        # Config absente (installation partielle, dossier efface) : on la cree
-        # plutot que de laisser le service demarrer sans.
-        mkdir -p "$(dirname "$CONFIG_FILE")"
-        install -m 0644 "$EXAMPLE_FILE" "$CONFIG_FILE"
-        echo "Config absente : copiee depuis l'exemple -> $CONFIG_FILE (a adapter)."
-    elif command -v python3 >/dev/null 2>&1; then
-        # Sauvegarde avant toute modification : la config porte des reglages que
-        # l'utilisateur ne pourrait pas retrouver.
-        BACKUP="$CONFIG_FILE.bak-$(date +%Y%m%d-%H%M%S)"
-        cp "$CONFIG_FILE" "$BACKUP"
-        ADDED="$(python3 "$SCRIPT_DIR/merge-config.py" "$EXAMPLE_FILE" "$CONFIG_FILE" || true)"
-        if [[ -n "$ADDED" ]]; then
-            echo
-            echo "Nouveaux parametres ajoutes a $CONFIG_FILE :"
-            echo "$ADDED" | sed 's/^/    /'
-            echo "  (valeurs existantes inchangees ; sauvegarde : $BACKUP)"
-            echo "  A RENSEIGNER si besoin avant que la fonction correspondante s'active."
-            echo
-        else
-            rm -f "$BACKUP"
-        fi
+# --- Completer les configurations ----------------------------------------
+# Les valeurs deja en place ne sont JAMAIS modifiees ; seuls les parametres
+# APPARUS depuis l'installation sont ajoutes, puis listes. Sans cela, une
+# version introduisant un parametre le laissait absent indefiniment et la
+# fonction correspondante ne s'activait jamais, en silence.
 
-        # La fusion ajoute ce qui MANQUE ; elle ne corrige pas une valeur deja
-        # presente devenue invalide. Un module dont le type a disparu de la
-        # fabrique reste donc en place, et le service demarre sans rien
-        # superviser. Cette verification ne modifie rien : elle constate, pour
-        # que la mise a jour ne laisse pas derriere elle un service muet.
-        if [[ -f "$SCRIPT_DIR/check-config.py" ]]; then
-            echo
-            if python3 "$SCRIPT_DIR/check-config.py" "$CONFIG_FILE" \
-                    --binary "$APP_DIR/morfmonitor" --example "$EXAMPLE_FILE" --hint-style sh; then
-                :
-            else
-                echo
-                echo "La configuration deployee ne permettra pas au service de collecter."
-                echo "Inspecter puis corriger :"
-                echo "    sudo $SCRIPT_DIR/config-tool.sh diff"
-                echo "    sudo $SCRIPT_DIR/config-tool.sh reset"
-                echo "La mise a jour se poursuit : ce diagnostic ne modifie rien."
-            fi
-            echo
-        fi
+# Reference : le fichier REEL du depot s'il existe, l'exemple sinon. Meme regle
+# que deploy-config.sh et install-service.sh. L'exemple etait code en dur ici,
+# si bien qu'une mise a jour ignorait votre propre configuration.
+pick_source() {
+    local base="$1"
+    if [[ -f "$REPO_ROOT/config/$base.json" ]]; then
+        printf '%s' "$REPO_ROOT/config/$base.json"
+    elif [[ -f "$REPO_ROOT/config/$base.example.json" ]]; then
+        printf '%s' "$REPO_ROOT/config/$base.example.json"
+    fi
+    return 0
+}
+
+# Les DEUX configurations sont completees. morfsystem.json etait ignore : un
+# parametre apparu dans la description du parc n'atteignait jamais
+# l'installation -- exactement le defaut que ce bloc corrigeait deja pour
+# l'autre fichier.
+update_one_config() {
+    local base="$1" dest="$2" label="$3"
+    local ref; ref="$(pick_source "$base")"
+    [[ -n "$ref" ]] || return 0
+
+    echo
+    echo "-- $label"
+    echo "   reference : $ref"
+
+    if [[ ! -f "$dest" ]]; then
+        mkdir -p "$(dirname "$dest")"
+        install -m 0644 "$ref" "$dest"
+        echo "   absente : copiee depuis la reference"
+        return 0
+    fi
+    if ! command -v python3 >/dev/null 2>&1; then
+        echo "   python3 absent : non completee" >&2
+        return 0
+    fi
+
+    local backup added
+    backup="$dest.bak-$(date +%Y%m%d-%H%M%S)"
+    cp "$dest" "$backup"
+    added="$(python3 "$SCRIPT_DIR/merge-config.py" "$ref" "$dest" || true)"
+    if [[ -n "$added" ]]; then
+        echo "   nouveaux parametres ajoutes (valeurs existantes inchangees) :"
+        echo "$added" | sed 's/^/      /'
+        echo "   sauvegarde : $backup"
+        echo "   A RENSEIGNER si besoin avant que la fonction correspondante s'active."
     else
-        echo "python3 absent : configuration non completee (voir $EXAMPLE_FILE)." >&2
+        rm -f "$backup"
+        echo "   a jour"
+    fi
+}
+
+CONFIG_FILE="$APP_DIR/morfmonitor.json"
+SHARED_FILE="${MT_SHARED_DIR:-/etc/morfsystem}/morfsystem.json"
+
+if [[ $NO_CONFIG -eq 0 ]]; then
+    update_one_config morfmonitor "$CONFIG_FILE" "Configuration du service   ($CONFIG_FILE)"
+    update_one_config morfsystem  "$SHARED_FILE" "Configuration partagee     ($SHARED_FILE)"
+
+    # La fusion ajoute ce qui MANQUE ; elle ne corrige pas une valeur deja
+    # presente devenue invalide. Un module dont le type a disparu de la fabrique
+    # reste donc en place, et le service demarre sans rien superviser. Cette
+    # verification ne modifie rien : elle constate, pour que la mise a jour ne
+    # laisse pas derriere elle un service muet.
+    if [[ -f "$SCRIPT_DIR/check-config.py" ]] && command -v python3 >/dev/null 2>&1; then
+        echo
+        if ! python3 "$SCRIPT_DIR/check-config.py" "$CONFIG_FILE"                 --binary "$APP_DIR/morfmonitor"                 --example "$(pick_source morfmonitor)" --hint-style sh; then
+            echo
+            echo "La configuration deployee ne permettra pas au service de collecter."
+            echo "Inspecter puis corriger :"
+            echo "    $SCRIPT_DIR/config-tool.sh diff"
+            echo "    $SCRIPT_DIR/deploy-config.sh"
+            echo "La mise a jour se poursuit : ce diagnostic ne modifie rien."
+        fi
+        echo
     fi
 fi
 

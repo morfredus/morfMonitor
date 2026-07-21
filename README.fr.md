@@ -2,7 +2,7 @@
 
 *Lire dans une autre langue : [English](README.md) · **Français** (ce document).*
 
-[![Version](https://img.shields.io/badge/version-0.3.6-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.3.9-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -114,6 +114,45 @@ journald élargirait le profil d'exposition bien au-delà de métriques : une li
 de log peut citer des chemins, des valeurs de configuration et, dans un message
 d'erreur, des identifiants manipulés par d'autres services. C'est une décision
 séparée.
+
+## Le système ne fait pas ce que j'attends
+
+Presque toutes les surprises viennent du **même malentendu** : le service ne lit
+jamais les fichiers du dépôt. Il lit ceux qui ont été **déployés**.
+
+```
+    config/morfmonitor.json   ──déploiement──>   /opt/morfmonitor/morfmonitor.json   ← lu
+    config/morfsystem.json    ──déploiement──>   /etc/morfsystem/morfsystem.json     ← lu
+```
+
+Modifier un fichier du dépôt ne change **rien** tant que `deploy-config.sh` n'a
+pas été lancé. C'est la cause la plus fréquente de « j'ai pourtant corrigé ça ».
+
+| Ce que je constate | Pourquoi | Quoi faire |
+|---|---|---|
+| J'ai modifié un fichier de `config/` et rien ne change | Le service lit `/opt` et `/etc` | `./scripts/linux/deploy-config.sh` |
+| Toutes les routes `/api/` répondent **503** | Aucun module de type `monitor` déclaré | `./scripts/linux/config-tool.sh check` |
+| Les listes services / sondes / applications sont **vides** | `morfsystem.json` n'est pas déployé | `./scripts/linux/deploy-config.sh --shared` |
+| J'ai ajouté une entrée à `systemd_services` ou `beacon_apps`, elle n'apparaît pas | `update` ajoute les **clés**, jamais les **entrées de liste** | `./scripts/linux/deploy-config.sh` (il écrase) |
+| J'ai édité le `.example.json`, c'est l'autre qui part | Le fichier **réel** est prioritaire | Éditer `config/morfsystem.json` |
+| Une application est en **anomalie permanente** | `enabled: true` sur une application lancée par intermittence | La passer à `false` |
+| Une application affiche **« désactivé »** | `enabled: false` | La passer à `true` si son absence doit alerter |
+| Un équipement ne remonte pas dans **Écosystème** | Il n'émet pas de heartbeat, ou la diffusion UDP est filtrée | `python3 tools/check-protocol.py` depuis morfBeacon |
+| Un service **arrêté** n'a levé aucune alerte | Il n'était pas **déclaré** : il n'a été promis à personne | L'ajouter à `beacon_apps` avec `enabled: true` |
+
+### Les deux règles à retenir
+
+**Déclarer, c'est s'attendre.** Une application dans `beacon_apps` avec
+`enabled: true` est *attendue* : son absence devient une anomalie, en rouge, sur
+l'écran et dans le diagnostic. Une application non déclarée qui s'arrête ne
+déclenche rien — personne n'avait dit qu'elle devait tourner. Réservez `true` à
+ce qui tourne en permanence.
+
+**Le fichier réel gagne sur l'exemple.** `install`, `update` et `deploy`
+utilisent `config/morfsystem.json` s'il existe, `config/morfsystem.example.json`
+sinon. Les exemples contiennent une configuration complète et fonctionnelle : si
+elle vous convient, ne créez pas de fichier réel. Si vous en créez un, c'est
+**lui** qui sera déployé, et l'exemple cessera d'être consulté.
 
 ## Configuration partagée
 
@@ -256,9 +295,18 @@ clone en fait donc la référence déployée.
 | Savoir pourquoi le service ne collecte rien | `config-tool.sh check` |
 | Comparer déployé et dépôt | `config-tool.sh diff` |
 
-Depuis morfTools, `./morfTools/config.sh deploy morfMonitor` appelle exactement
-le même script — utile pour piloter plusieurs projets depuis un seul endroit,
-inutile si vous êtes déjà dans morfMonitor.
+**`install` et `update` suivent la même règle de source** que `deploy` : votre
+fichier réel s'il existe, l'exemple sinon. Et tous trois traitent désormais les
+**deux** configurations — `install` ne plaçait que celle du service, si bien
+qu'une installation neuve démarrait sans rien superviser.
+
+`install` ne remplace jamais un fichier existant : il ne pose que ce qui manque.
+
+**Une limite à connaître** : `update` ajoute les **clés** nouvelles, jamais les
+**entrées de liste**. Un service ajouté à `systemd_services` ou une application
+ajoutée à `beacon_apps` n'arrivera donc pas par `update` — ce serait activer une
+surveillance que vous n'avez pas demandée. Pour les récupérer, utiliser
+`deploy-config.sh`, qui écrase.
 
 ## Philosophie
 
