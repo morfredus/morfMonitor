@@ -1,0 +1,27 @@
+{
+  "_comment": "Deployment facts for this project, read by morfdeploy. The four install steps live in one place for the whole parc; this file states only what is specific to this service.",
+  "service_name": "morfmonitor",
+  "display_name": "morfMonitor",
+  "description": "Single source of truth about a machine's state",
+  "binary": "morfmonitor",
+  "_comment_app_dir": "Overridden by MORF_APP_DIR, one variable for every service. The old per-project spellings (MT_/MN_/MS_) are still honoured with a notice.",
+  "app_dir": {
+    "linux": "/opt/morfmonitor",
+    "windows": "%ProgramData%/morfmonitor"
+  },
+  "_comment_configs": "Copied at install. Never overwritten by default: these hold settings edited by hand on the machine. An absolute destination is honoured as-is, which is how the shared parc file reaches /etc/morfsystem.",
+  "configs": [
+    {
+      "source": "config/morfmonitor.json",
+      "dest": "morfmonitor.json"
+    },
+    {
+      "source": "config/morfsystem.json",
+      "dest": {
+        "linux": "/etc/morfsystem/morfsystem.json",
+        "windows": "%ProgramData%/morfsystem/morfsystem.json"
+      }
+    }
+  ],
+  "status_url": "http://127.0.0.1:8790/status"
+}
