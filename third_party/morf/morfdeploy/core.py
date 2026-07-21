@@ -126,13 +126,19 @@ class Deployer:
         written = [target]
 
         for config in self.manifest.configs:
-            source = self.manifest.repo_root / config.source
-            if not source.is_file():
-                print(f"  MISSING source, skipped: {config.source}")
-                continue
-
             dest = config.resolved_dest(config_dir)
             dest.parent.mkdir(parents=True, exist_ok=True)
+
+            # The real file wins over the example -- resolved HERE rather than
+            # baked into the manifest. A manifest naming config/<name>.json is
+            # right on the machine that wrote it and wrong in every clone,
+            # because that file is local and untracked. morfNotify shipped
+            # exactly that way and could not find its own configuration.
+            source = self.manifest.repo_root / config.source
+            if config.source.endswith(".example.json"):
+                real = Path(str(source).replace(".example.json", ".json"))
+                if real.is_file():
+                    source = real
 
             # Never overwrite by default: these hold settings edited by hand on
             # this machine. Delivering a default over them destroys local state
@@ -145,6 +151,12 @@ class Deployer:
             # left behind, rather than installing a pristine example over a
             # machine that was already configured. The settings survive the
             # directory layout that happened to hold them.
+            # The migration is attempted BEFORE the source is required, because
+            # it does not need one: it copies from the previous location. Making
+            # a missing source skip the whole entry meant morfNotify never
+            # migrated a configuration that was sitting right there in /opt --
+            # and then the service was registered anyway and crash-looped 85
+            # times against a file nobody had put in place.
             previous = config.find_predecessor()
             if previous is not None:
                 shutil.copy2(previous, dest)
@@ -154,6 +166,25 @@ class Deployer:
                 print(f"                 -> {dest}")
                 print(f"  the old file is left in place; remove it once satisfied")
                 continue
+
+            # Nothing at the destination, nothing to migrate, and no source to
+            # copy: this service will not start. Refusing here is the whole
+            # point -- registering it anyway produces a unit that restarts
+            # forever against a file that does not exist, and the journal fills
+            # with an error the install never mentioned.
+            if not source.is_file():
+                homes = ", ".join(config.migrate_from) or "none declared"
+                raise DeployError(
+                    "\n".join([
+                        f"No configuration to install for {self.manifest.display_name}.",
+                        f"  declared source : {config.source} (absent from this clone)",
+                        f"  destination     : {dest} (absent)",
+                        f"  earlier homes   : {homes} (none found)",
+                        "",
+                        "The service would start and immediately exit. Nothing has "
+                        "been registered.",
+                    ])
+                )
 
             shutil.copy2(source, dest)
             dest.chmod(0o644)

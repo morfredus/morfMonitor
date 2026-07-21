@@ -12,7 +12,7 @@
   "_comment_configs": "Copied at install. Never overwritten by default: these hold settings edited by hand on the machine. An absolute destination is honoured as-is, which is how the shared parc file reaches /etc/morfsystem.",
   "configs": [
     {
-      "source": "config/morfmonitor.json",
+      "source": "config/morfmonitor.example.json",
       "dest": "morfmonitor.json",
       "migrate_from": [
         "/opt/morfmonitor/morfmonitor.json"

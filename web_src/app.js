@@ -384,12 +384,23 @@ function renderEcosysteme(all) {
            <th>État</th><th class="mono">Dernier heartbeat</th><th>Interface</th>
          </tr></thead><tbody>` +
         apps.map((a) => `<tr>
-          <td>${esc(a.label || a.app)}${a.declared ? '' : ' <span class="badge badge-off">non déclaré</span>'}</td>
+          <td>${esc(a.label || a.app)}${
+              !a.declared        ? ' <span class="badge badge-off">non déclaré</span>'
+            : a.enabled === false ? ' <span class="badge badge-off">non supervisé</span>'
+                                  : ''}</td>
           <td class="mono">${esc(a.ip || a.host || '—')}</td>
           <td class="mono">${esc(a.version || '—')}</td>
-          <td>${a.enabled === false ? badge('off', 'désactivé')
-                : a.online          ? stateBadge(a.state || 'ok')
-                                    : badge('err', 'hors ligne')}</td>
+          <!-- L'ÉTAT dit ce qu'on observe, jamais ce qu'on a déclaré. Ces deux
+               faits sont indépendants : « est-ce que ça tourne ? » se constate,
+               « dois-je être alerté si ça s'arrête ? » se décide. Les tester
+               dans le même ordre affichait « désactivé » pour ComponentHub
+               alors qu'il émettait un heartbeat trois secondes plus tôt.
+               Le fait déclaratif vit maintenant en pastille près du nom.
+               Hors ligne n'est rouge que si quelqu'un a promis le contraire :
+               un service non supervisé qui s'arrête n'est pas une anomalie. -->
+          <td>${a.online ? stateBadge(a.state || 'ok')
+                : (a.enabled === false || !a.declared) ? badge('off', 'hors ligne')
+                                                       : badge('err', 'hors ligne')}</td>
           <td class="mono">${esc(a.last_seen_s === undefined ? '—' : ago(a.last_seen_s))}</td>
           <td>${webUiLink(a)}</td>
         </tr>`).join('') + `</tbody></table></div>` +
