@@ -69,6 +69,33 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
 
 ### Corrigé
 
+- **L'interface Web contredisait la réalité sur la page « Services
+  morfSystem ».** Les six services affichaient un badge « arrêté » à côté d'une
+  colonne indiquant « active » — une contradiction dans la même ligne — et
+  MeteoHub était noté « injoignable » alors qu'il répondait.
+
+  Cause : l'interface avait été écrite contre un schéma JSON **supposé**. Sous
+  Windows, `systemd` et `network` sont vides par construction ; les tableaux
+  n'ont donc jamais été rendus avec des données réelles, et les noms de champs
+  ont été devinés. Le booléen des unités est `active`, pas `running` ; le
+  sous-état est `sub_state`, pas `sub`. `u.running` valant toujours
+  `undefined`, chaque service était déclaré arrêté.
+
+- **Plus grave que des noms de champs : l'interface écrasait des états que le
+  service prend soin de distinguer.** `Supervisor` renvoie quatre états de
+  sonde — `online`, `offline`, `pending`, `disabled` — avec ce commentaire
+  explicite : « *On ne ment pas : « pas encore sondé » n'est pas « hors
+  ligne »* ». Pendant le délai de grâce mDNS du démarrage, une sonde est
+  `pending` ; l'affichage binaire la déclarait injoignable, annulant
+  exactement la précaution du collecteur. Idem pour systemd, dont les états
+  (`active`, `inactive`, `failed`, `activating`, `disabled`) étaient réduits à
+  deux.
+
+  L'interface rend désormais l'état réel, ajoute la latence ou le message
+  d'erreur des sondes, et signale le délai de grâce quand il s'applique. Les
+  anomalies excluent les unités volontairement désactivées et les sondes en
+  attente : les signaler noierait les vraies pannes sous du bruit prévisible.
+
 - **Les avertissements et les erreurs n'atteignaient jamais le journal.**
   `err()` était un `QTextStream` sur `stderr` qui n'était jamais vidé — seul
   `out()` l'était. Un démon systemd ne se terminant pas, tout ce qui passait

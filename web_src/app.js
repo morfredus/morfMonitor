@@ -79,6 +79,35 @@ function meter(percent) {
   return `<div class="meter${cls}"><i style="width:${w}%"></i></div>`;
 }
 
+// Etat d'une unite systemd. Le backend renvoie l'ActiveState de systemd tel
+// quel (active, inactive, failed, activating, disabled, unknown) ET un booleen
+// `active`. Rendre CET etat, plutot que d'inventer un booleen : afficher un
+// « arrete » deduit d'un champ inexistant a cote de la colonne qui affichait
+// « active » produisait une contradiction dans la meme ligne.
+function systemdBadge(u) {
+  const s = String(u.state || '').toLowerCase();
+  if (s === 'active')   return badge('ok',   'actif');
+  if (s === 'failed')   return badge('err',  'échec');
+  if (s === 'inactive') return badge('err',  'arrêté');
+  if (s === 'disabled') return badge('off',  'désactivé');
+  if (s === 'activating' || s === 'deactivating' || s === 'reloading')
+    return badge('warn', s);
+  return badge('off', s || 'inconnu');
+}
+
+// Etat d'une sonde reseau. Le backend distingue quatre cas et prend soin de ne
+// PAS confondre « pas encore sonde » et « hors ligne » (delai de grace mDNS au
+// demarrage). Les ecraser en un booleen annulait cette precaution et affichait
+// « injoignable » pour un equipement parfaitement joignable.
+function probeBadge(p) {
+  const s = String(p.state || '').toLowerCase();
+  if (s === 'online')   return badge('ok',   'joignable');
+  if (s === 'offline')  return badge('err',  'injoignable');
+  if (s === 'pending')  return badge('warn', 'en attente');
+  if (s === 'disabled') return badge('off',  'désactivé');
+  return badge('off', s || 'inconnu');
+}
+
 function stateBadge(state) {
   const s = String(state || '').toLowerCase();
   if (s === 'ok' || s === 'active' || s === 'running') return badge('ok', state);
@@ -214,34 +243,43 @@ function renderServices(all) {
   el('c-systemd').innerHTML = header('Services systemd', `${units.length} supervisés`) +
     (units.length
       ? `<div class="tbl-wrap"><table><thead><tr>
-           <th>Service</th><th class="mono">Unité</th><th>État</th><th class="mono">Actif</th>
+           <th>Service</th><th class="mono">Unité</th><th>État</th><th class="mono">Détail</th>
          </tr></thead><tbody>` +
         units.map((u) => `<tr>
           <td>${esc(u.label || u.unit)}</td>
           <td class="mono">${esc(u.unit || '—')}</td>
-          <td>${u.running ? badge('ok', 'actif') : badge('err', 'arrêté')}</td>
-          <td class="mono">${esc(u.state || u.sub || '—')}</td>
+          <td>${systemdBadge(u)}</td>
+          <td class="mono">${esc(u.sub_state || u.state || '—')}</td>
         </tr>`).join('') + `</tbody></table></div>`
       : unavailable('Aucun service systemd supervisé.',
           'La liste vient de morfsystem.json (clé systemd_services). Sous Windows, ' +
           'systemd n’existe pas : cette section reste vide par construction.'));
 
   const probes = s.network || [];
+  const grace = s.network_grace;
   el('c-probes').innerHTML = header('Sondes réseau', `${probes.length} équipements`) +
     (probes.length
       ? `<div class="tbl-wrap"><table><thead><tr>
-           <th>Équipement</th><th class="mono">Hôte</th><th class="mono">Port</th><th>État</th>
+           <th>Équipement</th><th class="mono">Hôte</th><th class="mono">Port</th>
+           <th>État</th><th class="mono">Détail</th>
          </tr></thead><tbody>` +
         probes.map((p) => `<tr>
           <td>${esc(p.label || p.name)}</td>
           <td class="mono">${esc(p.host || '—')}</td>
           <td class="mono">${esc(p.port ?? '—')}</td>
-          <td>${p.online ? badge('ok', 'joignable') : badge('err', 'injoignable')}</td>
-        </tr>`).join('') + `</tbody></table></div>`
+          <td>${probeBadge(p)}</td>
+          <td class="mono">${esc(
+              p.error ? p.error
+              : (typeof p.latency_ms === 'number' ? `${Math.round(p.latency_ms)} ms` : '—'))}</td>
+        </tr>`).join('') + `</tbody></table></div>` +
+        (grace
+          ? `<div class="unavailable" style="margin-top:.8rem"><strong>Délai de grâce en cours.</strong><br>` +
+            `Les sondes ne partent qu’une fois le réseau stabilisé : une résolution mDNS ` +
+            `trop précoce perturbe l’association WiFi et donnerait un faux « hors ligne ». ` +
+            `Les équipements sont donc « en attente », ce qui ne signifie pas injoignable.</div>`
+          : '')
       : unavailable('Aucune sonde réseau déclarée.',
-          s.network_grace
-            ? 'Délai de grâce au démarrage en cours : les sondes ne partent qu’une fois le réseau stabilisé.'
-            : 'À déclarer dans morfsystem.json (clé network_services) — un ESP32 ne répond pas à systemctl.'));
+          'À déclarer dans morfsystem.json (clé network_services) — un ESP32 ne répond pas à systemctl.'));
 }
 
 function renderEcosysteme(all) {
@@ -282,14 +320,21 @@ function problems(all) {
   const s = all.services || {};
   const r = all.resources || {};
 
+  // Une unite volontairement desactivee n'est pas une anomalie, et une sonde
+  // « en attente » pendant le delai de grace non plus. Les signaler noierait les
+  // vraies pannes sous du bruit previsible.
   (s.systemd || []).forEach((u) => {
-    if (!u.running) out.push({ what: u.label || u.unit, state: 'arrêté', kind: 'err' });
+    const st = String(u.state || '').toLowerCase();
+    if (st === 'active' || st === 'disabled' || st === 'activating') return;
+    out.push({ what: u.label || u.unit, state: st === 'failed' ? 'échec' : 'arrêté', kind: 'err' });
   });
   (s.network || []).forEach((p) => {
-    if (!p.online) out.push({ what: p.label || p.name, state: 'injoignable', kind: 'err' });
+    if (String(p.state || '').toLowerCase() !== 'offline') return;
+    out.push({ what: p.label || p.name, state: 'injoignable', kind: 'err' });
   });
   (s.beacon || []).forEach((a) => {
-    if (!a.online) out.push({ what: a.label || a.app, state: 'hors ligne', kind: 'err' });
+    if (a.online || a.enabled === false) return;
+    out.push({ what: a.label || a.app, state: 'hors ligne', kind: 'err' });
   });
   [['disk', 'Stockage'], ['memory', 'Mémoire'], ['swap', 'Swap']].forEach(([k, lbl]) => {
     const p = r[k] && r[k].percent;
