@@ -230,7 +230,17 @@ QJsonObject MonitorModule::beaconAppsJson() const {
         const auto it = m_beaconSeen.constFind(d.app);
         const bool seen = (it != m_beaconSeen.constEnd());
         const qint64 age = seen ? (now - it->lastSeen) : -1;
-        a["online"] = d.enabled && seen && age >= 0 && age < offlineAfter;
+        // « online » dit ce qu'on ENTEND, jamais ce qu'on a décidé d'écouter.
+        // Le `d.enabled &&` qui figurait ici rendait invisible un service qui
+        // émettait : ComponentHub s'affichait « désactivé » avec un heartbeat
+        // de neuf secondes, et l'onglet Écosystème ne pouvait plus répondre à
+        // la seule question pour laquelle il existe.
+        //
+        // Les deux faits sont indépendants et le restent : `enabled` dit si son
+        // absence doit alerter, et c'est le consommateur qui les combine.
+        // RaspberryDashboard calculait déjà son `online` ainsi, sans consulter
+        // `enabled` -- morfMonitor était le seul à les confondre.
+        a["online"] = seen && age >= 0 && age < offlineAfter;
         if (seen) {
             a["last_seen_s"] = static_cast<double>(age);
             a["version"] = it->version;

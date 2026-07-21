@@ -5,6 +5,28 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
+## [0.4.0] – 2026-07-22
+
+### Corrigé
+
+- **`online` dit désormais ce qu'on entend, pas ce qu'on a décidé d'écouter.**
+  ComponentHub s'affichait « désactivé » avec un heartbeat de neuf secondes.
+  L'API forçait `online` à faux dès que `enabled` valait faux, si bien qu'une
+  décision de supervision rendait invisible un service qui émettait.
+
+  Ce sont deux faits indépendants. « Est-ce que ça tourne ? » s'observe et ne se
+  configure pas. « Dois-je être alerté si ça s'arrête ? » se décide dans
+  `morfsystem.json` et ne dit rien de l'état réel. Les confondre empêchait
+  l'onglet Écosystème de répondre à la seule question pour laquelle il existe.
+
+  RaspberryDashboard calculait déjà son propre `online` sans consulter
+  `enabled` : morfMonitor était le seul des deux à les mélanger.
+
+- **L'interface reflète la même séparation.** Le fait déclaratif passe en
+  pastille près du nom — « non supervisé », à côté du « non déclaré » déjà
+  présent — et la colonne État montre l'état observé. Un service hors ligne
+  n'est en rouge que si quelqu'un a promis le contraire.
+
 ## [0.3.9] – 2026-07-21
 
 ### Documentation
