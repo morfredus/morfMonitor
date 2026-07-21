@@ -1,31 +1,37 @@
 #!/usr/bin/env bash
 #
-# deploy-config.sh - copie la configuration du depot vers le service installe.
+# deploy-config.sh — copie les configurations du depot vers leurs emplacements
+#                    d'installation. C'est LE script de deploiement.
 #
-# C'est la version DIRECTE : elle ecrase la configuration deployee par celle du
-# depot, point. Pas de fusion, pas de python, pas de question.
+# Il y a DEUX fichiers de configuration, et ils ne vont pas au meme endroit :
 #
-#   depot                                  service installe
-#   config/morfmonitor.json         --->   /opt/morfmonitor/morfmonitor.json
-#   (a defaut : morfmonitor.example.json)
+#   config/morfmonitor.json  ->  /opt/morfmonitor/morfmonitor.json
+#       Reglages du service lui-meme : port, adresse d'ecoute, modules.
+#       Lu par morfMonitor seul.
 #
-# A utiliser quand la configuration de reference est celle du depot. La
-# configuration deployee est sauvegardee avant d'etre remplacee, donc rien n'est
-# perdu : si elle contenait des reglages propres a la machine, ils sont dans le
-# fichier .bak-<date> a cote.
+#   config/morfsystem.json   ->  /etc/morfsystem/morfsystem.json
+#       Description de CE QUI EST SUPERVISE : services systemd, sondes reseau,
+#       applications attendues. Lu par morfMonitor ET RaspberryDashboard, d'ou
+#       son emplacement partage dans /etc.
 #
-# Pour ajouter seulement les nouvelles cles sans toucher a l'existant, utiliser
-# plutot update-service.sh (qui appelle merge-config.py).
+# Par defaut le script deploie LES DEUX, parce que c'est le geste courant et
+# qu'obliger a s'en souvenir n'aide personne.
+#
+# Chaque fichier est sauvegarde avant d'etre remplace (.bak-<date> a cote), et
+# les differences appliquees sont affichees. Rien n'est perdu.
+#
+# Ne PAS prefixer par sudo : le script n'eleve que les ecritures systeme. La
+# lecture, la comparaison et l'affichage n'ont aucun besoin des droits root.
 #
 # Usage :
-#   ./scripts/linux/deploy-config.sh                  # copie puis redemarre
-#   ./scripts/linux/deploy-config.sh --no-restart     # copie seulement
-#   MT_APP_DIR=/opt/autre ./scripts/linux/deploy-config.sh
+#   ./scripts/linux/deploy-config.sh                # les deux, puis redemarre
+#   ./scripts/linux/deploy-config.sh --service      # seulement /opt
+#   ./scripts/linux/deploy-config.sh --shared       # seulement /etc
+#   ./scripts/linux/deploy-config.sh --no-restart   # sans redemarrer
 #
-# NE PAS prefixer par sudo : le script n'eleve QUE les ecritures systeme, comme
-# le fait « config.sh shared ». Exiger sudo sur tout le script ferait tourner en
-# root la lecture, la comparaison et l'affichage, sans aucun besoin -- et les
-# deux sous-commandes de « config.sh » demanderaient l'inverse l'une de l'autre.
+# Pour AJOUTER les nouvelles cles sans ecraser vos reglages, voir
+# update-service.sh ; pour diagnostiquer une configuration deployee, voir
+# config-tool.sh.
 
 set -euo pipefail
 
@@ -33,54 +39,118 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 APP_DIR="${MT_APP_DIR:-/opt/morfmonitor}"
+SHARED_DIR="${MT_SHARED_DIR:-/etc/morfsystem}"
 SERVICE_NAME="${MT_SERVICE_NAME:-morfmonitor}"
-DEST="$APP_DIR/morfmonitor.json"
+
+# Commande d'elevation. Vide quand on est deja root, et surchargeable par
+# MT_SUDO pour deployer vers un emplacement accessible sans privileges — ce qui
+# rend le script VERIFIABLE. Sans cela il n'etait testable que sur une machine
+# reelle, et un « sudo » d'une autre plateforme (Windows en fournit un qui
+# renvoie toujours 0) faisait passer les verifications pour bonnes a tort.
+SUDO="${MT_SUDO-sudo}"
+[[ "${EUID:-1}" -eq 0 ]] && SUDO=""
 
 RESTART=1
-[[ "${1:-}" == "--no-restart" ]] && RESTART=0
+DO_SERVICE=1
+DO_SHARED=1
 
-# Source : la configuration reelle du depot si elle existe, sinon l'exemple.
-SRC="$REPO_ROOT/config/morfmonitor.json"
-[[ -f "$SRC" ]] || SRC="$REPO_ROOT/config/morfmonitor.example.json"
-[[ -f "$SRC" ]] || { echo "Aucune configuration source dans $REPO_ROOT/config/" >&2; exit 1; }
+for arg in "$@"; do
+    case "$arg" in
+        --no-restart) RESTART=0 ;;
+        --service)    DO_SHARED=0 ;;
+        --shared)     DO_SERVICE=0 ;;
+        -h|--help)    sed -n '3,34p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        *) echo "Option inconnue : $arg  (--service | --shared | --no-restart)" >&2; exit 2 ;;
+    esac
+done
 
-[[ -d "$APP_DIR" ]] || { echo "Service non installe : $APP_DIR absent.
-Lancer d'abord : sudo ./scripts/linux/install-service.sh" >&2; exit 1; }
-
-echo "Source      : $SRC"
-echo "Destination : $DEST"
-
-# Sauvegarde avant ecrasement : l'ancienne configuration peut porter des
-# reglages que personne ne saurait retrouver.
-if [[ -f "$DEST" ]]; then
-    BACKUP="$DEST.bak-$(date +%Y%m%d-%H%M%S)"
-    sudo cp "$DEST" "$BACKUP"
-    echo "Sauvegarde  : $BACKUP"
-    # Apercu des differences, plafonne : le but est de voir d'un coup d'oeil ce
-    # qui change, pas de relire les deux fichiers.
-    if command -v diff >/dev/null 2>&1 && ! diff -q "$BACKUP" "$SRC" >/dev/null; then
-        DIFF_OUT="$(diff -u "$BACKUP" "$SRC" | tail -n +3 || true)"
-        LINES="$(printf '%s\n' "$DIFF_OUT" | wc -l)"
-        echo
-        echo "Differences appliquees :"
-        printf '%s\n' "$DIFF_OUT" | head -n 30 | sed 's/^/    /'
-        (( LINES > 30 )) && echo "    ... ($((LINES - 30)) lignes de plus ; comparer avec : diff -u \"$BACKUP\" \"$SRC\")"
-        echo
+# Source : la configuration REELLE du depot si elle existe, l'exemple sinon.
+# Garder un vrai fichier dans le clone en fait donc la reference deployee.
+pick_source() {
+    local base="$1"
+    if [[ -f "$REPO_ROOT/config/$base.json" ]]; then
+        printf '%s\n' "$REPO_ROOT/config/$base.json"
+    elif [[ -f "$REPO_ROOT/config/$base.example.json" ]]; then
+        printf '%s\n' "$REPO_ROOT/config/$base.example.json"
     fi
+    return 0
+}
+
+# Copie un fichier vers sa destination, en sauvegardant et en montrant ce qui
+# change. Un deploiement muet laisse l'utilisateur sans moyen de savoir si son
+# geste a fait ce qu'il croyait.
+deploy_one() {
+    local src="$1" dest="$2" label="$3"
+
+    echo "── $label"
+    echo "   source      : $src"
+    echo "   destination : $dest"
+
+    $SUDO install -d -m 0755 "$(dirname "$dest")"
+
+    if $SUDO test -f "$dest"; then
+        local backup="$dest.bak-$(date +%Y%m%d-%H%M%S)"
+        $SUDO cp -p "$dest" "$backup"
+        echo "   sauvegarde  : $backup"
+        if ! $SUDO diff -q "$backup" "$src" >/dev/null 2>&1; then
+            local out lines
+            out="$($SUDO diff -u "$backup" "$src" | tail -n +3 || true)"
+            lines="$(printf '%s\n' "$out" | wc -l)"
+            echo
+            echo "   differences appliquees :"
+            printf '%s\n' "$out" | head -n 25 | sed 's/^/      /'
+            (( lines > 25 )) && echo "      ... ($((lines - 25)) lignes de plus)"
+            echo
+        else
+            echo "   (identique : rien ne change)"
+        fi
+    fi
+
+    $SUDO install -m 0644 "$src" "$dest"
+    echo "   copie       : OK"
+    echo
+}
+
+deployed=0
+
+if (( DO_SERVICE )); then
+    SRC="$(pick_source morfmonitor)"
+    if [[ -z "$SRC" ]]; then
+        echo "Aucune configuration de service dans $REPO_ROOT/config/" >&2; exit 1
+    elif [[ ! -d "$APP_DIR" ]]; then
+        echo "Service non installe : $APP_DIR absent." >&2
+        echo "Lancer d'abord : ./scripts/linux/install-service.sh" >&2
+        exit 1
+    fi
+    deploy_one "$SRC" "$APP_DIR/morfmonitor.json" "Configuration du service   ->  $APP_DIR"
+    deployed=1
 fi
 
-sudo install -m 0644 "$SRC" "$DEST"
-echo "Configuration copiee."
+if (( DO_SHARED )); then
+    SRC="$(pick_source morfsystem)"
+    if [[ -z "$SRC" ]]; then
+        echo "Aucune configuration partagee dans $REPO_ROOT/config/" >&2; exit 1
+    fi
+    deploy_one "$SRC" "$SHARED_DIR/morfsystem.json" "Configuration partagee     ->  $SHARED_DIR"
+    deployed=1
+fi
 
-if [[ $RESTART -eq 1 ]] && command -v systemctl >/dev/null 2>&1; then
-    sudo systemctl restart "$SERVICE_NAME"
-    sleep 1
+(( deployed )) || { echo "Rien a deployer." >&2; exit 1; }
+
+if (( RESTART )) && command -v systemctl >/dev/null 2>&1; then
+    # La configuration partagee est lue par les DEUX programmes : redemarrer
+    # morfMonitor seul laisserait le Dashboard sur l'ancienne description du parc.
+    for unit in "$SERVICE_NAME" morfdashboard; do
+        if $SUDO systemctl cat "$unit" >/dev/null 2>&1; then
+            $SUDO systemctl restart "$unit"
+            echo "Redemarre : $unit"
+        fi
+    done
     echo
-    sudo systemctl --no-pager --lines=0 status "$SERVICE_NAME" || true
-    echo
-    echo "Verifier que le service collecte :"
-    echo "    curl -s http://127.0.0.1:8790/api/all | head -c 200"
+    echo "Verifier :"
+    echo "    curl -s http://127.0.0.1:8790/api/config | head -c 200"
     echo "    journalctl -u $SERVICE_NAME -n 20"
 else
-    echo "Redemarrer pour appliquer : sudo systemctl restart $SERVICE_NAME"
+    echo "Redemarrer pour appliquer :"
+    echo "    $SUDO systemctl restart $SERVICE_NAME morfdashboard"
 fi

@@ -2,7 +2,7 @@
 
 *Read in another language: **English** (this document) · [Français](README.fr.md).*
 
-[![Version](https://img.shields.io/badge/version-0.3.4-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.3.6-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![License](https://img.shields.io/badge/License-GPL--3.0--only-blue)
@@ -79,94 +79,68 @@ precisely so that neither C++ nor Python is privileged.
 It replaces the `SERVICE_LABELS`, `NETWORK_SERVICES` and `BEACON_APPS`
 structures previously hard-coded in the Dashboard.
 
-## Managing the deployed configuration
+## Deploying the configurations
 
-### Deploying the repository configuration
+There are **two files**, and they do not go to the same place:
 
-The direct path: copy the repository configuration over the installed one.
+| Repository file | Destination | Contents | Read by |
+|---|---|---|---|
+| `config/morfmonitor.json` | `/opt/morfmonitor/` | port, bind address, modules | morfMonitor |
+| `config/morfsystem.json` | `/etc/morfsystem/` | what is **supervised** | morfMonitor **and** RaspberryDashboard |
 
-```bash
-./scripts/linux/deploy-config.sh               # copy, then restart
-./scripts/linux/deploy-config.sh --no-restart  # copy only
-```
-
-```powershell
-.\scripts\windows\deploy-config.ps1
-.\scripts\windows\deploy-config.ps1 -NoRestart
-```
-
-The source is `config/morfmonitor.json` when it exists, and
-`config/morfmonitor.example.json` otherwise — so keeping a real
-`config/morfmonitor.json` in the clone makes it the reference that gets
-deployed. It is plain shell: no Python, no merge, no questions.
-
-The deployed file is backed up as `morfmonitor.json.bak-<date>` before being
-replaced, and a capped diff shows what changed. Nothing is lost — if the old
-file held machine-specific settings, they are in the backup.
-
-Note that `config/morfmonitor.json` is not tracked by Git: only the `.example`
-files are. Keep it out of commits, or add it to `.gitignore` if you would rather
-not think about it.
-
-### Adding new keys without touching existing values
-
-Installing and updating **never overwrite** the deployed `morfmonitor.json` — it
-holds local settings that cannot be reconstructed. `update-service.sh` adds keys
-that appeared since installation, without changing any existing value.
-
-That rule leaves one blind spot: a value that is **already present but has
-become invalid** is never corrected. A module whose type disappeared from the
-factory stays in place, and the service then starts, listens and announces
-itself on the LAN while supervising nothing — every `/api/` route answering 503.
-
-Reconciling an existing value cannot be automatic: only the operator knows
-whether a value is a deliberate setting or a leftover. `config-tool.sh` makes it
-explicit instead, and every write is preceded by a dated backup.
+One command pushes both:
 
 ```bash
-./scripts/linux/config-tool.sh status      # where it is, and is it usable
-./scripts/linux/config-tool.sh check       # detailed diagnosis
-./scripts/linux/config-tool.sh diff        # deployed vs repository example
-./scripts/linux/config-tool.sh merge       # add missing keys only
-./scripts/linux/config-tool.sh reset       # replace entirely (confirmation required)
+./scripts/linux/deploy-config.sh
 ```
 
-**Never prefix these with `sudo`.** They elevate only the system writes, the way
-`morfTools/config.sh shared` does. Requiring `sudo` for the whole script would
-run the reading, comparing and printing as root for no reason — and the two
-subcommands of `config.sh` would then demand the opposite of each other.
+That is all. It backs up each existing file, shows the differences it applies,
+copies, then restarts `morfmonitor` and `morfdashboard`.
+
+**Do not prefix with `sudo`**: the script elevates only the system writes.
+
+To push just one:
+
+```bash
+./scripts/linux/deploy-config.sh --service      # /opt only
+./scripts/linux/deploy-config.sh --shared       # /etc only
+./scripts/linux/deploy-config.sh --no-restart   # without restarting
+```
+
+The source is your real file (`config/morfsystem.json`) when it exists, and the
+example otherwise — so keeping a real file in the clone makes it the reference
+that gets deployed.
+
+### The other tools, and when they help
+
+`deploy-config.sh` **overwrites**, which is not always what you want:
+
+| Need | Tool |
+|---|---|
+| Push my files as they are | `deploy-config.sh` ← the common case |
+| Add new keys **without** touching my settings | `update-service.sh` |
+| Find out why the service collects nothing | `config-tool.sh check` |
+| Compare deployed against repository | `config-tool.sh diff` |
 
 `check` asks the binary itself which module types are valid (`--list-types`), so
-the diagnosis stays correct as the factory evolves. It reports rather than
-repairs, and `update-service.sh` runs it after every update so a stale
-configuration announces itself instead of being discovered through a silent
-service.
+the diagnosis stays correct as the factory evolves, and `update-service.sh` runs
+it after every update.
 
-`merge` is the safe default. `reset` discards local settings and asks for
-explicit confirmation; use `--yes` only for scripted reprovisioning.
+From morfTools, `./morfTools/config.sh deploy morfMonitor` calls the very same
+script — useful to drive several projects from one place, pointless if you are
+already inside morfMonitor.
 
 ### Linux and Windows parity
 
-Every script in `scripts/linux/` has a counterpart in `scripts/windows/`:
-
-| Task | Linux | Windows |
-|---|---|---|
-| Install | `install-service.sh` | `install-service.ps1` |
-| Update | `update-service.sh` | `update-service.ps1` |
-| Deploy the repo config | `deploy-config.sh` | `deploy-config.ps1` |
-| Manage the deployed config | `config-tool.sh` | `config-tool.ps1` |
+Every script in `scripts/linux/` has a counterpart in `scripts/windows/`
+(`install-service`, `update-service`, `deploy-config`, `config-tool`).
 
 The **JSON logic stays in Python** (`merge-config.py`, `check-config.py`), called
 unchanged by both sides. Python is the only one of the three languages in this
 ecosystem that runs identically on Windows, Linux and the Raspberry Pi;
 reimplementing a recursive JSON merge in both Bash and PowerShell would create
 two implementations free to disagree — about the file that decides whether the
-service works at all. Same reasoning as
-`morfTools/scripts/ecosystem-check.py`, shared by `morf.sh` and `morf.ps1`.
-
-Callers declare which tooling to cite in their advice (`--hint-style sh|ps1`),
-so a Bash user is never told to run a PowerShell command. `deploy-config` needs
-no Python at all.
+service works at all.
 
 ## Reboot cause
 

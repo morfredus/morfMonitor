@@ -5,6 +5,61 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
+## [0.3.6] – 2026-07-21
+
+### Ajouté
+
+- **L'adresse IP de la machine figure sur la page État général.** Elle ne vivait
+  que dans l'onglet Réseau. Or c'est la première chose que l'on cherche quand un
+  client externe — SSH, un client FTP, un signet de navigateur — cesse de se
+  connecter après un changement de bail DHCP : la faire chercher dans un second
+  onglet transforme une question de trois secondes en enquête.
+
+  Seules les interfaces **réellement actives** sont listées, avec leur nom
+  (`192.168.1.105 (wlan0)`). Une interface montée mais sans lien — un `eth0`
+  dont le câble est débranché — n'apparaît pas : afficher une adresse qui ne
+  porte aucun trafic serait pire que ne rien afficher.
+
+## [0.3.5] – 2026-07-21
+
+### Modifié
+
+- **`deploy-config.sh` déploie désormais les DEUX configurations.** Il ne
+  poussait que `morfmonitor.json` vers `/opt` ; la configuration partagée
+  passait par un autre script, dans un autre dépôt, sous un autre nom. Cinq
+  points d'entrée coexistaient pour une seule opération — `config-tool`,
+  `shared-config`, `config shared`, `config deploy`, `deploy-config` — et rien
+  ne permettait de deviner lequel faisait quoi.
+
+  Une commande suffit maintenant :
+
+  ```sh
+  ./scripts/linux/deploy-config.sh
+  ```
+
+  Elle pousse `morfmonitor.json` vers `/opt/morfmonitor/` **et**
+  `morfsystem.json` vers `/etc/morfsystem/`, sauvegarde chaque fichier
+  existant, affiche les différences appliquées, puis redémarre `morfmonitor`
+  **et** `morfdashboard` — la configuration partagée étant lue par les deux,
+  ne relancer que l'un laisserait l'autre sur l'ancienne description du parc.
+
+  `--service` et `--shared` restreignent à l'une des deux.
+
+- **Le script est enfin vérifiable.** L'élévation passe par une variable
+  (`MT_SUDO`), vide quand on est déjà root et surchargeable pour déployer vers
+  un emplacement accessible sans privilèges.
+
+  Sans cela il n'était testable que sur une machine réelle — et le `sudo` que
+  fournit Windows 11, qui **renvoie 0 quoi qu'il arrive**, faisait passer un
+  test pour concluant alors qu'il ne vérifiait rien : le script annonçait
+  « identique » sur deux fichiers différents et une sauvegarde sur un dossier
+  inexistant.
+
+- Documentation reprise pour un lecteur qui découvre le projet : un tableau dit
+  quel fichier va où et qui le lit, puis une commande. Les autres outils
+  (`update-service`, `config-tool`) sont présentés par le besoin auquel ils
+  répondent, pas par leur nom.
+
 ## [0.3.4] – 2026-07-21
 
 ### Modifié

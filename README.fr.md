@@ -2,7 +2,7 @@
 
 *Lire dans une autre langue : [English](README.md) · **Français** (ce document).*
 
-[![Version](https://img.shields.io/badge/version-0.3.4-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.3.6-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -213,39 +213,52 @@ l'écosystème qui tourne à l'identique sous Windows, Linux et Raspberry Pi.
 La réécrire en Bash **et** en PowerShell donnerait deux implémentations libres
 de diverger, à propos du fichier qui décide si le service fonctionne.
 
-## Gérer la configuration déployée
+## Déployer les configurations
 
-L'installation et la mise à jour **ne remplacent jamais** `morfmonitor.json` :
-il porte des réglages locaux irrécupérables. `update-service.sh` ajoute les
-clés apparues depuis l'installation sans toucher aux valeurs existantes.
+Il y a **deux fichiers**, et ils ne vont pas au même endroit :
 
-Cette règle laisse un angle mort : une valeur **déjà présente mais devenue
-invalide** n'est jamais corrigée. Un module dont le type a disparu de la
-fabrique reste en place, et le service démarre alors, écoute, annonce sa
-présence sur le LAN — sans rien superviser, chaque route `/api/` répondant 503.
+| Fichier du dépôt | Destination | Contenu | Lu par |
+|---|---|---|---|
+| `config/morfmonitor.json` | `/opt/morfmonitor/` | port, adresse d'écoute, modules | morfMonitor |
+| `config/morfsystem.json` | `/etc/morfsystem/` | ce qui est **supervisé** | morfMonitor **et** RaspberryDashboard |
+
+Une seule commande pousse les deux :
 
 ```sh
-./scripts/linux/config-tool.sh status      # où elle est, est-elle exploitable
-./scripts/linux/config-tool.sh check       # diagnostic détaillé
-./scripts/linux/config-tool.sh diff        # écart avec l'exemple du dépôt
-./scripts/linux/config-tool.sh merge       # ajouter les clés manquantes
-./scripts/linux/config-tool.sh reset       # remplacer (confirmation requise)
-
-# Ne JAMAIS préfixer par sudo : les scripts n'élèvent que les écritures système,
-# comme le fait « morfTools/config.sh shared ».
-
-./scripts/linux/deploy-config.sh      # écraser par la config du dépôt
+./scripts/linux/deploy-config.sh
 ```
 
-`check` demande les types valides **au binaire** (`--list-types`) : le
-diagnostic reste juste quand la fabrique évolue. Il constate sans rien modifier,
-et `update-service.sh` l'exécute après chaque mise à jour — une configuration
-périmée s'annonce au lieu d'être découverte par un service silencieux.
+C'est tout. Elle sauvegarde chaque fichier existant, affiche les différences
+appliquées, copie, puis redémarre `morfmonitor` et `morfdashboard`.
 
-`deploy-config.sh` est la voie directe : il copie
-`config/morfmonitor.json` (ou l'exemple à défaut) par-dessus la configuration
-déployée, sans fusion et sans Python. Toute écriture est précédée d'une
-sauvegarde datée.
+**Ne pas préfixer par `sudo`** : le script n'élève que les écritures système.
+
+Pour n'en pousser qu'un :
+
+```sh
+./scripts/linux/deploy-config.sh --service      # seulement /opt
+./scripts/linux/deploy-config.sh --shared       # seulement /etc
+./scripts/linux/deploy-config.sh --no-restart   # sans redémarrer
+```
+
+La source est votre fichier réel (`config/morfsystem.json`) s'il existe, sinon
+l'exemple (`config/morfsystem.example.json`). Garder un vrai fichier dans le
+clone en fait donc la référence déployée.
+
+### Les autres outils, et quand ils servent
+
+`deploy-config.sh` **écrase**. Ce n'est pas toujours ce qu'on veut :
+
+| Besoin | Outil |
+|---|---|
+| Pousser mes fichiers tels quels | `deploy-config.sh` ← le cas courant |
+| Ajouter les clés nouvelles **sans** toucher à mes réglages | `update-service.sh` |
+| Savoir pourquoi le service ne collecte rien | `config-tool.sh check` |
+| Comparer déployé et dépôt | `config-tool.sh diff` |
+
+Depuis morfTools, `./morfTools/config.sh deploy morfMonitor` appelle exactement
+le même script — utile pour piloter plusieurs projets depuis un seul endroit,
+inutile si vous êtes déjà dans morfMonitor.
 
 ## Philosophie
 

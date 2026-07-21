@@ -141,11 +141,27 @@ function stateBadge(state) {
 
 // --- rendu des pages --------------------------------------------------------
 
+// Adresses IPv4 des interfaces REELLEMENT actives, sous la forme
+// « 192.168.1.105 (wlan0) ». L'adresse ne vivait que dans l'onglet Réseau ;
+// or c'est la premiere chose qu'on cherche quand un client externe — SSH, un
+// client FTP, un signet — cesse de se connecter apres un changement de bail
+// DHCP. La faire chercher dans un second onglet transforme une question de
+// trois secondes en enquete.
+function primaryAddresses(all) {
+  const ifaces = (all.network && all.network.interfaces) || [];
+  const live = ifaces.filter((i) => i.running && (i.ipv4 || []).length);
+  if (!live.length) return null;
+  return live.map((i) => `${esc(i.ipv4[0])} <span class="info-label">(${esc(i.name)})</span>`)
+             .join('<br>');
+}
+
 function renderEtat(all, status) {
   const sys = all.system || {};
+  const addr = primaryAddresses(all);
 
   el('c-machine').innerHTML = header('Machine') +
     row('Nom', esc(sys.hostname || '—')) +
+    row('Adresse', addr || '<span class="info-label">aucune interface active</span>') +
     (sys.model ? row('Modèle', esc(sys.model)) : '') +
     row('Système', esc([sys.os, sys.arch].filter(Boolean).join(' · ') || '—')) +
     row('Noyau', esc(sys.kernel || '—')) +
