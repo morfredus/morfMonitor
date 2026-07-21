@@ -1,22 +1,27 @@
 {
   "_comment": "ATTENTION : ce fichier n'est PAS lu par le service. Il est deploye vers /opt/morfmonitor/morfmonitor.json par ./scripts/linux/deploy-config.sh, et c'est CETTE copie que morfMonitor lit. Modifier ce fichier ne change rien tant que le deploiement n'a pas ete lance -- cause la plus frequente de « j'ai pourtant corrige ca ». Ce fichier decrit le SERVICE (port, adresse d'ecoute, modules). Ce qui est SUPERVISE vit dans morfsystem.json, deploye vers /etc/morfsystem/. Si vous creez un config/morfmonitor.json a cote, c'est LUI qui sera deploye et cet exemple cessera d'etre consulte.",
+
   "app_name": "morfMonitor",
   "_comment_port": "Port HTTP de morfMonitor, attribue par le registre d'adressage : 'ports.allocations' dans morfTools/ecosystem.json. Ce fichier ne decrit plus le plan du parc — il en etait une copie partielle, donc fausse. Consulter et modifier le registre, jamais ce commentaire. 'morf doctor' verifie que la valeur ci-dessous correspond au registre.",
   "http_port": 8790,
   "bind_address": "0.0.0.0",
+
   "_comment_web": "Interface Web servie sur le MEME port que l'API, a la racine. Ce n'est pas un service supplementaire : c'est une seconde vue des memes donnees, qui consomme les routes /api/ comme n'importe quel autre client. A false, seules les routes JSON repondent et le service redevient une API pure. ATTENTION a 'bind_address' : 0.0.0.0 expose l'interface a toutes les interfaces reseau de la machine. Sur un poste multi-domicilie ou expose, preferer l'adresse du LAN.",
   "web_enabled": true,
+
   "beacon": {
     "_comment": "Annonce de presence sur le LAN (protocole morfBeacon, port du parc).",
     "enabled": true,
     "udp_port": 45454,
     "interval_ms": 15000
   },
+
   "modules": [
     {
       "_comment": "Module de supervision : c'est LUI qui collecte l'etat de la machine et alimente toutes les routes /api/. Sans un module de type 'monitor', le service demarre mais chaque route /api/ repond 503 'aucun module de supervision actif'. Seul type reconnu par la fabrique : 'monitor'.",
       "type": "monitor",
       "id": "monitor-1",
+
       "_comment_config_path": "Facultatif, et A PLAT dans l'entree du module (pas dans un sous-objet 'params') : la fabrique lit les parametres directement sur l'objet du module. Sans lui, la configuration PARTAGEE (morfsystem.json, qui decrit ce qui est supervise) est cherchee aux emplacements standards -- voir SharedConfig.",
       "config_path": ""
     }
