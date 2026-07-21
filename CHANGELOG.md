@@ -5,6 +5,33 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
+## [0.3.4] – 2026-07-21
+
+### Modifié
+
+- **`deploy-config` n'exige plus d'être préfixé par `sudo`** : il élève
+  lui-même les seules écritures système, comme le fait `config.sh shared`. Les
+  deux sous-commandes du point d'entrée unifié demandaient jusqu'ici l'inverse
+  l'une de l'autre — une incohérence introduite en les unifiant. La règle est
+  désormais unique : **aucune commande `config` ne se préfixe par `sudo`**.
+
+  Lancer tout un script en root pour quelques écritures faisait aussi tourner
+  la lecture, la comparaison et l'affichage avec des droits dont ils n'ont
+  aucun besoin.
+
+  Côté Windows, il n'existe pas d'équivalent : un script ne peut pas élever une
+  seule écriture. Plutôt qu'exiger l'administrateur d'emblée — inutile quand
+  `-AppDir` vise un dossier accessible — l'échec d'écriture est intercepté et
+  explique précisément la cause. Un « accès refusé » brut enverrait chercher un
+  problème de fichier là où il s'agit de droits.
+
+- **Le message affiché quand aucune sonde réseau n'est déclarée était devenu
+  faux.** Il invitait à déclarer les ESP32 dans `network_services`, alors que
+  MeteoHub et GatewayLab s'annoncent désormais eux-mêmes. Une liste vide n'est
+  plus un manque à combler mais l'aboutissement de la migration : le texte
+  l'explique, et présente `network_services` comme le dernier recours pour un
+  équipement qui ne s'annonce pas.
+
 ## [0.3.3] – 2026-07-21
 
 ### Corrigé

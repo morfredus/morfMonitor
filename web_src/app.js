@@ -348,7 +348,11 @@ function renderServices(all) {
             `Les équipements sont donc « en attente », ce qui ne signifie pas injoignable.</div>`
           : '')
       : unavailable('Aucune sonde réseau déclarée.',
-          'À déclarer dans morfsystem.json (clé network_services) — un ESP32 ne répond pas à systemctl.'));
+          'Ce n’est pas un manque : une sonde TCP suppose de connaître une adresse à ' +
+          'l’avance, l’inverse d’une découverte. Un équipement qui émet un heartbeat ' +
+          'morfbeacon/1 apparaît dans Écosystème sans être déclaré nulle part. La clé ' +
+          'network_services de morfsystem.json reste le dernier recours, pour un ' +
+          'équipement qui ne s’annonce pas.'));
 }
 
 function renderEcosysteme(all) {

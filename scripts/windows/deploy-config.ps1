@@ -74,7 +74,16 @@ if (Test-Path -LiteralPath $dest) {
     }
 }
 
-Copy-Item -LiteralPath $src -Destination $dest -Force
+# Windows n'a pas d'equivalent de sudo : un script ne peut pas elever une seule
+# ecriture. Plutot que d'exiger l'administrateur d'emblee -- inutile quand
+# -AppDir pointe vers un dossier accessible -- on tente l'ecriture et on explique
+# precisement l'echec. Un « acces refuse » brut enverrait chercher un probleme
+# de fichier la ou il s'agit de droits.
+try {
+    Copy-Item -LiteralPath $src -Destination $dest -Force -ErrorAction Stop
+} catch [System.UnauthorizedAccessException] {
+    throw "Ecriture refusee : $dest`nRelancer dans une PowerShell Administrateur, ou viser un dossier accessible avec -AppDir."
+}
 Write-Host "Configuration copiee."
 
 if (-not $NoRestart) {

@@ -18,9 +18,14 @@
 # plutot update-service.sh (qui appelle merge-config.py).
 #
 # Usage :
-#   sudo ./scripts/linux/deploy-config.sh                  # copie puis redemarre
-#   sudo ./scripts/linux/deploy-config.sh --no-restart     # copie seulement
-#   sudo MT_APP_DIR=/opt/autre ./scripts/linux/deploy-config.sh
+#   ./scripts/linux/deploy-config.sh                  # copie puis redemarre
+#   ./scripts/linux/deploy-config.sh --no-restart     # copie seulement
+#   MT_APP_DIR=/opt/autre ./scripts/linux/deploy-config.sh
+#
+# NE PAS prefixer par sudo : le script n'eleve QUE les ecritures systeme, comme
+# le fait « config.sh shared ». Exiger sudo sur tout le script ferait tourner en
+# root la lecture, la comparaison et l'affichage, sans aucun besoin -- et les
+# deux sous-commandes de « config.sh » demanderaient l'inverse l'une de l'autre.
 
 set -euo pipefail
 
@@ -49,7 +54,7 @@ echo "Destination : $DEST"
 # reglages que personne ne saurait retrouver.
 if [[ -f "$DEST" ]]; then
     BACKUP="$DEST.bak-$(date +%Y%m%d-%H%M%S)"
-    cp "$DEST" "$BACKUP"
+    sudo cp "$DEST" "$BACKUP"
     echo "Sauvegarde  : $BACKUP"
     # Apercu des differences, plafonne : le but est de voir d'un coup d'oeil ce
     # qui change, pas de relire les deux fichiers.
@@ -64,14 +69,14 @@ if [[ -f "$DEST" ]]; then
     fi
 fi
 
-install -m 0644 "$SRC" "$DEST"
+sudo install -m 0644 "$SRC" "$DEST"
 echo "Configuration copiee."
 
 if [[ $RESTART -eq 1 ]] && command -v systemctl >/dev/null 2>&1; then
-    systemctl restart "$SERVICE_NAME"
+    sudo systemctl restart "$SERVICE_NAME"
     sleep 1
     echo
-    systemctl --no-pager --lines=0 status "$SERVICE_NAME" || true
+    sudo systemctl --no-pager --lines=0 status "$SERVICE_NAME" || true
     echo
     echo "Verifier que le service collecte :"
     echo "    curl -s http://127.0.0.1:8790/api/all | head -c 200"

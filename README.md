@@ -2,7 +2,7 @@
 
 *Read in another language: **English** (this document) · [Français](README.fr.md).*
 
-[![Version](https://img.shields.io/badge/version-0.3.3-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.3.4-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![License](https://img.shields.io/badge/License-GPL--3.0--only-blue)
@@ -86,8 +86,8 @@ structures previously hard-coded in the Dashboard.
 The direct path: copy the repository configuration over the installed one.
 
 ```bash
-sudo ./scripts/linux/deploy-config.sh               # copy, then restart
-sudo ./scripts/linux/deploy-config.sh --no-restart  # copy only
+./scripts/linux/deploy-config.sh               # copy, then restart
+./scripts/linux/deploy-config.sh --no-restart  # copy only
 ```
 
 ```powershell
@@ -127,9 +127,14 @@ explicit instead, and every write is preceded by a dated backup.
 ./scripts/linux/config-tool.sh status      # where it is, and is it usable
 ./scripts/linux/config-tool.sh check       # detailed diagnosis
 ./scripts/linux/config-tool.sh diff        # deployed vs repository example
-sudo ./scripts/linux/config-tool.sh merge  # add missing keys only
-sudo ./scripts/linux/config-tool.sh reset  # replace entirely (confirmation required)
+./scripts/linux/config-tool.sh merge       # add missing keys only
+./scripts/linux/config-tool.sh reset       # replace entirely (confirmation required)
 ```
+
+**Never prefix these with `sudo`.** They elevate only the system writes, the way
+`morfTools/config.sh shared` does. Requiring `sudo` for the whole script would
+run the reading, comparing and printing as root for no reason — and the two
+subcommands of `config.sh` would then demand the opposite of each other.
 
 `check` asks the binary itself which module types are valid (`--list-types`), so
 the diagnosis stays correct as the factory evolves. It reports rather than

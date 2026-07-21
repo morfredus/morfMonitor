@@ -2,7 +2,7 @@
 
 *Lire dans une autre langue : [English](README.md) · **Français** (ce document).*
 
-[![Version](https://img.shields.io/badge/version-0.3.3-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.3.4-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -228,10 +228,13 @@ présence sur le LAN — sans rien superviser, chaque route `/api/` répondant 5
 ./scripts/linux/config-tool.sh status      # où elle est, est-elle exploitable
 ./scripts/linux/config-tool.sh check       # diagnostic détaillé
 ./scripts/linux/config-tool.sh diff        # écart avec l'exemple du dépôt
-sudo ./scripts/linux/config-tool.sh merge  # ajouter les clés manquantes
-sudo ./scripts/linux/config-tool.sh reset  # remplacer (confirmation requise)
+./scripts/linux/config-tool.sh merge       # ajouter les clés manquantes
+./scripts/linux/config-tool.sh reset       # remplacer (confirmation requise)
 
-sudo ./scripts/linux/deploy-config.sh      # écraser par la config du dépôt
+# Ne JAMAIS préfixer par sudo : les scripts n'élèvent que les écritures système,
+# comme le fait « morfTools/config.sh shared ».
+
+./scripts/linux/deploy-config.sh      # écraser par la config du dépôt
 ```
 
 `check` demande les types valides **au binaire** (`--list-types`) : le
