@@ -126,9 +126,28 @@ function webUiLink(a) {
     const declares = Array.isArray(a.capabilities) && a.capabilities.includes('web_ui');
     return declares ? badge('warn', 'annoncée, injoignable') : '<span class="info-label">—</span>';
   }
-  const label = esc(ui.label || a.label || a.app);
+  const label = esc(ui.label || serviceName(a.app));
   const title = ui.description ? ` title="${esc(ui.description)}"` : '';
   return `<a href="${esc(ui.url)}" target="_blank" rel="noopener"${title}>${label} ↗</a>`;
+}
+
+// Nom d'affichage d'un service : on part du nom qu'il ANNONCE (champ `app` du
+// heartbeat), jamais d'un libellé défini ici. Un service renommé s'affiche
+// alors correctement de lui-même, sans qu'on touche à morfMonitor — la config
+// n'est plus une seconde source de vérité qui peut mentir.
+//
+// Seul le préfixe « morf » est normalisé : minuscule, et la lettre suivante en
+// majuscule, pour que « morfdashboard » et « morfDashboard » se lisent pareil.
+// Les majuscules internes sont celles du service et sont conservées, car on ne
+// peut pas les deviner : « morfTemplateService » reste tel quel. Un nom sans
+// préfixe morf (ComponentHub, MeteoHub) est affiché exactement comme annoncé.
+function serviceName(app) {
+  if (typeof app !== 'string' || !app) return '—';
+  if (/^morf/i.test(app)) {
+    const rest = app.slice(4);
+    return 'morf' + (rest ? rest.charAt(0).toUpperCase() + rest.slice(1) : '');
+  }
+  return app;
 }
 
 function stateBadge(state) {
@@ -384,7 +403,7 @@ function renderEcosysteme(all) {
            <th>État</th><th class="mono">Dernier heartbeat</th><th>Interface</th>
          </tr></thead><tbody>` +
         apps.map((a) => `<tr>
-          <td>${esc(a.label || a.app)}${
+          <td>${esc(serviceName(a.app))}${
               !a.declared        ? ' <span class="badge badge-off">non déclaré</span>'
             : a.enabled === false ? ' <span class="badge badge-off">non supervisé</span>'
                                   : ''}</td>
@@ -443,7 +462,7 @@ function problems(all) {
   // vraies pannes.
   (s.beacon || []).forEach((a) => {
     if (a.online || a.enabled === false || !a.declared) return;
-    out.push({ what: a.label || a.app, state: 'hors ligne', kind: 'err' });
+    out.push({ what: serviceName(a.app), state: 'hors ligne', kind: 'err' });
   });
   [['disk', 'Stockage'], ['memory', 'Mémoire'], ['swap', 'Swap']].forEach(([k, lbl]) => {
     const p = r[k] && r[k].percent;

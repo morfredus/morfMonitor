@@ -5,6 +5,19 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
+## [0.4.1] – 2026-07-22
+
+### Modifié
+
+- **L'onglet Écosystème affiche le nom que chaque service ANNONCE**, plus un
+  libellé défini côté morfMonitor. Un service renommé s'affiche désormais
+  correctement de lui-même : la configuration n'est plus une seconde source de
+  vérité qui pouvait mentir. Seul le préfixe « morf » est normalisé — minuscule,
+  lettre suivante en majuscule — de sorte que « morfdashboard » et
+  « morfDashboard » se lisent pareil, les majuscules internes
+  (« morfTemplateService ») étant conservées. Un nom sans préfixe morf
+  (ComponentHub, MeteoHub) est affiché tel qu'annoncé.
+
 ## [0.4.0] – 2026-07-22
 
 ### Corrigé
