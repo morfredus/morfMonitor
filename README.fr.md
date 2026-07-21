@@ -121,7 +121,7 @@ Presque toutes les surprises viennent du **même malentendu** : le service ne li
 jamais les fichiers du dépôt. Il lit ceux qui ont été **déployés**.
 
 ```
-    config/morfmonitor.json   ──déploiement──>   /opt/morfmonitor/morfmonitor.json   ← lu
+    config/morfmonitor.json   ──déploiement──>   /etc/morfmonitor/morfmonitor.json   ← lu
     config/morfsystem.json    ──déploiement──>   /etc/morfsystem/morfsystem.json     ← lu
 ```
 
@@ -269,7 +269,7 @@ Il y a **deux fichiers**, et ils ne vont pas au même endroit :
 
 | Fichier du dépôt | Destination | Contenu | Lu par |
 |---|---|---|---|
-| `config/morfmonitor.json` | `/opt/morfmonitor/` | port, adresse d'écoute, modules | morfMonitor |
+| `config/morfmonitor.json` | `/etc/morfmonitor/` | port, adresse d'écoute, modules | morfMonitor |
 | `config/morfsystem.json` | `/etc/morfsystem/` | ce qui est **supervisé** | morfMonitor **et** RaspberryDashboard |
 
 Une seule commande pousse les deux :

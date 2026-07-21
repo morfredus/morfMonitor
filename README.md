@@ -75,7 +75,7 @@ Nearly every surprise comes from the **same misunderstanding**: the service neve
 reads the repository files. It reads the **deployed** ones.
 
 ```
-    config/morfmonitor.json   ──deploy──>   /opt/morfmonitor/morfmonitor.json   ← read
+    config/morfmonitor.json   ──deploy──>   /etc/morfmonitor/morfmonitor.json   ← read
     config/morfsystem.json    ──deploy──>   /etc/morfsystem/morfsystem.json     ← read
 ```
 
@@ -124,7 +124,7 @@ There are **two files**, and they do not go to the same place:
 
 | Repository file | Destination | Contents | Read by |
 |---|---|---|---|
-| `config/morfmonitor.json` | `/opt/morfmonitor/` | port, bind address, modules | morfMonitor |
+| `config/morfmonitor.json` | `/etc/morfmonitor/` | port, bind address, modules | morfMonitor |
 | `config/morfsystem.json` | `/etc/morfsystem/` | what is **supervised** | morfMonitor **and** RaspberryDashboard |
 
 One command pushes both:

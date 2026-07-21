@@ -5,7 +5,7 @@
 #
 # Il y a DEUX fichiers de configuration, et ils ne vont pas au meme endroit :
 #
-#   config/morfmonitor.json  ->  /opt/morfmonitor/morfmonitor.json
+#   config/morfmonitor.json  ->  /etc/morfmonitor/morfmonitor.json
 #       Reglages du service lui-meme : port, adresse d'ecoute, modules.
 #       Lu par morfMonitor seul.
 #
@@ -39,7 +39,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-APP_DIR="${MT_APP_DIR:-/opt/morfmonitor}"
+# La configuration du service vit dans /etc, plus a cote du binaire : c'est la
+# convention Linux, et cela survit a un effacement de /opt pour reinstaller.
+# APP_DIR reste le dossier du BINAIRE, utilise ici seulement pour verifier que
+# le service est bien installe avant de deployer sa configuration.
+APP_DIR="${MORF_APP_DIR:-${MT_APP_DIR:-/opt/morfmonitor}}"
+CONFIG_DIR="${MORF_CONFIG_DIR:-/etc/morfmonitor}"
 SHARED_DIR="${MT_SHARED_DIR:-/etc/morfsystem}"
 SERVICE_NAME="${MT_SERVICE_NAME:-morfmonitor}"
 
@@ -135,7 +140,7 @@ if (( DO_SERVICE )); then
         echo "Lancer d'abord : ./scripts/linux/install-service.sh" >&2
         exit 1
     fi
-    deploy_one "$SRC" "$APP_DIR/morfmonitor.json" "Configuration du service   ->  $APP_DIR"
+    deploy_one "$SRC" "$CONFIG_DIR/morfmonitor.json" "Configuration du service   ->  $CONFIG_DIR"
     deployed=1
 fi
 

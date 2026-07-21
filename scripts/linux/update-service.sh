@@ -139,7 +139,8 @@ update_one_config() {
     fi
 }
 
-CONFIG_FILE="$APP_DIR/morfmonitor.json"
+# La configuration vit dans /etc, plus a cote du binaire.
+CONFIG_FILE="${MORF_CONFIG_DIR:-/etc/morfmonitor}/morfmonitor.json"
 SHARED_FILE="${MT_SHARED_DIR:-/etc/morfsystem}/morfsystem.json"
 
 if [[ $NO_CONFIG -eq 0 ]]; then

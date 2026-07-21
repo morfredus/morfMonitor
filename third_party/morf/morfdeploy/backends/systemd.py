@@ -83,6 +83,10 @@ class SystemdBackend(ServiceBackend):
         for token, value in (
             ("__RUN_USER__", run_user),
             ("__APP_DIR__", str(app_dir)),
+            # Configuration no longer sits beside the binary, so a unit needs
+            # both paths: __APP_DIR__ for what it executes, __CONFIG_DIR__ for
+            # what it reads.
+            ("__CONFIG_DIR__", str(manifest.config_dir())),
             ("__RUN_HOME__", str(home)),
         ):
             unit = unit.replace(token, value)

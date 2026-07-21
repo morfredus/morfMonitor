@@ -66,8 +66,8 @@ class ConfigFile:
                 return path
         return None
 
-    def resolved_dest(self, app_dir: Path) -> Path:
-        """Absolute destinations are honoured as-is; relative ones sit in app_dir.
+    def resolved_dest(self, config_dir: Path) -> Path:
+        """Absolute destinations are honoured as-is; relative ones sit in config_dir.
 
         The shared parc configuration lives outside any single application's
         directory -- it is read by morfMonitor and by RaspberryDashboard -- so
@@ -89,7 +89,7 @@ class ConfigFile:
                     f"Configuration destination not declared for this platform: {self.source}")
 
         dest = Path(os.path.expandvars(raw))
-        return dest if dest.is_absolute() else app_dir / dest
+        return dest if dest.is_absolute() else config_dir / dest
 
 
 @dataclass(frozen=True)
@@ -101,6 +101,7 @@ class Manifest:
     display_name: str
     binary: str
     app_dirs: dict = field(default_factory=dict)
+    config_dirs: dict = field(default_factory=dict)
     configs: tuple = ()
     description: str = ""
     status_url: str = ""
@@ -149,6 +150,27 @@ class Manifest:
             return Path(base) / self.service_name
         return Path("/opt") / self.service_name
 
+    def config_dir(self) -> Path:
+        """Where THIS service's configuration lives -- separate from its binary.
+
+        /etc is where a Linux administrator looks first, and the FHS is explicit
+        that host configuration belongs there rather than beside the program.
+        Keeping it out of app_dir also means wiping /opt/<service> to reinstall
+        cleanly no longer takes the settings with it.
+
+        The parc previously put both in /opt, self-contained-bundle style. Only
+        morfSync was doing it the conventional way, and it got normalised onto
+        the twelve that were not -- the right goal, the wrong reference.
+        """
+        key = {"Windows": "windows", "Darwin": "darwin"}.get(platform.system(), "linux")
+        declared = self.config_dirs.get(key)
+        if declared:
+            return Path(os.path.expandvars(declared))
+        if key == "windows":
+            base = os.environ.get("ProgramData", r"C:\ProgramData")
+            return Path(base) / self.service_name
+        return Path("/etc") / self.service_name
+
     def binary_name(self) -> str:
         """The executable's file name, with the platform's extension."""
         if platform.system() == "Windows" and not self.binary.endswith(".exe"):
@@ -195,6 +217,7 @@ class Manifest:
             display_name=raw.get("display_name") or raw["service_name"],
             binary=raw["binary"],
             app_dirs=raw.get("app_dir") or {},
+            config_dirs=raw.get("config_dir") or {},
             configs=configs,
             description=raw.get("description", ""),
             status_url=raw.get("status_url", ""),

@@ -116,7 +116,7 @@ class Deployer:
 
     # -- Step 3 -----------------------------------------------------------
 
-    def install_files(self, binary: Path, app_dir: Path) -> list:
+    def install_files(self, binary: Path, app_dir: Path, config_dir: Path) -> list:
         """Place the binary and the configurations; return what was written."""
         app_dir.mkdir(parents=True, exist_ok=True)
         target = app_dir / self.manifest.binary_name()
@@ -131,7 +131,7 @@ class Deployer:
                 print(f"  MISSING source, skipped: {config.source}")
                 continue
 
-            dest = config.resolved_dest(app_dir)
+            dest = config.resolved_dest(config_dir)
             dest.parent.mkdir(parents=True, exist_ok=True)
 
             # Never overwrite by default: these hold settings edited by hand on
@@ -212,13 +212,14 @@ class Deployer:
         print(f"Installing {self.manifest.display_name} ({self.backend.name})")
         print(f"  user:   {invoking_user()}")
         print(f"  source: {self.manifest.repo_root}")
-        print(f"  target: {app_dir}")
+        print(f"  binaire : {app_dir}")
+        print(f"  config  : {self.manifest.config_dir()}")
         print()
 
         self.check_privileges()
         binary = self.ensure_binary(rebuild=rebuild)
         self.stop_existing()
-        written = self.install_files(binary, app_dir)
+        written = self.install_files(binary, app_dir, self.manifest.config_dir())
         self.chown_to_user(written)
         self.register(app_dir)
 
@@ -247,7 +248,7 @@ class Deployer:
         binary = self.ensure_binary(rebuild=True)
         self.stop_existing()
         app_dir = self.manifest.app_dir()
-        written = self.install_files(binary, app_dir)
+        written = self.install_files(binary, app_dir, self.manifest.config_dir())
         self.chown_to_user(written)
         self.register(app_dir)
         print()
