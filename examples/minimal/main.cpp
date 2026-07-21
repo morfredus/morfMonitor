@@ -4,9 +4,9 @@
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * Demarre le service avec un module 'example', puis expose l'API. A tester :
- *   curl http://localhost:8799/status
- *   curl http://localhost:8799/modules
- *   curl -X POST http://localhost:8799/example -d '{"hello":"world"}'
+ *   curl http://localhost:8790/status
+ *   curl http://localhost:8790/modules
+ *   curl -X POST http://localhost:8790/example -d '{"hello":"world"}'
  */
 
 #include <QCoreApplication>
@@ -19,7 +19,7 @@ int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
 
     morfmonitor::ServiceConfig cfg;
-    cfg.httpPort         = 8799;
+    cfg.httpPort         = 8790;
     cfg.beaconIntervalMs = 5000;
 
     morfmonitor::ModuleDef ex;

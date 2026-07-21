@@ -91,4 +91,4 @@ Start-Sleep -Seconds 1
 Write-Host "Service '$TaskName' installe (tache planifiee, demarrage auto) et lance."
 Write-Host "Etat  :  schtasks /Query /TN $TaskName"
 Write-Host "Arret :  schtasks /End   /TN $TaskName"
-Write-Host "Test  :  curl http://127.0.0.1:8799/status"
+Write-Host "Test  :  curl http://127.0.0.1:8790/status"

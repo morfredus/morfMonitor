@@ -71,6 +71,7 @@ run_check() {
     local args=("$CONFIG_FILE")
     [[ -x "$BINARY" ]] && args+=(--binary "$BINARY")
     [[ -f "$EXAMPLE_FILE" ]] && args+=(--example "$EXAMPLE_FILE")
+    args+=(--hint-style sh)
     python3 "$SCRIPT_DIR/check-config.py" "${args[@]}"
 }
 

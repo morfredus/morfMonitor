@@ -81,6 +81,35 @@ structures previously hard-coded in the Dashboard.
 
 ## Managing the deployed configuration
 
+### Deploying the repository configuration
+
+The direct path: copy the repository configuration over the installed one.
+
+```bash
+sudo ./scripts/linux/deploy-config.sh               # copy, then restart
+sudo ./scripts/linux/deploy-config.sh --no-restart  # copy only
+```
+
+```powershell
+.\scripts\windows\deploy-config.ps1
+.\scripts\windows\deploy-config.ps1 -NoRestart
+```
+
+The source is `config/morfmonitor.json` when it exists, and
+`config/morfmonitor.example.json` otherwise — so keeping a real
+`config/morfmonitor.json` in the clone makes it the reference that gets
+deployed. It is plain shell: no Python, no merge, no questions.
+
+The deployed file is backed up as `morfmonitor.json.bak-<date>` before being
+replaced, and a capped diff shows what changed. Nothing is lost — if the old
+file held machine-specific settings, they are in the backup.
+
+Note that `config/morfmonitor.json` is not tracked by Git: only the `.example`
+files are. Keep it out of commits, or add it to `.gitignore` if you would rather
+not think about it.
+
+### Adding new keys without touching existing values
+
 Installing and updating **never overwrite** the deployed `morfmonitor.json` — it
 holds local settings that cannot be reconstructed. `update-service.sh` adds keys
 that appeared since installation, without changing any existing value.
@@ -110,6 +139,29 @@ service.
 
 `merge` is the safe default. `reset` discards local settings and asks for
 explicit confirmation; use `--yes` only for scripted reprovisioning.
+
+### Linux and Windows parity
+
+Every script in `scripts/linux/` has a counterpart in `scripts/windows/`:
+
+| Task | Linux | Windows |
+|---|---|---|
+| Install | `install-service.sh` | `install-service.ps1` |
+| Update | `update-service.sh` | `update-service.ps1` |
+| Deploy the repo config | `deploy-config.sh` | `deploy-config.ps1` |
+| Manage the deployed config | `config-tool.sh` | `config-tool.ps1` |
+
+The **JSON logic stays in Python** (`merge-config.py`, `check-config.py`), called
+unchanged by both sides. Python is the only one of the three languages in this
+ecosystem that runs identically on Windows, Linux and the Raspberry Pi;
+reimplementing a recursive JSON merge in both Bash and PowerShell would create
+two implementations free to disagree — about the file that decides whether the
+service works at all. Same reasoning as
+`morfTools/scripts/ecosystem-check.py`, shared by `morf.sh` and `morf.ps1`.
+
+Callers declare which tooling to cite in their advice (`--hint-style sh|ps1`),
+so a Bash user is never told to run a PowerShell command. `deploy-config` needs
+no Python at all.
 
 ## Reboot cause
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# update-service.sh — Met a jour morfSensor installe en service.
+# update-service.sh — Met a jour morfMonitor installe en service.
 #
 # Recupere le code (git pull), recompile, recopie le binaire dans le dossier fixe,
 # rafraichit l'unite systemd, complete la configuration, puis redemarre le
@@ -120,7 +120,7 @@ if [[ $NO_CONFIG -eq 0 && -f "$EXAMPLE_FILE" ]]; then
         if [[ -f "$SCRIPT_DIR/check-config.py" ]]; then
             echo
             if python3 "$SCRIPT_DIR/check-config.py" "$CONFIG_FILE" \
-                    --binary "$APP_DIR/morfmonitor" --example "$EXAMPLE_FILE"; then
+                    --binary "$APP_DIR/morfmonitor" --example "$EXAMPLE_FILE" --hint-style sh; then
                 :
             else
                 echo

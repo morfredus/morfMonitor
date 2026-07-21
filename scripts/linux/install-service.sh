@@ -87,4 +87,4 @@ sleep 1
 systemctl --no-pager --lines=0 status "$SERVICE_NAME" || true
 echo
 echo "Journaux :  journalctl -u $SERVICE_NAME -f"
-echo "Test API :  curl http://127.0.0.1:8799/status"
+echo "Test API :  curl http://127.0.0.1:8790/status"

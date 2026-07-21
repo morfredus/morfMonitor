@@ -30,10 +30,27 @@ Code de retour :
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 
 ERR, WARN, OK, INFO = "[ERREUR]", "[ATTENTION]", "[OK]", "[INFO]"
+
+# Ce script est appele des deux plateformes (config-tool.sh et config-tool.ps1).
+# Un conseil qui cite une commande PowerShell a un utilisateur sous bash l'envoie
+# dans le mur, et reciproquement.
+#
+# os.name ne suffit pas : il decrit l'INTERPRETEUR, pas l'outillage appelant.
+# Un Python Windows lance depuis Git Bash rapporte « nt » alors que
+# l'utilisateur vient de taper config-tool.sh. L'appelant, lui, sait toujours :
+# il le declare via --hint-style. La detection ne sert que de defaut.
+HINTS = {
+    "sh":  {"reset": "sudo ./scripts/linux/config-tool.sh reset",
+            "merge": "sudo ./scripts/linux/config-tool.sh merge"},
+    "ps1": {"reset": r".\scripts\windows\config-tool.ps1 reset",
+            "merge": r".\scripts\windows\config-tool.ps1 merge"},
+}
+DEFAULT_STYLE = "ps1" if os.name == "nt" else "sh"
 
 
 def known_types(binary):
@@ -72,7 +89,10 @@ def main():
     ap.add_argument("config")
     ap.add_argument("--binary", help="binaire du service, interroge via --list-types")
     ap.add_argument("--example", help="configuration d'exemple, pour comparaison")
+    ap.add_argument("--hint-style", choices=sorted(HINTS), default=DEFAULT_STYLE,
+                    help="outillage a citer dans les conseils (sh ou ps1)")
     args = ap.parse_args()
+    hint = HINTS[args.hint_style]
 
     cfg = load(args.config, "La configuration")
     fatal = False
@@ -107,7 +127,7 @@ def main():
             print(f"{ERR} Aucun module exploitable : le service n'aura rien a exposer.")
             print("        Corriger le champ 'type' dans la section 'modules', ou")
             print("        reinitialiser la configuration :")
-            print("            sudo ./scripts/linux/config-tool.sh reset")
+            print(f"            {hint['reset']}")
             fatal = True
         else:
             print(f"{OK} Modules exploitables : {', '.join(usable)}.")
@@ -122,7 +142,7 @@ def main():
         if missing:
             print(f"{WARN} Cles absentes de la configuration deployee : {', '.join(missing)}.")
             print("        Les ajouter sans toucher aux valeurs existantes :")
-            print("            sudo ./scripts/linux/config-tool.sh merge")
+            print(f"            {hint['merge']}")
 
         ex_types = {m.get("type") for m in ex.get("modules", []) if isinstance(m, dict)}
         new_types = sorted(t for t in ex_types if t and t not in declared)
