@@ -405,8 +405,13 @@ function problems(all) {
     if (String(p.state || '').toLowerCase() !== 'offline') return;
     out.push({ what: p.label || p.name, state: 'injoignable', kind: 'err' });
   });
+  // Seule une application DECLAREE justifie une alerte quand elle disparait :
+  // declarer, c'est dire « je m'attends a ce service ». Une application
+  // simplement entendue puis arretee — un outil de bureau que l'on ferme — n'a
+  // jamais ete promise a personne, et la signaler indefiniment noierait les
+  // vraies pannes.
   (s.beacon || []).forEach((a) => {
-    if (a.online || a.enabled === false) return;
+    if (a.online || a.enabled === false || !a.declared) return;
     out.push({ what: a.label || a.app, state: 'hors ligne', kind: 'err' });
   });
   [['disk', 'Stockage'], ['memory', 'Mémoire'], ['swap', 'Swap']].forEach(([k, lbl]) => {

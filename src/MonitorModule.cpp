@@ -16,6 +16,7 @@
 #include <QJsonArray>
 #include <QDateTime>
 #include <QFile>
+#include <QSet>
 
 namespace morfmonitor {
 
@@ -156,6 +157,35 @@ void MonitorModule::onBeaconDatagram() {
         }
         m_beaconSeen.insert(app, s);
         fetchWebUiIfNeeded(app);
+    }
+    pruneStaleBeacons();
+}
+
+// Les applications entendues sont conservees pour la DECOUVERTE : brancher un
+// service et le voir apparaitre indique quoi ajouter a la configuration. Passe
+// un certain temps, cet interet disparait et l'entree devient du bruit — une
+// application lancee une fois puis fermee serait listee « hors ligne »
+// indefiniment, et la table ne cesserait de croitre.
+//
+// Les applications DECLAREES ne sont jamais purgees : leur absence est
+// precisement ce qu'on veut voir. C'est la difference entre « entendu une
+// fois » et « attendu ».
+void MonitorModule::pruneStaleBeacons() {
+    // Assez long pour qu'une decouverte reste visible le temps de l'exploiter,
+    // assez court pour qu'une presence ancienne ne se fasse pas passer pour une
+    // panne actuelle.
+    constexpr qint64 kKeepUndeclaredS = 3600;
+
+    QSet<QString> declared;
+    for (const BeaconAppDef& d : m_config.beaconApps())
+        declared.insert(d.app);
+
+    const qint64 now = QDateTime::currentSecsSinceEpoch();
+    for (auto it = m_beaconSeen.begin(); it != m_beaconSeen.end();) {
+        if (!declared.contains(it.key()) && (now - it->lastSeen) > kKeepUndeclaredS)
+            it = m_beaconSeen.erase(it);
+        else
+            ++it;
     }
 }
 

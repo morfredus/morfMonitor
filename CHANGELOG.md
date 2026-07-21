@@ -5,6 +5,58 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
+## [0.3.3] – 2026-07-21
+
+### Corrigé
+
+- **Les liens de l'interface étaient illisibles sur le fond sombre.** Seuls ceux
+  du pied de page étaient stylés ; ceux des tableaux gardaient le bleu-violet
+  par défaut du navigateur, quasi invisible sur `#1e293b`. Ils reprennent
+  désormais la couleur d'accent, avec `:visited` explicite — sans quoi un lien
+  déjà ouvert repassait en violet, ce qui touchait précisément les liens vers
+  les interfaces, ceux qu'on ouvre le plus souvent.
+
+  Contraste mesuré : **6.83:1**, au-delà du seuil AA (4.5:1).
+
+## [0.3.2] – 2026-07-21
+
+### Corrigé
+
+- **Une application simplement entendue puis arrêtée était signalée comme
+  anomalie indéfiniment.** Déclarer, c'est dire « je m'attends à ce service » ;
+  une application jamais déclarée n'a été promise à personne. Un outil de bureau
+  lancé une fois puis fermé remontait pourtant en anomalie pour toujours, ce qui
+  aurait fini par noyer les vraies pannes. Seules les applications **déclarées**
+  justifient désormais une alerte.
+
+- **`m_beaconSeen` n'était jamais purgé** — aucun `remove`, `erase` ni `clear`.
+  Une application entendue une seule fois y restait à vie, et la table ne
+  pouvait que croître. Les entrées **non déclarées** sont désormais oubliées
+  après une heure sans annonce : assez long pour qu'une découverte reste
+  exploitable, assez court pour qu'une présence ancienne ne se fasse pas passer
+  pour une panne actuelle. Les entrées déclarées ne sont jamais purgées : leur
+  absence est précisément ce qu'on veut voir.
+
+- **La configuration d'exemple suggérait une structure que le code ne lit pas.**
+  Elle plaçait `config_path` dans un sous-objet `"params"`, alors que
+  `ServiceConfig::fromJson` affecte l'objet **entier** du module à `params` :
+  les paramètres se lisent donc à plat. La configuration partagée n'était jamais
+  chargée, sans le moindre message. Le commentaire d'en-tête de `ModuleDef`,
+  qui décrivait aussi un sous-objet, est corrigé.
+
+### Modifié
+
+- **MeteoHub passe de `network_services` à `beacon_apps`** dans
+  `morfsystem.example.json`. La sonde TCP existait parce que MeteoHub n'était pas
+  découvrable ; il l'est depuis son firmware 1.13.0. La sonde suppose de
+  connaître une adresse à l'avance — l'inverse d'une découverte — et le
+  commentaire la présente désormais comme le mécanisme de dernier recours.
+
+  Le déplacement n'est pas qu'un nettoyage : une application **déclarée** est
+  toujours listée, même jamais entendue, donc son absence se voit. Non déclarée,
+  elle n'apparaît que si elle s'annonce — si elle ne démarre jamais, personne ne
+  l'apprend.
+
 ## [0.3.1] – 2026-07-21
 
 ### Corrigé

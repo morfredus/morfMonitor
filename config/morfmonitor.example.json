@@ -22,8 +22,8 @@
       "type": "monitor",
       "id": "monitor-1",
 
-      "_comment_params": "config_path est optionnel : sans lui, la configuration PARTAGEE (morfsystem.json, qui decrit ce qui est supervise) est cherchee aux emplacements standards. Voir SharedConfig.",
-      "params": {}
+      "_comment_config_path": "Facultatif, et A PLAT dans l'entree du module (pas dans un sous-objet 'params') : la fabrique lit les parametres directement sur l'objet du module. Sans lui, la configuration PARTAGEE (morfsystem.json, qui decrit ce qui est supervise) est cherchee aux emplacements standards -- voir SharedConfig.",
+      "config_path": ""
     }
   ]
 }

@@ -18,7 +18,9 @@ namespace morfmonitor {
 // ModuleDef : declaration d'UN module a activer (lue depuis la config JSON).
 //   type   : identifiant de fabrique ("example", ...) -> ModuleFactory
 //   id     : identifiant unique dans le service
-//   params : objet JSON libre, propre au type (>>> vos parametres metier <<<)
+//   params : parametres du module. ATTENTION : fromJson y place l'objet ENTIER
+//            de l'entree, les parametres se lisent donc A PLAT (o["ma_cle"]),
+//            et non dans un sous-objet "params" que personne ne lit.
 // -----------------------------------------------------------------------------
 struct ModuleDef {
     QString     id;

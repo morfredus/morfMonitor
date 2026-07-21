@@ -19,17 +19,8 @@
     { "unit": "morfmonitor",   "label": "morfMonitor",   "enabled": true }
   ],
 
-  "_comment_network": "Equipements surveilles par sonde reseau plutot que par systemd : un ESP32 ne repond pas a 'systemctl'. On teste l'ouverture d'un port TCP. 'host' accepte un nom mDNS ou une IP fixe.",
-  "network_services": [
-    {
-      "name": "meteohub",
-      "label": "MeteoHub",
-      "host": "meteohub.local",
-      "port": 80,
-      "timeout_ms": 1000,
-      "enabled": true
-    }
-  ],
+  "_comment_network": "Equipements surveilles par sonde reseau : on teste l'ouverture d'un port TCP, 'host' acceptant un nom mDNS ou une IP fixe. C'est le mecanisme de DERNIER RECOURS, pour un equipement qui n'annonce pas sa presence. Il suppose de connaitre son adresse a l'avance -- l'inverse d'une decouverte. Preferer 'beacon_apps' des que l'equipement emet un heartbeat morfbeacon/1 : MeteoHub y est passe (voir plus bas), GatewayLab le peut aussi depuis sa version 1.7.0.",
+  "network_services": [],
 
   "_comment_probe_grace": "Delai de grace avant la premiere sonde reseau, en secondes d'uptime. Une sonde resout un nom mDNS par multicast : on laisse le WiFi s'associer et se stabiliser pour ne pas perturber sa connexion au demarrage.",
   "network_probe_grace_s": 45,
@@ -39,9 +30,11 @@
     "port": 45454,
     "offline_after_s": 60
   },
+  "_comment_beacon_apps": "Applications ATTENDUES sur le LAN. Declarer n'est pas la meme chose qu'entendre : une application declaree est toujours listee, meme jamais entendue, donc son absence se voit. Une application non declaree n'apparait que si elle s'annonce -- si elle ne demarre jamais, personne ne l'apprend. Ne declarer que ce dont l'absence doit alerter.",
   "beacon_apps": [
     { "app": "ComponentHub", "label": "ComponentHub", "enabled": true },
-    { "app": "SiteWatch",    "label": "SiteWatch",    "enabled": true }
+    { "app": "SiteWatch",    "label": "SiteWatch",    "enabled": true },
+    { "app": "MeteoHub S3",  "label": "MeteoHub",     "enabled": true }
   ],
 
   "_comment_ports": "Le port d'ecoute de morfMonitor n'est PAS ici : il appartient a sa configuration propre (morfmonitor.json). Ce fichier decrit ce qui est SUPERVISE, pas comment chaque service ecoute."

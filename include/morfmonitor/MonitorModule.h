@@ -70,6 +70,11 @@ private:
     // interface indisponible ne doit pas degrader la supervision.
     void fetchWebUiIfNeeded(const QString& app);
 
+    // Oublie les applications simplement ENTENDUES qui ne s'annoncent plus
+    // depuis longtemps. Les applications declarees sont conservees : leur
+    // absence est justement ce qu'on veut voir.
+    void pruneStaleBeacons();
+
     struct BeaconSeen;
     // Ajoute a une entree ce qui permet de la JOINDRE, et rien de plus :
     // morfMonitor publie une adresse, il n'ouvre aucune connexion pour le compte
