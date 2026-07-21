@@ -122,19 +122,28 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
     QByteArray reason = "OK";
     QByteArray out;
 
+    // HEAD = GET sans corps. Un service de supervision est precisement ce qu'on
+    // sonde : repondre 405 a une sonde HEAD la ferait conclure que le service
+    // est en panne alors qu'il repond parfaitement. Le routage est donc commun,
+    // et seul l'envoi du corps est supprime (les en-tetes, Content-Length
+    // compris, restent ceux qu'aurait produits le GET, comme l'exige HTTP).
+    const bool isHead = (method == "HEAD");
+    const QByteArray verb = isHead ? QByteArray("GET") : method;
+    sock->setProperty("head", isHead);
+
     // ---- Exemple de route POST (a remplacer par vos endpoints metier) ----
     if (path == "/example") {
-        if (method != "POST") {
+        if (verb != "POST") {
             code = 405; reason = "Method Not Allowed";
-            out = "{\"error\":\"use POST /example\"}";
+            out = "{\"error\":\"use POST /example\",\"allow\":\"POST\"}";
         } else {
             out = handleExamplePost(body, code, reason);
         }
     }
-    // ---- Routes GET ------------------------------------------------------
-    else if (method != "GET") {
+    // ---- Routes GET (et HEAD) --------------------------------------------
+    else if (verb != "GET") {
         code = 405; reason = "Method Not Allowed";
-        out = "{\"error\":\"method not allowed\"}";
+        out = "{\"error\":\"method not allowed\",\"allow\":\"GET, HEAD\"}";
     } else if (path.startsWith("/api/")) {
         // API de supervision : la raison d'etre du service. Toutes les routes
         // renvoient du JSON et sont utilisables par n'importe quel client —
@@ -254,10 +263,21 @@ void HttpServer::reply(QTcpSocket* sock, int code, const QByteArray& reason, con
     QByteArray resp;
     resp += "HTTP/1.1 " + QByteArray::number(code) + " " + reason + "\r\n";
     resp += "Content-Type: " + contentType + "\r\n";
+    // Rien de ce que sert ce service ne doit etre mis en cache. Une reponse
+    // /api/ en cache afficherait un etat perime dans un outil de supervision --
+    // le contraire de sa raison d'etre. Et un asset en cache fait survivre
+    // l'ancienne interface a une mise a jour du binaire, panne d'autant plus
+    // deroutante que le service, lui, a bien ete mis a jour.
+    resp += "Cache-Control: no-store\r\n";
     resp += "Content-Length: " + QByteArray::number(body.size()) + "\r\n";
     resp += "Access-Control-Allow-Origin: *\r\n";
+    if (code == 405)
+        resp += "Allow: GET, HEAD\r\n";
     resp += "Connection: close\r\n\r\n";
-    resp += body;
+    // Content-Length annonce la taille qu'aurait le corps ; sur HEAD, le corps
+    // lui-meme n'est pas envoye.
+    if (!sock->property("head").toBool())
+        resp += body;
     sock->write(resp);
     sock->flush();
     sock->disconnectFromHost();

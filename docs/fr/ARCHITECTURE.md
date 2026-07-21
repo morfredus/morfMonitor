@@ -17,7 +17,8 @@ Service (façade : câble tout à partir d'une ServiceConfig)
 │            └── MonitorModule  (supervision système ; via HostCollectors)
 ├── HttpServer         -> API HTTP (GET /api/system /api/resources /api/network
 │                         /api/services /api/reboot /api/config /api/all,
-│                         plus /status /healthz /modules)
+│                         plus /status /healthz /modules ; GET et HEAD)
+│     └── assets Web inertes (:/web via Qt resource) -> /  /styles.css  /app.js
 └── morfbeacon::Heartbeat -> annonce UDP (découverte LAN)
         ▲ IMetricsProvider
         └── ModuleRegistry expose un résumé (nombre de modules, ...)
@@ -75,3 +76,32 @@ autonome, sans dépôt externe. Resynchroniser avec `scripts/sync-morf.(sh|ps1)`
 Aucun code spécifique à une plateforme hors des collecteurs. Comportement identique
 Windows / Linux x64 / Raspberry Pi (ARM64). Installation en service fournie pour
 systemd (Linux) et Planificateur de tâches (Windows).
+
+Les collecteurs sont le seul endroit où les plateformes divergent, et cette
+divergence est **visible depuis l'extérieur** : sous Windows, `cpu_percent`,
+`memory`, `load`, `temperature` et `throttling` ne sont pas renseignés, car ils
+proviennent de `/proc` et `/sys`. Un consommateur doit traiter leur absence
+comme une absence de mesure, jamais comme une valeur nulle.
+
+## Interface Web
+
+L'interface Web n'est **pas une pièce d'architecture supplémentaire**. C'est
+une seconde vue des mêmes données, servie par le `HttpServer` existant sur le
+même port, sous forme de fichiers inertes embarqués dans le binaire (ressource
+Qt `:/web`, aucune dépendance Qt Widgets).
+
+La contrainte qui la définit tient en une phrase : **elle est cliente de
+l'API publique, pas une initiée.** Elle lit `/api/all`, `/status` et
+`/api/config` comme RaspberryDashboard le fait. Aucun gabarit, aucune donnée
+injectée côté serveur.
+
+Ce n'est pas cosmétique. morfMonitor annonce « il n'affiche rien » : sa
+responsabilité est de collecter et d'exposer, pas de présenter. Tant que la vue
+reste cliente de l'API, elle n'est qu'un affichage — extractible vers un projet
+séparé sans réécriture si elle devait un jour le devenir. Le jour où elle lirait
+`MonitorModule` directement, cette propriété serait perdue en silence, et
+« seconde vue » deviendrait faux sans que rien ne le signale.
+
+Les sources vivent dans `web_src/` (convention de l'écosystème : `web_src/`
+contient ce qui est écrit, `web/` ce qui est généré — ce dernier est d'ailleurs
+exclu par `.gitignore`).

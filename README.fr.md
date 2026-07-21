@@ -67,6 +67,54 @@ curl http://localhost:8790/api/resources
 (sous-tension, limite thermique). C'est le diagnostic le plus utile d'un Pi
 instable, et il n'apparaît nulle part ailleurs.
 
+## Interface Web
+
+morfMonitor sert une interface Web à la racine, **sur le même port que l'API**.
+
+Ce n'est pas un second service, ni une seconde collecte : c'est une **seconde
+vue des mêmes données**. La page est servie comme des fichiers inertes — aucun
+gabarit, aucune valeur injectée côté serveur — et interroge `/api/all`,
+`/status` et `/api/config` exactement comme n'importe quel autre client.
+RaspberryDashboard et le navigateur lisent les mêmes routes.
+
+| Page | Question à laquelle elle répond |
+|---|---|
+| État général | Identité de la machine, uptime, santé du service, résumé des anomalies |
+| Ressources | CPU, mémoire, charge, swap, stockage, températures, **bridage** |
+| Réseau | Interfaces, IPv4/IPv6, MAC, état du lien |
+| Services morfSystem | Unités systemd et sondes réseau supervisées |
+| Écosystème | Services découverts par morfBeacon, version et dernier heartbeat |
+| Diagnostic | Anomalies détectées, cause du dernier redémarrage, configuration partagée |
+
+Les deux interfaces répondent à des questions différentes, et c'est pourquoi
+les deux existent :
+
+> L'écran OLED répond à **« est-ce que tout va bien ? »**. L'interface Web
+> répond à **« pourquoi ? »**, et donne accès à tout ce qu'il faut pour
+> diagnostiquer.
+
+Mettre `"web_enabled": false` ne sert plus que les routes JSON.
+
+**Ce que l'interface ne fait pas.** Elle n'écrase jamais un état par une
+approximation : une unité désactivée n'est pas affichée « arrêtée », une sonde
+en attente pendant le délai de grâce n'est pas affichée « injoignable », et une
+métrique absente de la plateforme est nommée comme telle plutôt que montrée
+à zéro. Une case vide se lit comme une mesure ; une absence de mesure doit se
+dire.
+
+**Exposition.** L'interface hérite de `bind_address`, à `0.0.0.0` par défaut,
+donc toutes les interfaces réseau de la machine. Sur un poste multi-domicilié
+ou exposé, indiquer l'adresse du LAN. Il n'y a aucune authentification : le
+modèle de confiance est le réseau local, conformément au principe de
+l'écosystème.
+
+La page Diagnostic n'expose **délibérément aucun visualiseur de journaux**. Elle
+dérive ses anomalies des données que l'API renvoie déjà. Exposer la sortie de
+journald élargirait le profil d'exposition bien au-delà de métriques : une ligne
+de log peut citer des chemins, des valeurs de configuration et, dans un message
+d'erreur, des identifiants manipulés par d'autres services. C'est une décision
+séparée.
+
 ## Configuration partagée
 
 morfMonitor et RaspberryDashboard lisent **le même fichier** :
@@ -148,6 +196,53 @@ curl http://127.0.0.1:8790/api/all
 sudo ./scripts/linux/install-service.sh     # installer
 sudo ./scripts/linux/update-service.sh      # mettre à jour
 ```
+
+Chaque script a son équivalent Windows dans `scripts/windows/` (tâche
+planifiée) :
+
+| Tâche | Linux | Windows |
+|---|---|---|
+| Installer | `install-service.sh` | `install-service.ps1` |
+| Mettre à jour | `update-service.sh` | `update-service.ps1` |
+| Déployer la config du dépôt | `deploy-config.sh` | `deploy-config.ps1` |
+| Gérer la config déployée | `config-tool.sh` | `config-tool.ps1` |
+
+La logique JSON reste en Python (`merge-config.py`, `check-config.py`),
+appelée telle quelle des deux côtés : c'est le seul des trois langages de
+l'écosystème qui tourne à l'identique sous Windows, Linux et Raspberry Pi.
+La réécrire en Bash **et** en PowerShell donnerait deux implémentations libres
+de diverger, à propos du fichier qui décide si le service fonctionne.
+
+## Gérer la configuration déployée
+
+L'installation et la mise à jour **ne remplacent jamais** `morfmonitor.json` :
+il porte des réglages locaux irrécupérables. `update-service.sh` ajoute les
+clés apparues depuis l'installation sans toucher aux valeurs existantes.
+
+Cette règle laisse un angle mort : une valeur **déjà présente mais devenue
+invalide** n'est jamais corrigée. Un module dont le type a disparu de la
+fabrique reste en place, et le service démarre alors, écoute, annonce sa
+présence sur le LAN — sans rien superviser, chaque route `/api/` répondant 503.
+
+```sh
+./scripts/linux/config-tool.sh status      # où elle est, est-elle exploitable
+./scripts/linux/config-tool.sh check       # diagnostic détaillé
+./scripts/linux/config-tool.sh diff        # écart avec l'exemple du dépôt
+sudo ./scripts/linux/config-tool.sh merge  # ajouter les clés manquantes
+sudo ./scripts/linux/config-tool.sh reset  # remplacer (confirmation requise)
+
+sudo ./scripts/linux/deploy-config.sh      # écraser par la config du dépôt
+```
+
+`check` demande les types valides **au binaire** (`--list-types`) : le
+diagnostic reste juste quand la fabrique évolue. Il constate sans rien modifier,
+et `update-service.sh` l'exécute après chaque mise à jour — une configuration
+périmée s'annonce au lieu d'être découverte par un service silencieux.
+
+`deploy-config.sh` est la voie directe : il copie
+`config/morfmonitor.json` (ou l'exemple à défaut) par-dessus la configuration
+déployée, sans fusion et sans Python. Toute écriture est précédée d'une
+sauvegarde datée.
 
 ## Philosophie
 

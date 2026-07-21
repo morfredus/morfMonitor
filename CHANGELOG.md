@@ -5,7 +5,29 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
+## [0.2.0] – 2026-07-21
+
+Cette version ajoute une interface Web et corrige une série de défauts qui
+partagent tous une même cause : **du code écrit contre un schéma supposé plutôt
+que contre le schéma réel**. Les métriques Linux (`/proc`, `/sys`) n'existant pas
+sous Windows, les pages concernées n'avaient jamais été rendues avec de vraies
+données pendant leur développement. Le dump complet de l'API d'un Raspberry Pi
+en production a servi de référence pour tout reprendre.
+
 ### Ajouté
+
+- **Prise en charge de `HEAD`.** Le serveur répondait 405 à toute requête HEAD.
+  Un service de supervision est précisément ce que l'on sonde : une sonde
+  externe en HEAD concluait que morfMonitor était en panne alors qu'il
+  répondait parfaitement. HEAD suit désormais le même routage que GET, renvoie
+  les mêmes en-têtes — `Content-Length` compris, comme l'exige HTTP — sans le
+  corps. Les réponses 405 portent un en-tête `Allow`.
+
+- **`Cache-Control: no-store` sur toutes les réponses.** Une réponse `/api/` en
+  cache afficherait un état périmé dans un outil de supervision, soit le
+  contraire de sa raison d'être ; et un asset en cache fait survivre l'ancienne
+  interface à une mise à jour du binaire. Ce second cas s'est produit pendant la
+  vérification.
 
 - **Interface Web, servie à la racine sur le même port que l'API.** L'ajout de
   services à l'écosystème dépasse ce qu'un écran embarqué peut montrer :
@@ -37,7 +59,28 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
   **ce qui manque et pourquoi**, au lieu d'une case vide ou d'un `0` qui se
   lirait comme une mesure.
 
-### Ajouté
+- **Parité complète des scripts Linux et Windows.** `scripts/windows/` n'avait
+  qu'`install-service.ps1` ; chaque script de `scripts/linux/` a désormais son
+  homologue (`update-service.ps1`, `deploy-config.ps1`, `config-tool.ps1`).
+
+  La logique JSON **n'est pas convertie en shell** : Python est le seul des
+  trois langages de l'écosystème qui tourne à l'identique sous Windows, Linux
+  et Raspberry Pi. Les `.ps1` appellent les mêmes `.py`. Réécrire une fusion
+  JSON récursive en Bash *et* en PowerShell donnerait deux implémentations
+  libres de diverger, à propos du fichier qui décide si le service fonctionne —
+  même raison que `morfTools/scripts/ecosystem-check.py`, partagé par `morf.sh`
+  et `morf.ps1`.
+
+  `check-config.py` accepte `--hint-style sh|ps1` : l'appelant déclare
+  l'outillage à citer dans ses conseils. `os.name` ne suffisait pas — il décrit
+  l'interpréteur, pas le shell appelant.
+
+- **`scripts/linux/deploy-config.sh` et son équivalent PowerShell.** La voie
+  directe : copier la configuration du dépôt par-dessus celle du service, sans
+  fusion et sans Python. La source est `config/morfmonitor.json` si ce fichier
+  existe, l'exemple sinon. Sauvegarde datée et aperçu plafonné des différences
+  avant écrasement — écraser sans montrer quoi serait une mauvaise façon de
+  simplifier.
 
 - **`scripts/linux/config-tool.sh` : gestion à la demande de la configuration
   déployée.** L'installation et la mise à jour ne remplacent jamais
@@ -68,6 +111,43 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
   périmée s'annonce désormais au lieu d'être découverte par un service muet.
 
 ### Corrigé
+
+- **La page Ressources était calée sur un schéma erroné.** `cpu_percent` et
+  `cpu_freq_mhz` sont **à plat**, pas dans un objet `cpu` : la carte Processeur
+  ne s'affichait donc jamais, et un message annonçait à tort que le CPU n'était
+  pas collecté sur cette plateforme. `load` est un **tableau**
+  `[1 min, 5 min, 15 min]`, lu comme un objet : la carte Charge affichait trois
+  tirets sur une machine dont la charge était parfaitement mesurée.
+
+  `temperature` et `throttling` n'étaient pas affichés du tout. C'est le plus
+  coûteux des trois oublis : le collecteur écrit lui-même que le bridage « est
+  le diagnostic le plus utile d'un Pi instable, et il n'apparaît nulle part
+  ailleurs ». Une sous-tension corrompt la carte SD et fige des services sans
+  rien écrire dans les journaux. Le bridage a désormais sa carte, distingue
+  « maintenant » de « depuis le démarrage », et remonte au premier rang des
+  anomalies avec la température CPU (seuils 70 / 80 °C).
+
+  Le champ `model` (modèle de la machine), collecté mais jamais affiché, est
+  ajouté à la carte Machine.
+
+- **`reboot.confidence` est une fraction, pas un pourcentage.** Un diagnostic
+  fiable à 70 % s'affichait « 0.7 % », donc comme une quasi-certitude d'erreur.
+
+- **Les entrées beacon désactivées étaient peintes en rouge « hors ligne ».**
+  Une application volontairement désactivée (`enabled: false`) n'est pas en
+  panne — même confusion que celle corrigée pour les sondes réseau.
+
+- **La carte « Configuration partagée » annonçait « non chargée » en
+  permanence.** Elle lisait `all.monitor.config_loaded`, or `/api/all` n'expose
+  que `system`, `resources`, `network`, `services` et `reboot` : il n'existe
+  aucune clé `monitor`. Elle lit désormais `/api/config`, dont les clés sont
+  `loaded` et `path`, et résume ce que le fichier déclare.
+
+- **État des interfaces réseau clarifié.** Une interface `up` sans `running`
+  est montée administrativement mais sans porteuse (câble débranché, WiFi non
+  associé) : l'état affiché est « sans lien » et non « montée ». Les adresses
+  IPv6 sont listées au lieu d'être masquées derrière un compteur, sur la page
+  dont le rôle est justement le détail.
 
 - **L'interface Web contredisait la réalité sur la page « Services
   morfSystem ».** Les six services affichaient un badge « arrêté » à côté d'une
@@ -196,7 +276,7 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
   Constaté en conditions réelles : le service avait démarré à 04:00, le fichier
   partagé a été créé à 04:13, et morfMonitor ne l'a jamais vu.
 
-### Ajouté
+
 
 - **Première version de morfMonitor**, la source unique de vérité sur l'état
   d'une machine. Il collecte, maintient en cache et expose en JSON ; il

@@ -123,6 +123,7 @@ function renderEtat(all, status) {
 
   el('c-machine').innerHTML = header('Machine') +
     row('Nom', esc(sys.hostname || '—')) +
+    (sys.model ? row('Modèle', esc(sys.model)) : '') +
     row('Système', esc([sys.os, sys.arch].filter(Boolean).join(' · ') || '—')) +
     row('Noyau', esc(sys.kernel || '—')) +
     row('Démarrée le', esc(sys.boot_time || '—')) +
@@ -144,20 +145,27 @@ function renderEtat(all, status) {
         `Services supervisés en ligne, ressources sous les seuils.</div>`);
 }
 
+// Schema reel de /api/resources (voir HostCollectors.cpp) :
+//   cpu_percent, cpu_freq_mhz   -- A PLAT, pas dans un objet « cpu »
+//   load                        -- TABLEAU [1 min, 5 min, 15 min]
+//   memory, swap, disk          -- objets { total_b, used_b, free_b, percent }
+//   temperature { cpu_c, gpu_c }
+//   throttling { raw, undervoltage_now, throttled_now, *_since_boot }
 function renderRessources(all) {
   const r = all.resources || {};
   const parts = [];
 
-  // CPU / memoire / charge : Linux uniquement (/proc). Absents ailleurs.
-  if (r.cpu) {
-    const c = r.cpu;
+  const temp = r.temperature || {};
+  if (typeof r.cpu_percent === 'number' || typeof r.cpu_freq_mhz === 'number') {
     parts.push(`<div class="card">${header('Processeur')}` +
-      row('Utilisation', typeof c.percent === 'number' ? `${c.percent.toFixed(1)} %` : '—') +
-      meter(c.percent) +
-      row('Cœurs', esc(c.cores ?? '—')) +
-      row('Température', typeof c.temp_c === 'number' ? `${c.temp_c.toFixed(1)} °C` : '—') +
+      row('Utilisation', typeof r.cpu_percent === 'number' ? `${r.cpu_percent.toFixed(1)} %` : '—') +
+      meter(r.cpu_percent) +
+      row('Fréquence', typeof r.cpu_freq_mhz === 'number' ? `${r.cpu_freq_mhz} MHz` : '—') +
+      row('Température CPU', typeof temp.cpu_c === 'number' ? `${temp.cpu_c.toFixed(1)} °C` : '—') +
+      (typeof temp.gpu_c === 'number' ? row('Température GPU', `${temp.gpu_c.toFixed(1)} °C`) : '') +
       `</div>`);
   }
+
   if (r.memory) {
     const m = r.memory;
     parts.push(`<div class="card">${header('Mémoire')}` +
@@ -166,28 +174,27 @@ function renderRessources(all) {
       row('Disponible', bytes(m.available_b ?? m.free_b) ?? '—') +
       `</div>`);
   }
-  if (r.load) {
-    parts.push(`<div class="card">${header('Charge')}` +
-      row('1 min', esc(r.load['1m'] ?? '—')) +
-      row('5 min', esc(r.load['5m'] ?? '—')) +
-      row('15 min', esc(r.load['15m'] ?? '—')) +
+
+  // load est un tableau : le lire comme un objet {1m,5m,15m} affichait trois
+  // tirets sur une machine dont la charge etait parfaitement mesuree.
+  if (Array.isArray(r.load) && r.load.length >= 3) {
+    parts.push(`<div class="card">${header('Charge moyenne')}` +
+      row('1 min', r.load[0].toFixed(2)) +
+      row('5 min', r.load[1].toFixed(2)) +
+      row('15 min', r.load[2].toFixed(2)) +
       `</div>`);
   }
-  if (typeof r.processes === 'number' || (r.processes && typeof r.processes === 'object')) {
-    const p = r.processes;
-    parts.push(`<div class="card">${header('Processus')}` +
-      row('Total', esc(typeof p === 'number' ? p : (p.total ?? '—'))) +
-      (typeof p === 'object' ? row('En exécution', esc(p.running ?? '—')) : '') +
-      `</div>`);
-  }
+
   if (r.swap) {
     const s = r.swap;
     parts.push(`<div class="card">${header('Swap')}` +
       (s.total_b
-        ? row('Utilisé', `${bytes(s.used_b) ?? '—'} / ${bytes(s.total_b)}`) + meter(s.percent)
+        ? row('Utilisé', `${bytes(s.used_b) ?? '—'} / ${bytes(s.total_b)}`) + meter(s.percent) +
+          row('Libre', bytes(s.free_b) ?? '—')
         : row('Configuré', 'non')) +
       `</div>`);
   }
+
   if (r.disk) {
     const d = r.disk;
     parts.push(`<div class="card">${header('Stockage', d.mount || '')}` +
@@ -197,11 +204,39 @@ function renderRessources(all) {
       `</div>`);
   }
 
-  const missing = ['cpu', 'memory', 'load'].filter((k) => !r[k]);
+  // Bridage : sous-tension et limite thermique. Le collecteur le dit lui-meme,
+  // « c'est le diagnostic le plus utile d'un Pi instable, et il n'apparait
+  // nulle part ailleurs ». Un Pi sous-alimente corrompt sa carte SD et fige des
+  // services sans qu'aucun journal ne l'explique : cette section merite d'etre
+  // lue meme quand tout va bien.
+  if (r.throttling) {
+    const t = r.throttling;
+    const flag = (now, since, labelNow, labelSince) =>
+      now   ? badge('err',  labelNow)
+      : since ? badge('warn', labelSince)
+      : badge('ok', 'non');
+    const clean = !t.undervoltage_now && !t.throttled_now &&
+                  !t.undervoltage_since_boot && !t.throttled_since_boot;
+    parts.push(`<div class="card">${header('Alimentation et bridage',
+                                           clean ? 'sain' : 'à surveiller')}` +
+      row('Sous-tension', flag(t.undervoltage_now, t.undervoltage_since_boot,
+                               'maintenant', 'depuis le démarrage')) +
+      row('Bridage thermique', flag(t.throttled_now, t.throttled_since_boot,
+                                    'maintenant', 'depuis le démarrage')) +
+      (clean ? '' :
+        `<div class="unavailable" style="margin-top:.6rem">` +
+        `Une sous-tension corrompt la carte SD et fige des services sans laisser ` +
+        `de trace dans les journaux. Vérifier l’alimentation et le câble avant ` +
+        `de chercher ailleurs.</div>`) +
+      `</div>`);
+  }
+
+  const expected = { cpu_percent: 'processeur', memory: 'mémoire', load: 'charge' };
+  const missing = Object.keys(expected).filter((k) => r[k] === undefined);
   if (missing.length) {
     parts.push(`<div class="card span-all">${header('Métriques indisponibles')}` +
       unavailable(
-        `Non collectées sur cette plateforme : ${missing.join(', ')}.`,
+        `Non collectées sur cette plateforme : ${missing.map((k) => expected[k]).join(', ')}.`,
         'Ces mesures proviennent de /proc et /sys : elles ne sont renseignées que ' +
         'sous Linux, cible de production de morfMonitor. Le service reste fonctionnel ; ' +
         'seules ces valeurs manquent.') +
@@ -219,12 +254,23 @@ function renderReseau(all) {
     return;
   }
   const rows = ifaces.map((i) => {
-    const st = i.running ? badge('ok', 'active') : i.up ? badge('warn', 'montée') : badge('off', 'inactive');
+    // up sans running = interface administrativement montee mais sans porteuse
+    // (cable debranche, WiFi non associe). « montee » etait exact mais opaque.
+    const st = i.running ? badge('ok', 'active')
+             : i.up     ? badge('warn', 'sans lien')
+                        : badge('off', 'inactive');
+    // Cette page est celle du detail : lister les adresses plutot que de les
+    // masquer derriere un compteur. Au-dela de deux, on resume pour ne pas
+    // etirer la ligne.
+    const v6 = i.ipv6 || [];
+    const v6txt = v6.length === 0 ? '—'
+                : v6.length <= 2  ? v6.join(', ')
+                                  : `${v6.slice(0, 2).join(', ')} +${v6.length - 2}`;
     return `<tr>
       <td class="mono">${esc(i.name)}</td>
       <td>${st}</td>
       <td class="mono">${esc((i.ipv4 || []).join(', ') || '—')}</td>
-      <td class="mono">${esc((i.ipv6 || []).length ? `${i.ipv6.length} adr.` : '—')}</td>
+      <td class="mono">${esc(v6txt)}</td>
       <td class="mono">${esc(i.mac || '—')}</td>
     </tr>`;
   }).join('');
@@ -298,8 +344,10 @@ function renderEcosysteme(all) {
           <td>${esc(a.label || a.app)}</td>
           <td class="mono">${esc(a.host || '—')}</td>
           <td class="mono">${esc(a.version || '—')}</td>
-          <td>${a.online ? stateBadge(a.state || 'ok') : badge('err', 'hors ligne')}</td>
-          <td class="mono">${esc(ago(a.last_seen_s))}</td>
+          <td>${a.enabled === false ? badge('off', 'désactivé')
+                : a.online          ? stateBadge(a.state || 'ok')
+                                    : badge('err', 'hors ligne')}</td>
+          <td class="mono">${esc(a.last_seen_s === undefined ? '—' : ago(a.last_seen_s))}</td>
           <td>${a.declared ? badge('ok', 'oui') : badge('off', 'non')}</td>
         </tr>`).join('') + `</tbody></table></div>` +
         `<div class="unavailable" style="margin-top:.8rem">` +
@@ -341,10 +389,24 @@ function problems(all) {
     if (typeof p === 'number' && p >= 90) out.push({ what: lbl, state: `${p.toFixed(0)} %`, kind: 'err' });
     else if (typeof p === 'number' && p >= 75) out.push({ what: lbl, state: `${p.toFixed(0)} %`, kind: 'warn' });
   });
+
+  // Une sous-tension est une panne materielle silencieuse : elle corrompt la
+  // carte SD et fige des services sans rien ecrire dans les journaux. Elle a sa
+  // place au premier rang des anomalies, pas seulement dans une carte a lire.
+  const t = r.throttling || {};
+  if (t.undervoltage_now)        out.push({ what: 'Alimentation', state: 'sous-tension', kind: 'err' });
+  else if (t.undervoltage_since_boot) out.push({ what: 'Alimentation', state: 'sous-tension depuis le démarrage', kind: 'warn' });
+  if (t.throttled_now)           out.push({ what: 'Processeur', state: 'bridé', kind: 'err' });
+  else if (t.throttled_since_boot)    out.push({ what: 'Processeur', state: 'bridé depuis le démarrage', kind: 'warn' });
+
+  const tc = r.temperature && r.temperature.cpu_c;
+  if (typeof tc === 'number' && tc >= 80)      out.push({ what: 'Température CPU', state: `${tc.toFixed(0)} °C`, kind: 'err' });
+  else if (typeof tc === 'number' && tc >= 70) out.push({ what: 'Température CPU', state: `${tc.toFixed(0)} °C`, kind: 'warn' });
+
   return out;
 }
 
-function renderDiagnostic(all) {
+function renderDiagnostic(all, config) {
   const pb = problems(all);
   el('c-anomalies').innerHTML =
     header('Anomalies détectées', pb.length ? `${pb.length} élément(s)` : 'aucune') +
@@ -353,20 +415,40 @@ function renderDiagnostic(all) {
       : unavailable('Aucune anomalie.',
           'Tous les services supervisés répondent et aucune ressource ne dépasse 75 %.'));
 
+  // confidence est une FRACTION (0 a 1), pas un pourcentage : l'afficher tel
+  // quel donnait « 0.7 % » pour un diagnostic sur lequel le service est en fait
+  // confiant a 70 %.
   const rb = all.reboot || {};
   el('c-reboot').innerHTML = header('Dernier redémarrage') +
     row('Cause', esc(rb.cause || 'inconnue')) +
-    row('Confiance', typeof rb.confidence === 'number' ? `${rb.confidence} %` : '—') +
+    row('Confiance', typeof rb.confidence === 'number'
+        ? `${Math.round(rb.confidence * 100)} %` : '—') +
     (rb.label ? `<div class="unavailable" style="margin-top:.6rem">${esc(rb.label)}</div>` : '') +
     (rb.evidence ? `<div class="unavailable" style="margin-top:.5rem">${esc(rb.evidence)}</div>` : '');
 
-  const cfg = all.monitor || {};
+  // La configuration partagee vient de /api/config, pas de /api/all : ce dernier
+  // n'expose que system, resources, network, services et reboot. Lire un
+  // « all.monitor » inexistant faisait afficher « non chargee » en permanence,
+  // y compris sur une machine ou elle l'etait parfaitement.
+  const cfg = config || {};
+  // Le pluriel porte sur le nom, pas sur le qualificatif : « services systemd »
+  // et non « service systemds ».
+  const counts = [
+    [(cfg.systemd_services || []).length, 'service', 'services', 'systemd'],
+    [(cfg.network_services || []).length, 'sonde', 'sondes', 'réseau'],
+    [(cfg.beacon_apps || []).length, 'application', 'applications', 'beacon'],
+  ].map(([n, one, many, qual]) => `${n} ${n > 1 ? many : one} ${qual}`).join(' · ');
+
   el('c-config').innerHTML = header('Configuration partagée') +
-    row('Chargée', cfg.config_loaded ? badge('ok', 'oui') : badge('err', 'non')) +
-    row('Chemin', `<span class="mono">${esc(cfg.config_path || '—')}</span>`) +
-    (cfg.config_error
-      ? `<div class="unavailable" style="margin-top:.6rem">${esc(cfg.config_error)}</div>`
-      : '');
+    row('Chargée', cfg.loaded ? badge('ok', 'oui') : badge('err', 'non')) +
+    row('Chemin', `<span class="mono">${esc(cfg.path || '—')}</span>`) +
+    (cfg.loaded ? row('Déclare', esc(counts)) : '') +
+    (cfg.loaded
+      ? ''
+      : `<div class="unavailable" style="margin-top:.6rem">` +
+        `Sans ce fichier, morfMonitor supervise la machine mais rien d’externe : ` +
+        `ni service systemd, ni sonde réseau, ni application beacon déclarée. ` +
+        `Emplacement attendu : /etc/morfsystem/morfsystem.json.</div>`);
 }
 
 // --- boucle de rafraichissement ---------------------------------------------
@@ -396,8 +478,11 @@ function showServiceProblem(title, detail) {
 
 async function refresh() {
   try {
-    const [allR, statusR] = await Promise.all([fetch('/api/all'), fetch('/status')]);
+    const [allR, statusR, configR] = await Promise.all([
+      fetch('/api/all'), fetch('/status'), fetch('/api/config'),
+    ]);
     const status = statusR.ok ? await statusR.json() : {};
+    const config = configR.ok ? await configR.json().catch(() => ({})) : {};
 
     // 503 : le service tourne (il a repondu), mais aucun module de supervision
     // n'est actif. Le corps porte la raison — le lire plutot que de traiter
@@ -437,7 +522,7 @@ async function refresh() {
     renderReseau(all);
     renderServices(all);
     renderEcosysteme(all);
-    renderDiagnostic(all);
+    renderDiagnostic(all, config);
 
     setConn('ok', 'en ligne');
     el('foot-refresh').textContent =
