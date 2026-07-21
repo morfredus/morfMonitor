@@ -8,6 +8,10 @@
 
 #include <QUdpSocket>
 #include <QNetworkDatagram>
+#include <QNetworkAccessManager>
+#include <QNetworkRequest>
+#include <QNetworkReply>
+#include <QUrl>
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QDateTime>
@@ -71,6 +75,43 @@ bool MonitorModule::isFresh(const Cached& c, int maxAgeMs) const {
 
 // --- Heartbeats morfBeacon ---------------------------------------------------
 
+void MonitorModule::fetchWebUiIfNeeded(const QString& app) {
+    const auto it = m_beaconSeen.find(app);
+    if (it == m_beaconSeen.end() || it->webUiFetched)
+        return;
+    if (!it->capabilities.contains(QLatin1String("web_ui")))
+        return;                       // pas d'interface annoncee : rien a demander
+    if (it->sourceIp.isEmpty() || it->statusPort == 0)
+        return;                       // rien pour construire l'URL
+
+    // Marque avant l'envoi : sans cela, chaque heartbeat relancerait une requete
+    // tant que la premiere n'a pas repondu.
+    it->webUiFetched = true;
+
+    if (!m_http)
+        m_http = new QNetworkAccessManager(this);
+
+    const QUrl url(QStringLiteral("http://%1:%2/status").arg(it->sourceIp).arg(it->statusPort));
+    QNetworkRequest req(url);
+    req.setTransferTimeout(3000);     // un service lent ne doit pas retenir la supervision
+    QNetworkReply* reply = m_http->get(req);
+
+    connect(reply, &QNetworkReply::finished, this, [this, app, reply]() {
+        reply->deleteLater();
+        const auto entry = m_beaconSeen.find(app);
+        if (entry == m_beaconSeen.end())
+            return;
+        if (reply->error() != QNetworkReply::NoError) {
+            // Echec sans consequence : le service reste supervise, simplement
+            // sans lien. On autorise un nouvel essai au prochain heartbeat.
+            entry->webUiFetched = false;
+            return;
+        }
+        const QJsonObject o = QJsonDocument::fromJson(reply->readAll()).object();
+        entry->webUi = o.value(QStringLiteral("web_ui")).toObject();
+    });
+}
+
 void MonitorModule::onBeaconDatagram() {
     while (m_beaconSocket && m_beaconSocket->hasPendingDatagrams()) {
         const QNetworkDatagram dg = m_beaconSocket->receiveDatagram();
@@ -86,11 +127,55 @@ void MonitorModule::onBeaconDatagram() {
         // configuration : l'API peut ainsi révéler ce qui tourne réellement sur
         // le réseau, ce qui aide à peupler la configuration.
         BeaconSeen s;
-        s.lastSeen = QDateTime::currentSecsSinceEpoch();
-        s.version  = o.value(QStringLiteral("version")).toString();
-        s.host     = o.value(QStringLiteral("host")).toString();
-        s.state    = o.value(QStringLiteral("state")).toString();
+        s.lastSeen   = QDateTime::currentSecsSinceEpoch();
+        s.version    = o.value(QStringLiteral("version")).toString();
+        s.host       = o.value(QStringLiteral("host")).toString();
+        s.state      = o.value(QStringLiteral("state")).toString();
+        s.statusPort = static_cast<quint16>(o.value(QStringLiteral("status_port")).toInt());
+
+        // L'adresse de l'emetteur vient de la COUCHE RESEAU, pas du datagramme :
+        // c'est la seule valeur dont on soit sur qu'elle permette de le joindre
+        // depuis ici.
+        s.sourceIp = dg.senderAddress().toString();
+        // Qt prefixe les adresses IPv4 mappees en IPv6 (« ::ffff:192.168.1.55 ») ;
+        // un lien construit tel quel serait inutilisable.
+        if (const int i = s.sourceIp.lastIndexOf(QLatin1Char(':')); i >= 0 &&
+            s.sourceIp.startsWith(QLatin1String("::ffff:")))
+            s.sourceIp = s.sourceIp.mid(i + 1);
+
+        for (const QJsonValue& c : o.value(QStringLiteral("capabilities")).toArray())
+            s.capabilities << c.toString();
+
+        // Une entree deja connue conserve le detail deja recupere : inutile de
+        // reinterroger /status a chaque heartbeat. C'est le sens de
+        // « push presence / pull detail » — la presence est bavarde, le detail
+        // ne se demande qu'une fois.
+        if (const auto it = m_beaconSeen.constFind(app); it != m_beaconSeen.constEnd()) {
+            s.webUi        = it->webUi;
+            s.webUiFetched = it->webUiFetched && it->version == s.version;
+        }
         m_beaconSeen.insert(app, s);
+        fetchWebUiIfNeeded(app);
+    }
+}
+
+void MonitorModule::addReachability(QJsonObject& a, const BeaconSeen& s) {
+    if (!s.sourceIp.isEmpty())  a["ip"] = s.sourceIp;
+    if (s.statusPort != 0)      a["status_port"] = static_cast<int>(s.statusPort);
+    if (!s.capabilities.isEmpty()) {
+        QJsonArray caps;
+        for (const QString& c : s.capabilities) caps.append(c);
+        a["capabilities"] = caps;
+    }
+    // Detail de l'interface Web, complete de l'adresse a laquelle l'ouvrir :
+    // le consommateur ne doit pas avoir a recomposer une URL lui-meme.
+    if (!s.webUi.isEmpty() && !s.sourceIp.isEmpty()) {
+        QJsonObject ui = s.webUi;
+        const int port = ui.value("port").toInt(s.statusPort);
+        ui["url"] = QStringLiteral("http://%1:%2%3")
+                        .arg(s.sourceIp).arg(port)
+                        .arg(ui.value("path").toString(QStringLiteral("/")));
+        a["web_ui"] = ui;
     }
 }
 
@@ -121,6 +206,7 @@ QJsonObject MonitorModule::beaconAppsJson() const {
             a["version"] = it->version;
             a["host"]    = it->host;
             a["state"]   = it->state;
+            addReachability(a, *it);
         }
         arr.append(a);
     }
@@ -141,6 +227,7 @@ QJsonObject MonitorModule::beaconAppsJson() const {
         a["version"]     = it->version;
         a["host"]        = it->host;
         a["state"]       = it->state;
+        addReachability(a, *it);
         arr.append(a);
     }
 

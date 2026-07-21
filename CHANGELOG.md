@@ -5,6 +5,84 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
+## [0.3.1] – 2026-07-21
+
+### Corrigé
+
+- **morfMonitor annonçait la capacité `web_ui` sans en publier le détail.**
+  Il sert une interface Web mais ne la déclarait pas, et sa propre entrée dans
+  la page Écosystème n'affichait donc aucun lien.
+
+  La déclaration a révélé un second défaut : morfMonitor sert son **propre**
+  `/status` au lieu d'utiliser le `StatusServer` de morfBeacon, et ne
+  connaissait donc pas les champs `webUi`. La capacité partait bien dans le
+  heartbeat, mais le détail restait introuvable — un observateur ne pouvait pas
+  construire le lien.
+
+  Les deux sont corrigés : morfMonitor se déclare comme n'importe quel autre
+  service et publie le bloc `web_ui` dans son `/status`. Un observatoire qui
+  s'exempterait de ses propres règles n'aurait aucune raison d'être cru sur les
+  autres.
+
+  **Tout service réimplémentant `/status` contracte la même obligation** :
+  déclarer une capacité sans en servir le détail annonce une interface que
+  personne ne saura ouvrir.
+
+  La déclaration est conditionnée à `web_enabled` : annoncer une interface
+  désactivée produirait un lien mort.
+
+## [0.3.0] – 2026-07-21
+
+Première étape de l'**observatoire** : morfMonitor ne se contente plus de dire
+quels services vivent, il permet d'atteindre ceux qui exposent une interface.
+Sans rien connaître d'eux, et sans jamais se mettre sur le chemin.
+
+### Ajouté
+
+- **Le listener beacon conserve l'adresse de l'émetteur et son `status_port`.**
+  Le datagramme transportait déjà ce dernier et l'adresse était disponible à la
+  réception, mais `BeaconSeen` ne retenait que `lastSeen`, `version`, `host` et
+  `state` : morfMonitor savait qu'un service vivait, pas où le joindre. Aucune
+  navigation n'était possible.
+
+  L'adresse vient de la **couche réseau**, pas du datagramme : c'est la seule
+  dont on soit sûr qu'elle permette de joindre l'émetteur. `host` est un nom
+  annoncé, qui ne résout pas forcément depuis la machine qui observe. Les
+  adresses IPv4 mappées en IPv6 (`::ffff:192.168.1.55`) sont normalisées, sans
+  quoi le lien serait inutilisable.
+
+- **Découverte des interfaces Web déclarées.** Un service annonçant la capacité
+  `web_ui` voit son `/status` interrogé **une fois** pour obtenir le détail
+  (chemin, libellé, port), puis la page Écosystème propose un lien vers lui.
+
+  C'est le « pull detail » du protocole, pas une sonde périodique : le détail
+  n'est redemandé que si la version du service change. Un échec est sans
+  conséquence — le service reste supervisé, simplement sans lien.
+
+- `/api/services` expose désormais, par entrée beacon : `ip`, `status_port`,
+  `capabilities` et, le cas échéant, `web_ui` complété d'une `url` prête à
+  l'emploi. Un consommateur n'a pas à recomposer l'adresse lui-même.
+
+- **Le lien est un `href` ordinaire** vers l'adresse propre du service, ouvert
+  dans un nouvel onglet avec `rel="noopener"`. morfMonitor n'est pas sur le
+  chemin de la requête : il ne relaie rien, n'ouvre aucune session,
+  n'authentifie personne. Couper morfMonitor laisse ces adresses joignables ;
+  seule la commodité de les trouver disparaît. C'est l'invariant
+  « observatoire, pas portail », et il est vérifiable.
+
+  Ajouter un service à l'écosystème ne demande **aucune modification ici**.
+
+### Limite connue
+
+Sur une machine **multi-domiciliée** (WSL, Hyper-V, VPN), un émetteur diffuse
+son heartbeat sur toutes ses interfaces et morfMonitor retient l'adresse du
+dernier datagramme reçu. Celle-ci peut appartenir à un réseau virtuel, donc être
+injoignable depuis le navigateur d'une autre machine.
+
+Le cas ne se produit pas sur la cible de production (un Raspberry Pi avec une
+seule interface active) et n'affecte que le lien, jamais la supervision. Une
+sélection préférant l'interface portant la route du réseau local reste à faire.
+
 ## [0.2.0] – 2026-07-21
 
 Cette version ajoute une interface Web et corrige une série de défauts qui

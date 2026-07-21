@@ -21,7 +21,8 @@
 
   "_comment_network": "Equipements surveilles par sonde reseau plutot que par systemd : un ESP32 ne repond pas a 'systemctl'. On teste l'ouverture d'un port TCP. 'host' accepte un nom mDNS ou une IP fixe.",
   "network_services": [
-   ],
+   
+  ],
 
   "_comment_probe_grace": "Delai de grace avant la premiere sonde reseau, en secondes d'uptime. Une sonde resout un nom mDNS par multicast : on laisse le WiFi s'associer et se stabiliser pour ne pas perturber sa connexion au demarrage.",
   "network_probe_grace_s": 45,

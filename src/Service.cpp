@@ -55,6 +55,21 @@ bool Service::start() {
         pc.statusPort          = m_http ? m_http->port() : 0;
         pc.statusBindAddress   = m_config.bindAddress;
 
+        // morfMonitor sert lui-meme une interface Web : il la declare comme
+        // n'importe quel autre service, et se decouvre donc par le meme
+        // mecanisme. Un observatoire qui s'exempterait de ses propres regles
+        // n'aurait aucune raison d'etre cru sur les autres.
+        //
+        // Conditionne a webEnabled : annoncer une interface desactivee
+        // produirait un lien mort. La declaration suit ce qui est reellement
+        // servi, elle ne l'affirme pas.
+        if (m_config.webEnabled) {
+            pc.webUiPath        = QStringLiteral("/");
+            pc.webUiLabel       = QStringLiteral("Supervision");
+            pc.webUiDescription = QStringLiteral(
+                "Etat de la machine et des services morfSystem.");
+        }
+
         m_heartbeat = new morfbeacon::Heartbeat(pc, m_registry, this);
         m_heartbeat->start();
     }

@@ -2,7 +2,7 @@
 
 *Read in another language: **English** (this document) · [Français](README.fr.md).*
 
-[![Version](https://img.shields.io/badge/version-0.1.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.3.1-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![License](https://img.shields.io/badge/License-GPL--3.0--only-blue)
@@ -48,7 +48,7 @@ like any other client. RaspberryDashboard and the browser read the same routes.
 | Ressources | CPU, memory, load, swap, storage, processes |
 | Réseau | Interfaces, IPv4/IPv6, MAC, link state |
 | Services morfSystem | systemd units and network probes being supervised |
-| Écosystème | Services discovered over morfBeacon, with version and last heartbeat |
+| Écosystème | Services discovered over morfBeacon, with version, last heartbeat and a link to any web interface they declare |
 | Diagnostic | Detected anomalies, last reboot cause, shared configuration state |
 
 The two interfaces answer different questions, which is why both exist:

@@ -14,6 +14,7 @@
 #include <memory>
 
 class QUdpSocket;
+class QNetworkAccessManager;
 
 namespace morfmonitor {
 
@@ -63,6 +64,18 @@ public:
 
 private:
     void onBeaconDatagram();
+
+    // Interroge /status d'un service qui annonce « web_ui », une seule fois par
+    // version vue. Sans reponse, le service reste simplement sans lien : une
+    // interface indisponible ne doit pas degrader la supervision.
+    void fetchWebUiIfNeeded(const QString& app);
+
+    struct BeaconSeen;
+    // Ajoute a une entree ce qui permet de la JOINDRE, et rien de plus :
+    // morfMonitor publie une adresse, il n'ouvre aucune connexion pour le compte
+    // de l'utilisateur. C'est la difference entre referencer et mediatiser.
+    static void addReachability(QJsonObject& entry, const BeaconSeen& seen);
+
     QJsonObject beaconAppsJson() const;
     qint64 uptimeSeconds() const;
 
@@ -90,12 +103,37 @@ private:
     // On ÉCOUTE, on ne sonde pas : les applications de bureau annoncent leur
     // présence en broadcast, donc aucune adresse à connaître et aucune requête
     // à émettre.
-    QUdpSocket* m_beaconSocket = nullptr;
+    //
+    // Seule exception, et elle est bornée : quand un service annonce la capacité
+    // « web_ui », son /status est interrogé UNE fois pour obtenir le détail de
+    // son interface. C'est le « pull detail » du protocole, pas une sonde
+    // périodique — et cela ne fait de morfMonitor l'intermédiaire de rien : il
+    // lit une description, il ne relaie aucun trafic.
+    QUdpSocket*            m_beaconSocket = nullptr;
+    QNetworkAccessManager* m_http = nullptr;
     struct BeaconSeen {
         qint64  lastSeen = 0;   // secondes Unix
         QString version;
         QString host;
         QString state;
+
+        // Adresse REELLE de l'emetteur, relevee a la reception du datagramme, et
+        // port de son serveur /status. Sans ces deux valeurs, morfMonitor sait
+        // qu'un service vit mais pas ou le joindre : aucune navigation n'est
+        // possible. `host` ne suffit pas — c'est un nom annonce, qui ne resout
+        // pas forcement depuis la machine qui observe.
+        QString sourceIp;
+        quint16 statusPort = 0;
+
+        // Capacites annoncees (protocole morfbeacon/1). Un consommateur
+        // s'appuie sur elles, jamais sur le nom de l'application.
+        QStringList capabilities;
+
+        // Detail de l'interface Web, obtenu en interrogeant /status une fois la
+        // capacite « web_ui » reperee. Vide tant qu'elle ne l'est pas : le
+        // heartbeat annonce, HTTP detaille.
+        QJsonObject webUi;
+        bool        webUiFetched = false;
     };
     QHash<QString, BeaconSeen> m_beaconSeen;  // clé = nom annoncé (« app »)
 };

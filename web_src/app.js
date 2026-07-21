@@ -108,6 +108,29 @@ function probeBadge(p) {
   return badge('off', s || 'inconnu');
 }
 
+// Lien vers l'interface d'un service decouvert.
+//
+// C'est un `href` ordinaire vers l'adresse propre du service : le navigateur s'y
+// rend directement. morfMonitor n'est PAS sur le chemin de la requete -- il ne
+// relaie rien, n'ouvre aucune session, n'authentifie personne. C'est ce qui le
+// garde observatoire et non portail : coupez-le, ces adresses restent
+// joignables, seule la commodite de les trouver disparait.
+//
+// rel="noopener" : une page ouverte depuis ici ne doit pas pouvoir manipuler
+// celle-ci via window.opener.
+function webUiLink(a) {
+  const ui = a.web_ui;
+  if (!ui || !ui.url) {
+    // Distinguer « annonce une interface mais son detail n'a pu etre lu » de
+    // « n'en annonce aucune » : la premiere est un incident, la seconde un fait.
+    const declares = Array.isArray(a.capabilities) && a.capabilities.includes('web_ui');
+    return declares ? badge('warn', 'annoncée, injoignable') : '<span class="info-label">—</span>';
+  }
+  const label = esc(ui.label || a.label || a.app);
+  const title = ui.description ? ` title="${esc(ui.description)}"` : '';
+  return `<a href="${esc(ui.url)}" target="_blank" rel="noopener"${title}>${label} ↗</a>`;
+}
+
 function stateBadge(state) {
   const s = String(state || '').toLowerCase();
   if (s === 'ok' || s === 'active' || s === 'running') return badge('ok', state);
@@ -337,27 +360,29 @@ function renderEcosysteme(all) {
     header('Services découverts via morfBeacon', `${apps.length} annoncés`) +
     (apps.length
       ? `<div class="tbl-wrap"><table><thead><tr>
-           <th>Application</th><th class="mono">Hôte</th><th class="mono">Version</th>
-           <th>État</th><th class="mono">Dernier heartbeat</th><th>Déclaré</th>
+           <th>Application</th><th class="mono">Adresse</th><th class="mono">Version</th>
+           <th>État</th><th class="mono">Dernier heartbeat</th><th>Interface</th>
          </tr></thead><tbody>` +
         apps.map((a) => `<tr>
-          <td>${esc(a.label || a.app)}</td>
-          <td class="mono">${esc(a.host || '—')}</td>
+          <td>${esc(a.label || a.app)}${a.declared ? '' : ' <span class="badge badge-off">non déclaré</span>'}</td>
+          <td class="mono">${esc(a.ip || a.host || '—')}</td>
           <td class="mono">${esc(a.version || '—')}</td>
           <td>${a.enabled === false ? badge('off', 'désactivé')
                 : a.online          ? stateBadge(a.state || 'ok')
                                     : badge('err', 'hors ligne')}</td>
           <td class="mono">${esc(a.last_seen_s === undefined ? '—' : ago(a.last_seen_s))}</td>
-          <td>${a.declared ? badge('ok', 'oui') : badge('off', 'non')}</td>
+          <td>${webUiLink(a)}</td>
         </tr>`).join('') + `</tbody></table></div>` +
         `<div class="unavailable" style="margin-top:.8rem">` +
         `<strong>Découverte, pas configuration.</strong><br>` +
         `Ces services sont entendus sur le réseau local (diffusion UDP, protocole morfbeacon/1) : ` +
-        `aucune adresse n’est connue à l’avance. « Déclaré » indique si l’application figure dans ` +
-        `la liste beacon_apps de morfsystem.json. Un « non » n’est pas une anomalie : un service ` +
-        `tournant sur une machine supervisée est généralement suivi par systemd, la liste beacon_apps ` +
-        `étant réservée aux applications sans unité systemd (applications de bureau). ` +
-        `Un service est considéré hors ligne après ${esc(offlineAfter ?? '—')} s sans annonce.</div>`
+        `aucune adresse n’est connue à l’avance. Un service qui annonce la capacité ` +
+        `<code>web_ui</code> voit son interface interrogée une fois, et le lien ci-dessus pointe ` +
+        `<strong>directement</strong> vers elle — morfMonitor observe et référence, il ne relaie ` +
+        `rien. Ajouter un service à l’écosystème ne demande donc aucune modification ici. ` +
+        `« Non déclaré » signifie absent de la liste beacon_apps de morfsystem.json, ce qui n’est ` +
+        `pas une anomalie : un service tournant sur une machine supervisée est généralement suivi ` +
+        `par systemd. Un service est considéré hors ligne après ${esc(offlineAfter ?? '—')} s sans annonce.</div>`
       : unavailable('Aucune annonce reçue.',
           'Aucun service morfSystem ne diffuse sur le port beacon, ou le pare-feu bloque la diffusion UDP.'));
 }

@@ -226,6 +226,24 @@ QByteArray HttpServer::buildStatusJson() const {
     o["uptime_s"] = static_cast<double>(m_uptime.isValid() ? m_uptime.elapsed() / 1000 : 0);
     o["ts"]       = static_cast<double>(QDateTime::currentSecsSinceEpoch());
     o["metrics"]  = m_registry ? m_registry->metrics() : QJsonObject{};
+
+    // Detail de l'interface Web, attendu par tout consommateur qui a vu passer
+    // la capacite « web_ui » dans le heartbeat.
+    //
+    // morfMonitor sert son PROPRE /status au lieu d'utiliser le StatusServer de
+    // morfBeacon : il doit donc publier ce bloc lui-meme. Sans cela, il
+    // annoncerait une capacite dont le detail resterait introuvable, et un
+    // observateur ne pourrait pas construire le lien. Tout service qui
+    // reimplemente /status contracte la meme obligation.
+    if (m_config.webEnabled) {
+        QJsonObject ui;
+        ui["path"]        = QStringLiteral("/");
+        ui["label"]       = QStringLiteral("Supervision");
+        ui["port"]        = static_cast<int>(m_server->isListening() ? m_server->serverPort()
+                                                                     : m_config.httpPort);
+        ui["description"] = QStringLiteral("Etat de la machine et des services morfSystem.");
+        o["web_ui"] = ui;
+    }
     return toJson(o);
 }
 
