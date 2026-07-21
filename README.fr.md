@@ -232,9 +232,20 @@ curl http://127.0.0.1:8790/api/all
 ## Installer en service
 
 ```sh
-sudo ./scripts/linux/install-service.sh     # installer
-sudo ./scripts/linux/update-service.sh      # mettre à jour
+# Toutes plateformes : Linux, Windows, Raspberry Pi
+sudo ./service.py install      # compile si besoin, installe, demarre
+sudo ./service.py update       # recompile, remplace le binaire, redemarre
+sudo ./service.py uninstall    # desinscrit, en conservant votre configuration
+./service.py status            # ce que le systeme en dit
 ```
+
+Un seul point d'entree partout. Ce qu'est ce service — son nom, son dossier,
+ses configurations — est declare dans `service.json` a cote. Les quatre etapes
+d'installation vivent une seule fois pour tout le parc ; seul le gestionnaire
+de services change selon la plateforme.
+
+Les anciens scripts `scripts/linux/` et `scripts/windows/` fonctionnent
+toujours, inchanges.
 
 Chaque script a son équivalent Windows dans `scripts/windows/` (tâche
 planifiée) :

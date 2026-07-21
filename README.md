@@ -183,8 +183,10 @@ already inside morfMonitor.
 
 ### Linux and Windows parity
 
-Every script in `scripts/linux/` has a counterpart in `scripts/windows/`
-(`install-service`, `update-service`, `deploy-config`, `config-tool`).
+Service installation no longer needs a counterpart: `./service.py` is one
+implementation for Linux, Windows and the Raspberry Pi, and only the service
+manager it drives differs. The remaining `scripts/linux/` and `scripts/windows/`
+pairs (`deploy-config`, `config-tool`) still work and are unchanged.
 
 The **JSON logic stays in Python** (`merge-config.py`, `check-config.py`), called
 unchanged by both sides. Python is the only one of the three languages in this
