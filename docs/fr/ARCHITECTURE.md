@@ -92,7 +92,7 @@ Qt `:/web`, aucune dépendance Qt Widgets).
 
 La contrainte qui la définit tient en une phrase : **elle est cliente de
 l'API publique, pas une initiée.** Elle lit `/api/all`, `/status` et
-`/api/config` comme RaspberryDashboard le fait. Aucun gabarit, aucune donnée
+`/api/config` comme morfDashboard le fait. Aucun gabarit, aucune donnée
 injectée côté serveur.
 
 Ce n'est pas cosmétique. morfMonitor annonce « il n'affiche rien » : sa

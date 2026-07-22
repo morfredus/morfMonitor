@@ -40,7 +40,7 @@ morfMonitor serves a web interface at `/`, on the **same port as the API**.
 It is not a second service, and not a second collection: it is a **second view
 of the same data**. The page is served as inert assets — no server-side
 templating, no injected values — and fetches `/api/all` and `/status` exactly
-like any other client. RaspberryDashboard and the browser read the same routes.
+like any other client. morfDashboard and the browser read the same routes.
 
 | Page | Question it answers |
 |---|---|
@@ -110,7 +110,7 @@ the example stops being consulted.
 
 ## Shared configuration
 
-morfMonitor and RaspberryDashboard read **the same file**,
+morfMonitor and morfDashboard read **the same file**,
 `/etc/morfsystem/morfsystem.json`. Adding a supervised component requires
 editing that file only — no code change in either program. JSON was chosen
 precisely so that neither C++ nor Python is privileged.
@@ -125,7 +125,7 @@ There are **two files**, and they do not go to the same place:
 | Repository file | Destination | Contents | Read by |
 |---|---|---|---|
 | `config/morfmonitor.json` | `/etc/morfmonitor/` | port, bind address, modules | morfMonitor |
-| `config/morfsystem.json` | `/etc/morfsystem/` | what is **supervised** | morfMonitor **and** RaspberryDashboard |
+| `config/morfsystem.json` | `/etc/morfsystem/` | what is **supervised** | morfMonitor **and** morfDashboard |
 
 One command pushes both:
 

@@ -18,7 +18,7 @@ interroger le système d'exploitation elle-même. Toutes lisent morfMonitor.
 
 ## Pourquoi
 
-RaspberryDashboard collectait lui-même ses informations : `psutil`, `systemctl`,
+morfDashboard collectait lui-même ses informations : `psutil`, `systemctl`,
 `/proc`, commandes shell, sondes réseau, écoute morfBeacon. Cette logique était
 soudée à son interface graphique.
 
@@ -75,7 +75,7 @@ Ce n'est pas un second service, ni une seconde collecte : c'est une **seconde
 vue des mêmes données**. La page est servie comme des fichiers inertes — aucun
 gabarit, aucune valeur injectée côté serveur — et interroge `/api/all`,
 `/status` et `/api/config` exactement comme n'importe quel autre client.
-RaspberryDashboard et le navigateur lisent les mêmes routes.
+morfDashboard et le navigateur lisent les mêmes routes.
 
 | Page | Question à laquelle elle répond |
 |---|---|
@@ -156,7 +156,7 @@ elle vous convient, ne créez pas de fichier réel. Si vous en créez un, c'est
 
 ## Configuration partagée
 
-morfMonitor et RaspberryDashboard lisent **le même fichier** :
+morfMonitor et morfDashboard lisent **le même fichier** :
 `/etc/morfsystem/morfsystem.json` (voir `config/morfsystem.example.json`).
 
 C'est la source unique de vérité des composants supervisés. Ajouter un service,
@@ -200,7 +200,7 @@ par défaut, qui masquerait une coupure.
 
 ## Mode dégradé du Dashboard
 
-RaspberryDashboard privilégie morfMonitor, mais **ne dépend pas** de lui : un
+morfDashboard privilégie morfMonitor, mais **ne dépend pas** de lui : un
 écran de supervision qui s'éteint parce que le superviseur est arrêté est un
 contresens.
 
@@ -270,7 +270,7 @@ Il y a **deux fichiers**, et ils ne vont pas au même endroit :
 | Fichier du dépôt | Destination | Contenu | Lu par |
 |---|---|---|---|
 | `config/morfmonitor.json` | `/etc/morfmonitor/` | port, adresse d'écoute, modules | morfMonitor |
-| `config/morfsystem.json` | `/etc/morfsystem/` | ce qui est **supervisé** | morfMonitor **et** RaspberryDashboard |
+| `config/morfsystem.json` | `/etc/morfsystem/` | ce qui est **supervisé** | morfMonitor **et** morfDashboard |
 
 Une seule commande pousse les deux :
 

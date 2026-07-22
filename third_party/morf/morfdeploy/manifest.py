@@ -70,7 +70,7 @@ class ConfigFile:
         """Absolute destinations are honoured as-is; relative ones sit in config_dir.
 
         The shared parc configuration lives outside any single application's
-        directory -- it is read by morfMonitor and by RaspberryDashboard -- so
+        directory -- it is read by morfMonitor and by morfDashboard -- so
         it must be expressible as an absolute path.
 
         And that path is not the same everywhere. `dest` may therefore be an

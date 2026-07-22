@@ -7,7 +7,7 @@ les ressources qu'il mesure.
 Depuis la 0.2.0, il sert aussi une interface Web. Cela ne change pas sa
 responsabilité : la page est une **seconde vue** des mêmes données, servie comme
 des fichiers inertes et cliente des routes `/api/` publiques, au même titre que
-RaspberryDashboard. morfMonitor collecte et expose ; il ne présente pas.
+morfDashboard. morfMonitor collecte et expose ; il ne présente pas.
 
 ## Invariant : observatoire, pas portail
 
@@ -57,7 +57,7 @@ Référence complète, valable pour tout le parc :
 
 - **Pas de stockage long terme ni d'analyse** : c'est le rôle de morfAnalytics.
 - **Pas d'alerte ni de notification** : c'est le rôle de morfNotify.
-- **Pas de vue synthétique embarquée** : c'est le rôle de RaspberryDashboard.
+- **Pas de vue synthétique embarquée** : c'est le rôle de morfDashboard.
   L'écran OLED répond à « est-ce que tout va bien ? », l'interface Web répond à
   « pourquoi ? ». Les deux lisent la même API.
 - **Pas de logique de présentation côté serveur.** L'interface Web reste des

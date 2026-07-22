@@ -11,7 +11,7 @@
 #
 #   config/morfsystem.json   ->  /etc/morfsystem/morfsystem.json
 #       Description de CE QUI EST SUPERVISE : services systemd, sondes reseau,
-#       applications attendues. Lu par morfMonitor ET RaspberryDashboard, d'ou
+#       applications attendues. Lu par morfMonitor ET morfDashboard, d'ou
 #       son emplacement partage dans /etc.
 #
 # Par defaut le script deploie LES DEUX, parce que c'est le geste courant et
