@@ -2,7 +2,7 @@
 
 *Read in another language: **English** (this document) · [Français](README.fr.md).*
 
-[![Version](https://img.shields.io/badge/version-0.5.1-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.5.2-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![License](https://img.shields.io/badge/License-GPL--3.0--only-blue)

@@ -15,6 +15,10 @@
 #include <QNetworkInterface>
 #include <QStorageInfo>
 #include <QRegularExpression>
+#include <QSet>
+
+#include <algorithm>
+#include <vector>
 
 namespace morfmonitor {
 
@@ -193,19 +197,53 @@ QJsonObject ResourceCollector::collect() {
         }
     }
 
-    // --- Disque : la racine, celle qui compte pour la santé de la machine ----
+    // --- Disque : tous les volumes REELS montés -----------------------------
+    // La racine seule mentait dès que /home est une partition séparée —
+    // installation Linux classique sur un portable : « / » à 90 % affole alors
+    // que les données ont ailleurs toute la place, et inversement un /home
+    // plein restait invisible. Plutôt que d'ajouter /home en dur (qui n'est
+    // pas un montage séparé sur un Raspberry Pi), on liste chaque système de
+    // fichiers adossé à un périphérique (/dev/…), en écartant les
+    // pseudo-montages : tmpfs, et les squashfs des snaps — en lecture seule,
+    // toujours « pleins » à 100 %, la fausse alerte assurée.
     {
-        QStorageInfo root(QStringLiteral("/"));
-        if (root.isValid() && root.bytesTotal() > 0) {
+        struct Vol { QString mount; QJsonObject d; };
+        std::vector<Vol> vols;
+        QSet<QString> devices;
+        for (const QStorageInfo& v : QStorageInfo::mountedVolumes()) {
+            if (!v.isValid() || !v.isReady() || v.isReadOnly() || v.bytesTotal() <= 0)
+                continue;
+            const QString device = QString::fromUtf8(v.device());
+            if (!device.startsWith(QLatin1String("/dev/")))
+                continue;
+            if (devices.contains(device))
+                continue;   // montage bind : le même volume sous un autre chemin
+            devices.insert(device);
+
             QJsonObject d;
-            d["mount"]     = root.rootPath();
-            d["total_b"]   = static_cast<double>(root.bytesTotal());
-            d["free_b"]    = static_cast<double>(root.bytesAvailable());
-            d["used_b"]    = static_cast<double>(root.bytesTotal() - root.bytesAvailable());
-            d["percent"]   = qRound((1.0 - static_cast<double>(root.bytesAvailable())
-                                     / static_cast<double>(root.bytesTotal())) * 1000.0) / 10.0;
-            o["disk"] = d;
+            d["mount"]   = v.rootPath();
+            d["total_b"] = static_cast<double>(v.bytesTotal());
+            d["free_b"]  = static_cast<double>(v.bytesAvailable());
+            d["used_b"]  = static_cast<double>(v.bytesTotal() - v.bytesAvailable());
+            d["percent"] = qRound((1.0 - static_cast<double>(v.bytesAvailable())
+                                   / static_cast<double>(v.bytesTotal())) * 1000.0) / 10.0;
+            vols.push_back({v.rootPath(), d});
         }
+        // Tri par point de montage : « / » d'abord, puis /boot, /home… L'ordre
+        // de mountedVolumes() est celui du montage, qui varie d'un boot à
+        // l'autre — un affichage qui change de place à chaque redémarrage se
+        // lit comme une panne.
+        std::sort(vols.begin(), vols.end(),
+                  [](const Vol& a, const Vol& b) { return a.mount < b.mount; });
+
+        QJsonArray disks;
+        for (const Vol& v : vols) {
+            disks.append(v.d);
+            if (v.mount == QLatin1String("/"))
+                o["disk"] = v.d;   // compat : consommateurs d'avant `disks`
+        }
+        if (!disks.isEmpty())
+            o["disks"] = disks;
     }
 
     // --- Températures --------------------------------------------------------

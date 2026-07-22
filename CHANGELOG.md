@@ -5,6 +5,26 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
+## [0.5.2] – 2026-07-22
+
+### Corrigé
+
+- **Le stockage couvre tous les volumes montés, plus la seule racine.** Sur
+  une machine où `/home` est une partition séparée — installation Linux
+  classique sur un portable — la page Ressources pouvait afficher « / » à
+  90 % et affoler alors que les données avaient ailleurs toute la place, ou à
+  l'inverse taire un `/home` plein. L'API expose désormais `disks` : un objet
+  par système de fichiers adossé à un périphérique (`/dev/…`), pseudo-montages
+  écartés (tmpfs, squashfs des snaps — en lecture seule, toujours « pleins » à
+  100 %), montages bind dédupliqués, tri par point de montage. `disk` (la
+  seule racine) est conservé pour les consommateurs existants.
+
+### Modifié
+
+- **Une carte Stockage par volume** dans la page Ressources, et **une jauge
+  d'anomalie par volume** (« Stockage /home » à 92 % est signalé pour
+  lui-même, avec son point de montage dans le libellé).
+
 ## [0.5.1] – 2026-07-22
 
 ### Modifié

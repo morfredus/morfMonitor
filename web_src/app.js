@@ -206,7 +206,12 @@ function renderEtat(all, status) {
 // Schema reel de /api/resources (voir HostCollectors.cpp) :
 //   cpu_percent, cpu_freq_mhz   -- A PLAT, pas dans un objet « cpu »
 //   load                        -- TABLEAU [1 min, 5 min, 15 min]
-//   memory, swap, disk          -- objets { total_b, used_b, free_b, percent }
+//   memory, swap                -- objets { total_b, used_b, free_b, percent }
+//   disks                       -- TABLEAU de { mount, total_b, used_b, free_b,
+//                                  percent } : un par volume reel monte (/ ,
+//                                  /home separe, /boot/firmware...)
+//   disk                        -- la seule racine, conserve pour les
+//                                  consommateurs d'avant `disks`
 //   temperature { cpu_c, gpu_c }
 //   throttling { raw, undervoltage_now, throttled_now, *_since_boot }
 function renderRessources(all) {
@@ -253,14 +258,20 @@ function renderRessources(all) {
       `</div>`);
   }
 
-  if (r.disk) {
-    const d = r.disk;
+  // Une carte PAR VOLUME : la racine seule mentait dès que /home est une
+  // partition séparée — « / » à 90 % affole alors que les données ont
+  // ailleurs toute la place, et inversement un /home plein restait invisible.
+  // `disks` liste les volumes réels ; `disk` (la seule racine) reste le repli
+  // face à un service qui n'a pas encore été mis à jour.
+  const disks = Array.isArray(r.disks) && r.disks.length ? r.disks
+              : r.disk ? [r.disk] : [];
+  disks.forEach((d) => {
     parts.push(`<div class="card">${header('Stockage', d.mount || '')}` +
       row('Utilisé', `${bytes(d.used_b) ?? '—'} / ${bytes(d.total_b) ?? '—'}`) +
       meter(d.percent) +
       row('Libre', bytes(d.free_b) ?? '—') +
       `</div>`);
-  }
+  });
 
   // Bridage : sous-tension et limite thermique. Le collecteur le dit lui-meme,
   // « c'est le diagnostic le plus utile d'un Pi instable, et il n'apparait
@@ -489,8 +500,16 @@ function problems(all) {
   expected.forEach((anyOnline, app) => {
     if (!anyOnline) out.push({ what: serviceName(app), state: 'hors ligne', kind: 'err' });
   });
-  [['disk', 'Stockage'], ['memory', 'Mémoire'], ['swap', 'Swap']].forEach(([k, lbl]) => {
-    const p = r[k] && r[k].percent;
+  // Chaque volume est surveillé pour lui-même : un /home qui se remplit est
+  // une anomalie que la seule racine ne montrait jamais. Le point de montage
+  // figure dans le libellé, sinon deux volumes pleins donnent deux lignes
+  // « Stockage » impossibles à distinguer.
+  const vols = Array.isArray(r.disks) && r.disks.length ? r.disks
+             : r.disk ? [r.disk] : [];
+  const gauges = vols.map((d) => [d.percent, `Stockage ${d.mount || ''}`.trim()]);
+  gauges.push([r.memory && r.memory.percent, 'Mémoire'],
+              [r.swap && r.swap.percent, 'Swap']);
+  gauges.forEach(([p, lbl]) => {
     if (typeof p === 'number' && p >= 90) out.push({ what: lbl, state: `${p.toFixed(0)} %`, kind: 'err' });
     else if (typeof p === 'number' && p >= 75) out.push({ what: lbl, state: `${p.toFixed(0)} %`, kind: 'warn' });
   });
