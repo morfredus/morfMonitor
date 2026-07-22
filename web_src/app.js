@@ -430,18 +430,25 @@ function renderEcosysteme(all) {
           <td class="mono">${esc(a.last_seen_s === undefined ? '—' : ago(a.last_seen_s))}</td>
           <td>${webUiLink(a)}</td>
         </tr>`).join('') + `</tbody></table></div>` +
+        // Un paragraphe par idée, pas un pavé : le texte se consulte, il ne se
+        // lit pas d'une traite. La durée n'est jamais écrite en dur — elle
+        // vient de morfsystem.json, et un texte qui dirait « 60 s » mentirait
+        // dès que la configuration en déciderait autrement.
         `<div class="unavailable" style="margin-top:.8rem">` +
-        `<strong>Découverte, pas configuration.</strong><br>` +
-        `Ces services sont entendus sur le réseau local (diffusion UDP, protocole morfbeacon/1) : ` +
-        `aucune adresse n’est connue à l’avance. Un service qui annonce la capacité ` +
-        `<code>web_ui</code> voit son interface interrogée une fois, et le lien ci-dessus pointe ` +
-        `<strong>directement</strong> vers elle — morfMonitor observe et référence, il ne relaie ` +
-        `rien. Ajouter un service à l’écosystème ne demande donc aucune modification ici. ` +
-        `« Non déclaré » signifie absent de la liste beacon_apps de morfsystem.json, ce qui n’est ` +
-        `pas une anomalie : un service tournant sur une machine supervisée est généralement suivi ` +
-        `par systemd. Un même service installé sur plusieurs machines occupe une ligne par machine — ` +
-        `la colonne Machine donne le nom d’hôte annoncé, joignable en général en lui ajoutant ` +
-        `<code>.local</code>. Un service est considéré hors ligne après ${esc(offlineAfter ?? '—')} s sans annonce.</div>`
+        `<strong>Découverte automatique</strong>` +
+        `<p style="margin:.6rem 0 0">morfMonitor écoute les annonces UDP ` +
+        `(<code>morfbeacon/1</code>) du réseau local. Aucune adresse IP n’est ` +
+        `configurée à l’avance.</p>` +
+        `<p style="margin:.6rem 0 0">Les services publiant une interface Web sont ` +
+        `interrogés une fois afin d’obtenir leur URL, puis les liens affichés ` +
+        `pointent directement vers eux.</p>` +
+        `<p style="margin:.6rem 0 0"><strong>Non déclaré</strong> signifie simplement que le ` +
+        `service ne figure pas dans la liste des applications connues ` +
+        `(<code>morfsystem.json</code>). Ce n’est pas une erreur.</p>` +
+        `<p style="margin:.6rem 0 0">Un même service installé sur plusieurs machines ` +
+        `apparaît une fois par machine.</p>` +
+        `<p style="margin:.6rem 0 0">Après ${esc(offlineAfter ?? '—')} secondes sans ` +
+        `heartbeat, un service est considéré hors ligne.</p></div>`
       : unavailable('Aucune annonce reçue.',
           'Aucun service morfSystem ne diffuse sur le port beacon, ou le pare-feu bloque la diffusion UDP.'));
 }

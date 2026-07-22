@@ -5,6 +5,16 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
+## [0.5.1] – 2026-07-22
+
+### Modifié
+
+- **Le texte explicatif de l'onglet Écosystème est réécrit, un paragraphe par
+  idée** : découverte automatique, interrogation unique des interfaces Web,
+  sens de « non déclaré », une ligne par machine, délai de mise hors ligne.
+  Le pavé d'un seul tenant se consultait mal. Le délai reste tiré de la
+  configuration (`beacon.offline_after_s`), jamais écrit en dur.
+
 ## [0.5.0] – 2026-07-22
 
 ### Corrigé
