@@ -193,6 +193,50 @@ class Deployer:
 
         return written
 
+    def enrich_configs(self, config_dir: Path) -> None:
+        """Bring every installed configuration up to the new version's keys.
+
+        Runs after the configs are in place, in install and update alike: a
+        config that was kept, or migrated from an older layout, may predate keys
+        this version introduced. A fresh one copied from the example already has
+        them, so the merge is a no-op there. Enriching only -- never touches a
+        value the user set, never removes a key.
+        """
+        from .configmerge import merge_config
+
+        for config in self.manifest.configs:
+            dest = config.resolved_dest(config_dir)
+            if not dest.is_file():
+                continue
+
+            # The reference is the example this version ships -- the canonical
+            # set of keys -- not whatever real file the repo may also carry.
+            source = config.source
+            if not source.endswith(".example.json"):
+                source = source.replace(".json", ".example.json")
+            reference = self.manifest.repo_root / source
+            if not reference.is_file():
+                continue
+
+            try:
+                added, obsolete = merge_config(reference, dest)
+            except (OSError, ValueError) as exc:
+                print(f"  could not enrich {dest}: {exc}")
+                continue
+
+            settings = [k for k in added if not k.rsplit(".", 1)[-1].startswith("_comment")]
+            comments = len(added) - len(settings)
+            if settings:
+                print(f"  config enriched: {dest}")
+                for key in settings:
+                    print(f"    + {key}  (new option, default applied -- review it)")
+                if comments:
+                    print(f"    + {comments} documentation comment(s)")
+            if obsolete:
+                print(f"  {dest}: keys no longer in the reference, kept as-is:")
+                for key in obsolete:
+                    print(f"    ? {key}")
+
     def chown_to_user(self, installed: list) -> None:
         """Give back only the files this install actually wrote.
 

@@ -252,8 +252,8 @@ planifiée) :
 
 | Tâche | Linux | Windows |
 |---|---|---|
-| Installer | `install-service.sh` | `install-service.ps1` |
-| Mettre à jour | `update-service.sh` | `update-service.ps1` |
+| Installer | `service.py install` | `service.py install` |
+| Mettre à jour | `service.py update` | `service.py update` |
 | Déployer la config du dépôt | `deploy-config.sh` | `deploy-config.ps1` |
 | Gérer la config déployée | `config-tool.sh` | `config-tool.ps1` |
 
@@ -302,7 +302,7 @@ clone en fait donc la référence déployée.
 | Besoin | Outil |
 |---|---|
 | Pousser mes fichiers tels quels | `deploy-config.sh` ← le cas courant |
-| Ajouter les clés nouvelles **sans** toucher à mes réglages | `update-service.sh` |
+| Ajouter les clés nouvelles **sans** toucher à mes réglages | `service.py update` |
 | Savoir pourquoi le service ne collecte rien | `config-tool.sh check` |
 | Comparer déployé et dépôt | `config-tool.sh diff` |
 

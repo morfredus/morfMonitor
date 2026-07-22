@@ -157,12 +157,12 @@ that gets deployed.
 | Need | Tool |
 |---|---|
 | Push my files as they are | `deploy-config.sh` ← the common case |
-| Add new keys **without** touching my settings | `update-service.sh` |
+| Add new keys **without** touching my settings | `service.py update` |
 | Find out why the service collects nothing | `config-tool.sh check` |
 | Compare deployed against repository | `config-tool.sh diff` |
 
 `check` asks the binary itself which module types are valid (`--list-types`), so
-the diagnosis stays correct as the factory evolves, and `update-service.sh` runs
+the diagnosis stays correct as the factory evolves, and `service.py update` runs
 it after every update.
 
 **`install` and `update` follow the same source rule** as `deploy`: your real
@@ -177,7 +177,7 @@ entries**. A service added to `systemd_services`, or an application added to
 `beacon_apps`, will not arrive through `update` — that would switch on
 monitoring you never asked for. Use `deploy-config.sh`, which overwrites.
 
-From morfTools, `./morfTools/config.sh deploy morfMonitor` calls the very same
+From morfTools, `python3 ./morfTools/config.py deploy morfMonitor` calls the very same
 script — useful to drive several projects from one place, pointless if you are
 already inside morfMonitor.
 
