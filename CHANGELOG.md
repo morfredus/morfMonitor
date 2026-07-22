@@ -5,6 +5,20 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
+## [0.5.3] – 2026-07-22
+
+### Modifié
+
+- **La roadmap devient un document de vision.** Philosophie d'interface
+  (« afficher l'information utile plutôt que toute l'information
+  disponible »), origine des données, seuils et tendance du stockage, type de
+  machine dans l'Écosystème, et l'évolution vers une console d'état de
+  morfSystem — point d'entrée **en lecture** de l'administration. Trois
+  pistes sont explicitement bornées par les arbitrages existants : les
+  journaux attendent l'authentification et R5, les alertes restent émises par
+  morfNotify, et commander (redémarrer, mettre à jour) reste le rôle de
+  morfTools.
+
 ## [0.5.2] – 2026-07-22
 
 ### Corrigé
