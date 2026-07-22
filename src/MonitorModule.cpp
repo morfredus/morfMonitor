@@ -76,8 +76,8 @@ bool MonitorModule::isFresh(const Cached& c, int maxAgeMs) const {
 
 // --- Heartbeats morfBeacon ---------------------------------------------------
 
-void MonitorModule::fetchWebUiIfNeeded(const QString& app) {
-    const auto it = m_beaconSeen.find(app);
+void MonitorModule::fetchWebUiIfNeeded(const QString& key) {
+    const auto it = m_beaconSeen.find(key);
     if (it == m_beaconSeen.end() || it->webUiFetched)
         return;
     if (!it->capabilities.contains(QLatin1String("web_ui")))
@@ -97,9 +97,9 @@ void MonitorModule::fetchWebUiIfNeeded(const QString& app) {
     req.setTransferTimeout(3000);     // un service lent ne doit pas retenir la supervision
     QNetworkReply* reply = m_http->get(req);
 
-    connect(reply, &QNetworkReply::finished, this, [this, app, reply]() {
+    connect(reply, &QNetworkReply::finished, this, [this, key, reply]() {
         reply->deleteLater();
-        const auto entry = m_beaconSeen.find(app);
+        const auto entry = m_beaconSeen.find(key);
         if (entry == m_beaconSeen.end())
             return;
         if (reply->error() != QNetworkReply::NoError) {
@@ -129,6 +129,8 @@ void MonitorModule::onBeaconDatagram() {
         // le réseau, ce qui aide à peupler la configuration.
         BeaconSeen s;
         s.lastSeen   = QDateTime::currentSecsSinceEpoch();
+        s.app        = app;
+        s.instance   = o.value(QStringLiteral("instance")).toString();
         s.version    = o.value(QStringLiteral("version")).toString();
         s.host       = o.value(QStringLiteral("host")).toString();
         s.state      = o.value(QStringLiteral("state")).toString();
@@ -147,42 +149,49 @@ void MonitorModule::onBeaconDatagram() {
         for (const QJsonValue& c : o.value(QStringLiteral("capabilities")).toArray())
             s.capabilities << c.toString();
 
+        // La clef est l'IDENTITE D'INSTANCE, pas le nom : deux machines qui font
+        // tourner le meme service sont deux entrees, et chacune vit sa vie. Un
+        // emetteur qui n'annonce pas `instance` (version anterieure du
+        // protocole) en recoit une derivee de son adresse — moins stable qu'un
+        // nom d'hote, mais qui distingue tout autant les machines.
+        const QString key = s.instance.isEmpty()
+            ? app + QLatin1Char('@') + s.sourceIp : s.instance;
+
         // Une entree deja connue conserve le detail deja recupere : inutile de
         // reinterroger /status a chaque heartbeat. C'est le sens de
         // « push presence / pull detail » — la presence est bavarde, le detail
         // ne se demande qu'une fois.
-        if (const auto it = m_beaconSeen.constFind(app); it != m_beaconSeen.constEnd()) {
+        if (const auto it = m_beaconSeen.constFind(key); it != m_beaconSeen.constEnd()) {
             s.webUi        = it->webUi;
             s.webUiFetched = it->webUiFetched && it->version == s.version;
         }
-        m_beaconSeen.insert(app, s);
-        fetchWebUiIfNeeded(app);
+        m_beaconSeen.insert(key, s);
+        fetchWebUiIfNeeded(key);
     }
     pruneStaleBeacons();
 }
 
-// Les applications entendues sont conservees pour la DECOUVERTE : brancher un
+// Les instances entendues sont conservees pour la DECOUVERTE : brancher un
 // service et le voir apparaitre indique quoi ajouter a la configuration. Passe
 // un certain temps, cet interet disparait et l'entree devient du bruit — une
 // application lancee une fois puis fermee serait listee « hors ligne »
 // indefiniment, et la table ne cesserait de croitre.
 //
-// Les applications DECLAREES ne sont jamais purgees : leur absence est
-// precisement ce qu'on veut voir. C'est la difference entre « entendu une
-// fois » et « attendu ».
+// Les instances des applications DECLAREES sont purgees comme les autres : ce
+// n'est plus l'entree entendue qui garantit la visibilite d'une absence, c'est
+// la DECLARATION elle-meme — beaconAppsJson emet une ligne « hors ligne » pour
+// toute application declaree dont aucune instance ne se fait entendre. Une
+// machine d'essai eteinte pour de bon finit donc par disparaitre de la liste,
+// au lieu d'y rester en panne perpetuelle.
 void MonitorModule::pruneStaleBeacons() {
     // Assez long pour qu'une decouverte reste visible le temps de l'exploiter,
     // assez court pour qu'une presence ancienne ne se fasse pas passer pour une
     // panne actuelle.
-    constexpr qint64 kKeepUndeclaredS = 3600;
-
-    QSet<QString> declared;
-    for (const BeaconAppDef& d : m_config.beaconApps())
-        declared.insert(d.app);
+    constexpr qint64 kKeepStaleS = 3600;
 
     const qint64 now = QDateTime::currentSecsSinceEpoch();
     for (auto it = m_beaconSeen.begin(); it != m_beaconSeen.end();) {
-        if (!declared.contains(it.key()) && (now - it->lastSeen) > kKeepUndeclaredS)
+        if ((now - it->lastSeen) > kKeepStaleS)
             it = m_beaconSeen.erase(it);
         else
             ++it;
@@ -215,59 +224,70 @@ QJsonObject MonitorModule::beaconAppsJson() const {
     const qint64 now = QDateTime::currentSecsSinceEpoch();
     const int offlineAfter = m_config.beaconOfflineAfterS();
 
+    // Une entree par INSTANCE entendue : le meme service tournant sur deux
+    // machines produit deux lignes, chacune avec son hote, son adresse et son
+    // heartbeat. Regroupees sous un seul nom, elles s'ecrasaient l'une l'autre
+    // et l'affichage alternait entre les machines a chaque annonce.
+    const auto fill = [&](QJsonObject& a, const BeaconSeen& s) {
+        const qint64 age = now - s.lastSeen;
+        // « online » dit ce qu'on ENTEND, jamais ce qu'on a décidé d'écouter.
+        // Le `enabled &&` qui figurait ici rendait invisible un service qui
+        // émettait : ComponentHub s'affichait « désactivé » avec un heartbeat
+        // de neuf secondes. `enabled` dit si une absence doit alerter, et
+        // c'est le consommateur qui combine les deux faits.
+        a["online"]      = age < offlineAfter;
+        a["last_seen_s"] = static_cast<double>(age);
+        a["instance"]    = s.instance.isEmpty()
+                               ? s.app + QLatin1Char('@') + s.sourceIp : s.instance;
+        a["version"]     = s.version;
+        a["host"]        = s.host;
+        a["state"]       = s.state;
+        addReachability(a, s);
+    };
+
     // 1. Les applications déclarées : toujours listées, en ligne ou non. Une
     //    application attendue mais absente est une information ; l'omettre la
-    //    ferait disparaître silencieusement de l'affichage.
+    //    ferait disparaître silencieusement de l'affichage. Quand plusieurs
+    //    instances s'annoncent, chacune a sa ligne ; quand aucune ne se fait
+    //    entendre, la déclaration à elle seule produit la ligne « hors ligne ».
     QSet<QString> declared;
     for (const BeaconAppDef& d : m_config.beaconApps()) {
         declared.insert(d.app);
-        QJsonObject a;
-        a["app"]      = d.app;
-        a["label"]    = d.label;
-        a["enabled"]  = d.enabled;
-        a["declared"] = true;
-
-        const auto it = m_beaconSeen.constFind(d.app);
-        const bool seen = (it != m_beaconSeen.constEnd());
-        const qint64 age = seen ? (now - it->lastSeen) : -1;
-        // « online » dit ce qu'on ENTEND, jamais ce qu'on a décidé d'écouter.
-        // Le `d.enabled &&` qui figurait ici rendait invisible un service qui
-        // émettait : ComponentHub s'affichait « désactivé » avec un heartbeat
-        // de neuf secondes, et l'onglet Écosystème ne pouvait plus répondre à
-        // la seule question pour laquelle il existe.
-        //
-        // Les deux faits sont indépendants et le restent : `enabled` dit si son
-        // absence doit alerter, et c'est le consommateur qui les combine.
-        // RaspberryDashboard calculait déjà son `online` ainsi, sans consulter
-        // `enabled` -- morfMonitor était le seul à les confondre.
-        a["online"] = seen && age >= 0 && age < offlineAfter;
-        if (seen) {
-            a["last_seen_s"] = static_cast<double>(age);
-            a["version"] = it->version;
-            a["host"]    = it->host;
-            a["state"]   = it->state;
-            addReachability(a, *it);
+        bool heard = false;
+        for (auto it = m_beaconSeen.constBegin(); it != m_beaconSeen.constEnd(); ++it) {
+            if (it->app != d.app)
+                continue;
+            heard = true;
+            QJsonObject a;
+            a["app"]      = d.app;
+            a["label"]    = d.label;
+            a["enabled"]  = d.enabled;
+            a["declared"] = true;
+            fill(a, *it);
+            arr.append(a);
         }
-        arr.append(a);
+        if (!heard) {
+            QJsonObject a;
+            a["app"]      = d.app;
+            a["label"]    = d.label;
+            a["enabled"]  = d.enabled;
+            a["declared"] = true;
+            a["online"]   = false;
+            arr.append(a);
+        }
     }
 
-    // 2. Les applications entendues mais NON déclarées, marquées comme telles.
-    //    C'est un outil de découverte : brancher un nouveau service et le voir
-    //    apparaître ici indique quoi ajouter à la configuration.
+    // 2. Les instances entendues d'applications NON déclarées, marquées comme
+    //    telles. C'est un outil de découverte : brancher un nouveau service et
+    //    le voir apparaître ici indique quoi ajouter à la configuration.
     for (auto it = m_beaconSeen.constBegin(); it != m_beaconSeen.constEnd(); ++it) {
-        if (declared.contains(it.key()))
+        if (declared.contains(it->app))
             continue;
-        const qint64 age = now - it->lastSeen;
         QJsonObject a;
-        a["app"]         = it.key();
-        a["label"]       = it.key();
-        a["declared"]    = false;
-        a["online"]      = age < offlineAfter;
-        a["last_seen_s"] = static_cast<double>(age);
-        a["version"]     = it->version;
-        a["host"]        = it->host;
-        a["state"]       = it->state;
-        addReachability(a, *it);
+        a["app"]      = it->app;
+        a["label"]    = it->app;
+        a["declared"] = false;
+        fill(a, *it);
         arr.append(a);
     }
 

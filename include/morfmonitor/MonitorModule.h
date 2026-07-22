@@ -68,7 +68,7 @@ private:
     // Interroge /status d'un service qui annonce « web_ui », une seule fois par
     // version vue. Sans reponse, le service reste simplement sans lien : une
     // interface indisponible ne doit pas degrader la supervision.
-    void fetchWebUiIfNeeded(const QString& app);
+    void fetchWebUiIfNeeded(const QString& key);
 
     // Oublie les applications simplement ENTENDUES qui ne s'annoncent plus
     // depuis longtemps. Les applications declarees sont conservees : leur
@@ -118,6 +118,8 @@ private:
     QNetworkAccessManager* m_http = nullptr;
     struct BeaconSeen {
         qint64  lastSeen = 0;   // secondes Unix
+        QString app;            // nom annonce — plusieurs entrees peuvent le partager
+        QString instance;       // identite « app@host » du protocole, si annoncee
         QString version;
         QString host;
         QString state;
@@ -140,7 +142,12 @@ private:
         QJsonObject webUi;
         bool        webUiFetched = false;
     };
-    QHash<QString, BeaconSeen> m_beaconSeen;  // clé = nom annoncé (« app »)
+    // Clé = identité d'INSTANCE (champ « instance » du protocole, ou app@ip à
+    // défaut), jamais le seul nom « app » : le même service tournant sur deux
+    // machines est deux instances, et les indexer par nom les faisait s'écraser
+    // l'une l'autre à chaque heartbeat — l'affichage alternait entre les hôtes
+    // toutes les quinze secondes. PROTOCOL.md avait prévu le champ pour ça.
+    QHash<QString, BeaconSeen> m_beaconSeen;
 };
 
 } // namespace morfmonitor

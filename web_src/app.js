@@ -399,7 +399,8 @@ function renderEcosysteme(all) {
     header('Services découverts via morfBeacon', `${apps.length} annoncés`) +
     (apps.length
       ? `<div class="tbl-wrap"><table><thead><tr>
-           <th>Application</th><th class="mono">Adresse</th><th class="mono">Version</th>
+           <th>Application</th><th class="mono">Machine</th><th class="mono">Adresse</th>
+           <th class="mono">Version</th>
            <th>État</th><th class="mono">Dernier heartbeat</th><th>Interface</th>
          </tr></thead><tbody>` +
         apps.map((a) => `<tr>
@@ -407,7 +408,13 @@ function renderEcosysteme(all) {
               !a.declared        ? ' <span class="badge badge-off">non déclaré</span>'
             : a.enabled === false ? ' <span class="badge badge-off">non supervisé</span>'
                                   : ''}</td>
-          <td class="mono">${esc(a.ip || a.host || '—')}</td>
+          <!-- La MACHINE est le nom que l'instance ANNONCE (champ host du
+               heartbeat) : c'est lui qu'on tape suivi de .local pour la
+               joindre par mDNS. Un même service présent sur plusieurs
+               machines occupe une ligne par machine — l'identité vient du
+               champ instance du protocole, jamais du seul nom. -->
+          <td class="mono">${esc(a.host || '—')}</td>
+          <td class="mono">${esc(a.ip || '—')}</td>
           <td class="mono">${esc(a.version || '—')}</td>
           <!-- L'ÉTAT dit ce qu'on observe, jamais ce qu'on a déclaré. Ces deux
                faits sont indépendants : « est-ce que ça tourne ? » se constate,
@@ -432,7 +439,9 @@ function renderEcosysteme(all) {
         `rien. Ajouter un service à l’écosystème ne demande donc aucune modification ici. ` +
         `« Non déclaré » signifie absent de la liste beacon_apps de morfsystem.json, ce qui n’est ` +
         `pas une anomalie : un service tournant sur une machine supervisée est généralement suivi ` +
-        `par systemd. Un service est considéré hors ligne après ${esc(offlineAfter ?? '—')} s sans annonce.</div>`
+        `par systemd. Un même service installé sur plusieurs machines occupe une ligne par machine — ` +
+        `la colonne Machine donne le nom d’hôte annoncé, joignable en général en lui ajoutant ` +
+        `<code>.local</code>. Un service est considéré hors ligne après ${esc(offlineAfter ?? '—')} s sans annonce.</div>`
       : unavailable('Aucune annonce reçue.',
           'Aucun service morfSystem ne diffuse sur le port beacon, ou le pare-feu bloque la diffusion UDP.'));
 }
@@ -460,9 +469,18 @@ function problems(all) {
   // simplement entendue puis arretee — un outil de bureau que l'on ferme — n'a
   // jamais ete promise a personne, et la signaler indefiniment noierait les
   // vraies pannes.
+  //
+  // Et la promesse porte sur le SERVICE, pas sur chacune de ses instances : la
+  // liste contient desormais une ligne par machine, donc on regroupe par nom et
+  // on n'alerte que si AUCUNE instance ne repond. Une machine d'essai eteinte
+  // ne met pas en panne un service qui tourne tres bien ailleurs.
+  const expected = new Map();
   (s.beacon || []).forEach((a) => {
-    if (a.online || a.enabled === false || !a.declared) return;
-    out.push({ what: serviceName(a.app), state: 'hors ligne', kind: 'err' });
+    if (a.enabled === false || !a.declared) return;
+    expected.set(a.app, (expected.get(a.app) || false) || !!a.online);
+  });
+  expected.forEach((anyOnline, app) => {
+    if (!anyOnline) out.push({ what: serviceName(app), state: 'hors ligne', kind: 'err' });
   });
   [['disk', 'Stockage'], ['memory', 'Mémoire'], ['swap', 'Swap']].forEach(([k, lbl]) => {
     const p = r[k] && r[k].percent;

@@ -5,6 +5,35 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
+## [0.5.0] – 2026-07-22
+
+### Corrigé
+
+- **Deux machines faisant tourner le même service ne s'écrasent plus l'une
+  l'autre.** La découverte était indexée par le nom `app` : deux instances du
+  même service (un morfMonitor sur le Pi, un autre sur un portable) se
+  partageaient une seule entrée, et l'affichage alternait entre les hôtes à
+  chaque heartbeat. La découverte est désormais indexée par l'**identité
+  d'instance** — le champ `instance` (`app@host`) que PROTOCOL.md avait prévu
+  précisément pour ça, ou `app@ip` pour un émetteur qui ne l'annonce pas.
+
+### Modifié
+
+- **Une ligne par machine dans l'onglet Écosystème**, avec une colonne
+  *Machine* donnant le nom d'hôte annoncé (joignable en général en lui
+  ajoutant `.local`). L'API `/api/services` émet une entrée `beacon` par
+  instance, chacune portant `instance`, `host`, `ip` et son propre lien
+  d'interface Web.
+- **Une anomalie « hors ligne » ne se déclenche que si AUCUNE instance ne
+  répond** : la déclaration promet le service, pas chacune de ses machines.
+  Une machine d'essai éteinte ne met plus en panne un service qui tourne
+  ailleurs.
+- **Les instances des applications déclarées sont purgées comme les autres**
+  après une heure de silence : c'est la déclaration elle-même qui garantit la
+  ligne « hors ligne », plus l'entrée entendue. Une machine retirée du parc
+  finit donc par disparaître de la liste au lieu d'y rester en panne
+  perpétuelle.
+
 ## [0.4.1] – 2026-07-22
 
 ### Modifié
