@@ -17,6 +17,7 @@ import getpass
 import os
 import platform
 import shutil
+import subprocess
 from pathlib import Path
 
 from .backends import ServiceBackend, select
@@ -255,11 +256,58 @@ class Deployer:
         user = invoking_user()
         if user == "root":
             return
-        for path in installed:
+
+        # The dedicated application directory itself must belong to the user
+        # too: the unit runs with User=<user> and WorkingDirectory=app_dir, and
+        # a module creating its runtime data there (a cache/, a sqlite file)
+        # fails on a root-owned directory -- silently, deep inside the module,
+        # with an error message pointing at the configuration. That is exactly
+        # what happened to morfAnalytics after a from-scratch install: mkdir
+        # under sudo made /opt/morfanalytics root's, and narrowing the chown to
+        # written files had dropped the directory entry.
+        #
+        # The directory ENTRY only, never recursive, and only when its name is
+        # the service's -- a dedicated /opt/<service>. A shared location (the
+        # old /usr/local/bin) can never match and is never handed over, which
+        # is what the narrowing was protecting against.
+        paths = list(installed)
+        app_dir = self.manifest.app_dir()
+        if app_dir.exists() and app_dir.name == self.manifest.service_name:
+            paths.insert(0, app_dir)
+
+        for path in paths:
             try:
                 shutil.chown(path, user=user, group=user)
             except (OSError, LookupError) as exc:
                 print(f"  could not chown {path}: {exc}")
+
+    def verify_writable(self, app_dir: Path) -> None:
+        """Warn, loudly, if the run user cannot write in the app directory.
+
+        The unit runs with User=<user> and WorkingDirectory=app_dir; a module
+        creating runtime data there (a cache, a sqlite file) fails on a
+        directory the user does not own -- and may fail silently, deep inside
+        the service, with symptoms that point elsewhere. That exact chain cost
+        an investigation once: /opt/morfanalytics owned by root, the analytics
+        cache uncreatable, and a UI message blaming the configuration.
+
+        Checked HERE, at install time, where the person who can fix it is
+        looking. A warning rather than a failure: some services never write to
+        their app_dir, and a deliberately shared app_dir is valid.
+        """
+        if platform.system() == "Windows":
+            return
+        user = invoking_user()
+        if user == "root" or not shutil.which("sudo"):
+            return
+        probe = subprocess.run(["sudo", "-u", user, "test", "-w", str(app_dir)],
+                               check=False)
+        if probe.returncode != 0:
+            print()
+            print(f"  WARNING: {app_dir} is not writable by '{user}', who the")
+            print("  service runs as. A module creating runtime data there (a cache,")
+            print("  a database) will fail -- possibly silently. Fix:")
+            print(f"      sudo chown {user}:{user} {app_dir}")
 
     def report_legacy_binaries(self) -> None:
         """Name the copies an earlier layout left behind, without touching them."""
