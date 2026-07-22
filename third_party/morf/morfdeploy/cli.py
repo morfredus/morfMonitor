@@ -38,6 +38,18 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Rebuild even when a binary is already present (install only)",
     )
+    parser.add_argument(
+        "--purge",
+        action="store_true",
+        help="uninstall: also remove the configuration and the binary directory",
+    )
+    parser.add_argument(
+        "--backup",
+        type=Path,
+        metavar="DIR",
+        default=None,
+        help="uninstall --purge: copy the configuration into DIR before removing it",
+    )
     return parser
 
 
@@ -65,7 +77,12 @@ def main(argv: list | None = None) -> int:
         elif args.action == "update":
             deployer.update()
         elif args.action == "uninstall":
-            deployer.uninstall()
+            if args.backup is not None and not args.purge:
+                print("--backup only applies with --purge "
+                      "(without --purge the configuration is kept anyway).",
+                      file=sys.stderr)
+                return 2
+            deployer.uninstall(purge=args.purge, backup_dir=args.backup)
         else:
             deployer.status()
     except DeployError as exc:

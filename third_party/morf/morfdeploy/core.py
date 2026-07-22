@@ -285,15 +285,86 @@ class Deployer:
         print()
         print(f"{self.manifest.display_name} updated.")
 
-    def uninstall(self) -> None:
+    def config_footprint(self) -> list:
+        """Every configuration location this service has ever used.
+
+        Read from the manifest, not hard-coded: the current config, plus each
+        earlier home declared in migrate_from. A service moved twice knows all
+        three of its addresses, so a teardown can find them without a second
+        list drifting from this one.
+        """
+        paths = []
+        config_dir = self.manifest.config_dir()
+        for config in self.manifest.configs:
+            paths.append(config.resolved_dest(config_dir))
+            for previous in config.migrate_from:
+                paths.append(Path(os.path.expandvars(previous)))
+        return paths
+
+    def uninstall(self, purge: bool = False, backup_dir: Path | None = None) -> None:
         print(f"Uninstalling {self.manifest.display_name} ({self.backend.name})")
         self.check_privileges()
         self.backend.uninstall(self.manifest)
+
         app_dir = self.manifest.app_dir()
-        print()
-        print("Service removed.")
-        print(f"{app_dir} was kept -- it holds your configurations.")
-        print(f"Remove it by hand if you mean to: {app_dir}")
+        configs = [p for p in self.config_footprint() if p.exists()]
+        legacy = [Path(p) for p in self.manifest.legacy_binaries if Path(p).exists()]
+
+        if not purge:
+            print()
+            print("Service removed. Your configuration was kept:")
+            for path in configs or [app_dir]:
+                print(f"    {path}")
+            print("Re-run with --purge to remove it too "
+                  "(add --backup to copy it first).")
+            self.report_legacy_binaries()
+            return
+
+        # --purge: copy first if asked, then remove. The backup happens before
+        # any deletion, so an interrupted run never leaves a half-removed config
+        # with no copy of what was there.
+        if backup_dir is not None and configs:
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            print(f"\nBacking up configuration to {backup_dir}:")
+            for path in configs:
+                # The backup name encodes the FULL source path, flattened. Two
+                # configs can share a basename in different directories -- the
+                # current one in /etc, an old one migrate_from left in /opt --
+                # and naming both by basename alone let the second silently
+                # overwrite the first, losing exactly what the backup exists to
+                # keep.
+                flat = str(path).lstrip("/\\").replace(":", "").replace("/", "_").replace("\\", "_")
+                dest = backup_dir / f"{self.manifest.service_name}__{flat}"
+                shutil.copy2(path, dest)
+                print(f"    {path}  ->  {dest.name}")
+
+        print("\nRemoving:")
+        for path in configs:
+            self._remove(path)
+        for path in legacy:
+            self._remove(path)
+        # The application directory holds the binary and, before the /etc move,
+        # old configs. Removed last, and only on purge.
+        if app_dir.exists():
+            self._remove(app_dir)
+        print("\nService and configuration removed.")
+
+    @staticmethod
+    def _remove(path: Path) -> None:
+        try:
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
+                # A dedicated legacy directory left empty (e.g. /etc/homeserverhub
+                # after its one file goes) is tidied, but only if empty -- never
+                # a recursive removal of a parent we did not create.
+                parent = path.parent
+                if parent.name and not any(parent.iterdir()):
+                    parent.rmdir()
+            print(f"    {path}")
+        except OSError as exc:
+            print(f"    could not remove {path}: {exc}")
 
     def status(self) -> None:
         if not self.backend.is_installed(self.manifest):
