@@ -24,7 +24,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "action",
-        choices=("install", "update", "uninstall", "status"),
+        choices=("install", "update", "uninstall", "status", "is-installed"),
         help="What to do",
     )
     parser.add_argument(
@@ -64,9 +64,13 @@ def main(argv: list | None = None) -> int:
 
     # `status` must work on an unsupported platform: refusing to even report
     # what is installed would be unhelpful where being honest is the point.
-    if args.action == "status":
+    # `is-installed` answers the same question, and an unsupported platform
+    # hosts nothing: reporting "no" there is both true and useful.
+    if args.action in ("status", "is-installed"):
         backend = select()
         if not backend.supported:
+            if args.action == "is-installed":
+                return 1
             print(backend.supported_note, file=sys.stderr)
             return 3
 
@@ -83,6 +87,22 @@ def main(argv: list | None = None) -> int:
                       file=sys.stderr)
                 return 2
             deployer.uninstall(purge=args.purge, backup_dir=args.backup)
+        elif args.action == "is-installed":
+            # Deliberately silent, and the only action whose exit status IS the
+            # answer. A caller sweeping the parc needs a decision, not prose --
+            # which is exactly why `status` output must never be parsed for it
+            # (see backends/base.py).
+            #
+            #   0  registered with the system
+            #   1  not registered
+            #   2  cannot tell -- the caller lacks the rights to even ask
+            #
+            # The third answer matters: without it, a permission error reads as
+            # "not installed", and a sweep skips a running service while
+            # reporting success.
+            if not deployer.backend.can_query_installation(manifest):
+                return 2
+            return 0 if deployer.backend.is_installed(manifest) else 1
         else:
             deployer.status()
     except DeployError as exc:

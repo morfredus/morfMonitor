@@ -40,6 +40,21 @@ class ServiceBackend(abc.ABC):
     def is_installed(self, manifest: Manifest) -> bool:
         """True when the service is registered with the system."""
 
+    def can_query_installation(self, manifest: Manifest) -> bool:
+        """True when this process may ask the system what is registered.
+
+        Default True: on most platforms, listing units is a read anyone can do
+        -- `systemctl list-unit-files` answers a plain user perfectly well.
+
+        It exists because Windows is different, and the difference is
+        dangerous: `schtasks /Query` on a task registered to run as SYSTEM
+        answers "access denied" to a non-elevated caller, with an exit status
+        indistinguishable from "no such task". A caller would conclude "not
+        installed" from what is only a lack of rights, skip the service, and
+        report success. Saying "I cannot tell" is the honest third answer.
+        """
+        return True
+
     @abc.abstractmethod
     def status(self, manifest: Manifest) -> str:
         """A short human-readable status, for display only.

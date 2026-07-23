@@ -369,6 +369,17 @@ class Deployer:
         whole purpose is to ship new code must not silently reuse the binary
         that happens to be lying in the build directory.
         """
+        # « Not installed » must never be concluded from « I was not allowed to
+        # ask ». Unelevated on Windows, schtasks answers access-denied for a
+        # task registered as SYSTEM, with the same exit status as « no such
+        # task » -- so this said a running service was not installed, and sent
+        # the person to `install`, the wrong action entirely.
+        if not self.backend.can_query_installation(self.manifest):
+            raise DeployError(
+                f"Cannot tell whether {self.manifest.display_name} is installed: "
+                "this process is not allowed to ask the service manager.\n"
+                + self.backend.privilege_hint()
+            )
         if not self.backend.is_installed(self.manifest):
             raise DeployError(
                 f"{self.manifest.display_name} is not installed on this machine.\n"
@@ -468,6 +479,13 @@ class Deployer:
             print(f"    could not remove {path}: {exc}")
 
     def status(self) -> None:
+        # Same honesty as update(): silence about rights would turn a running
+        # service into a missing one, in the one report meant to be trusted.
+        if not self.backend.can_query_installation(self.manifest):
+            print(f"{self.manifest.display_name}: cannot tell ({self.backend.name}) -- "
+                  "not allowed to ask the service manager")
+            print(self.backend.privilege_hint())
+            return
         if not self.backend.is_installed(self.manifest):
             print(f"{self.manifest.display_name}: not installed ({self.backend.name})")
             return

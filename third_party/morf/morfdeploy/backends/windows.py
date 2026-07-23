@@ -34,6 +34,7 @@ import ctypes
 import os
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 from ..manifest import Manifest
@@ -61,6 +62,16 @@ class WindowsBackend(ServiceBackend):
         return None
 
     # -- Interrogation ----------------------------------------------------
+
+    def can_query_installation(self, manifest: Manifest) -> bool:
+        # A scheduled task runs as SYSTEM (/RU SYSTEM), and schtasks refuses to
+        # describe it to a non-elevated caller -- "Acces refuse", exit status 1,
+        # exactly what "no such task" returns. Without this, an unelevated
+        # sweep would silently decide nothing is installed. `sc query` has no
+        # such restriction, so the scm strategy can always answer.
+        if self._strategy(manifest) == "scm":
+            return True
+        return self.has_privileges()
 
     def is_installed(self, manifest: Manifest) -> bool:
         if self._strategy(manifest) == "scm":
@@ -125,10 +136,60 @@ class WindowsBackend(ServiceBackend):
         print("  scheduled task registered (not a service: no restart on crash)")
 
     def stop(self, manifest: Manifest) -> None:
+        """Disable, stop, and wait until the binary is actually released.
+
+        Three steps where Linux needs one, because Windows differs twice.
+
+        **Disable first.** A stop that something can undo is not a stop: an SCM
+        wrapper (WinSW, NSSM) restarts a service it believes crashed, and it
+        would come back holding the very files about to be replaced. Disabling
+        is always undone by whoever called us -- install and update re-register
+        the service wholesale, uninstall removes it -- so it never leaks.
+
+        **Then wait.** Windows refuses to overwrite a file a process holds open,
+        and stopping is not instantaneous: `schtasks /End` returns as soon as
+        the request is made. Copying immediately fails with a permission error
+        that says nothing about its real cause -- the previous instance still
+        running. Linux has no equivalent step: `systemctl stop` returns once the
+        unit has actually stopped.
+        """
         if self._strategy(manifest) == "scm":
+            self._run(["sc.exe", "config", manifest.service_name,
+                       "start=", "disabled"], check=False)
             self._run(["sc.exe", "stop", manifest.service_name], check=False)
         else:
+            self._run(["schtasks", "/Change", "/TN", manifest.service_name,
+                       "/DISABLE"], check=False)
             self._run(["schtasks", "/End", "/TN", manifest.service_name], check=False)
+        self._await_release(manifest)
+
+    def _await_release(self, manifest: Manifest, timeout_s: float = 15.0) -> None:
+        """Block until the installed binary can be written, or say why not.
+
+        Opening the file for append is the test: Windows locks a running
+        image against writing, and grants the handle the moment the process is
+        gone. Nothing is written -- the handle is opened and closed.
+
+        A timeout warns rather than fails: the copy that follows will produce
+        the real error if the file is genuinely stuck, and this message is what
+        makes that error readable.
+        """
+        target = manifest.app_dir() / manifest.binary_name()
+        if not target.exists():
+            return                      # first install: nothing holds anything
+
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            try:
+                with open(target, "ab"):
+                    return
+            except OSError:
+                time.sleep(0.3)
+
+        print(f"  WARNING: {target.name} is still held by a running process after "
+              f"{timeout_s:.0f}s.")
+        print("  Replacing it will fail. Stop it by hand, then run this again:")
+        print(f"      schtasks /End /TN {manifest.service_name}")
 
     def start(self, manifest: Manifest) -> None:
         if self._strategy(manifest) == "scm":
