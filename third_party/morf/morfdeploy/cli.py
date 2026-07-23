@@ -39,6 +39,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Rebuild even when a binary is already present (install only)",
     )
     parser.add_argument(
+        "--force",
+        action="store_true",
+        help="update: redeploy and restart even when nothing changed",
+    )
+    parser.add_argument(
         "--purge",
         action="store_true",
         help="uninstall: also remove the configuration and the binary directory",
@@ -79,7 +84,7 @@ def main(argv: list | None = None) -> int:
         if args.action == "install":
             deployer.install(rebuild=args.rebuild)
         elif args.action == "update":
-            deployer.update()
+            deployer.update(force=args.force)
         elif args.action == "uninstall":
             if args.backup is not None and not args.purge:
                 print("--backup only applies with --purge "

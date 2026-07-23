@@ -14,6 +14,7 @@ label on top of the old duplication.
 from __future__ import annotations
 
 import getpass
+import hashlib
 import os
 import platform
 import shutil
@@ -203,7 +204,7 @@ class Deployer:
 
         return written
 
-    def enrich_configs(self, config_dir: Path) -> None:
+    def enrich_configs(self, config_dir: Path) -> bool:
         """Bring every installed configuration up to the new version's keys.
 
         Runs after the configs are in place, in install and update alike: a
@@ -211,9 +212,14 @@ class Deployer:
         this version introduced. A fresh one copied from the example already has
         them, so the merge is a no-op there. Enriching only -- never touches a
         value the user set, never removes a key.
+
+        Returns True when a key was actually added, because that decides whether
+        the service must be restarted: a new option written into a file the
+        running process read at startup changes nothing until it reads it again.
         """
         from .configmerge import merge_config
 
+        changed = False
         for config in self.manifest.configs:
             dest = config.resolved_dest(config_dir)
             if not dest.is_file():
@@ -242,10 +248,52 @@ class Deployer:
                     print(f"    + {key}  (new option, default applied -- review it)")
                 if comments:
                     print(f"    + {comments} documentation comment(s)")
+            if added:
+                changed = True
             if obsolete:
+                # Reported, never removed -- and not a change: nothing was
+                # written, so it cannot justify restarting anything.
                 print(f"  {dest}: keys no longer in the reference, kept as-is:")
                 for key in obsolete:
                     print(f"    ? {key}")
+
+        return changed
+
+    # -- Is there anything to do at all? ----------------------------------
+
+    @staticmethod
+    def digest(path: Path) -> str | None:
+        """Content fingerprint, or None when the file is not there.
+
+        Content, not size and date: `git checkout` and a rebuild both rewrite
+        timestamps on files whose bytes are identical, so a date comparison
+        would report a change on every single run -- exactly the noise this is
+        meant to remove. At a few megabytes the read costs nothing measurable.
+        """
+        if not path.is_file():
+            return None
+        digest = hashlib.sha256()
+        with open(path, "rb") as handle:
+            for chunk in iter(lambda: handle.read(1 << 20), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    def already_deployed(self, binary: Path, app_dir: Path, config_dir: Path) -> bool:
+        """True when deploying would put back exactly what is already there.
+
+        Stopping a service, copying a byte-identical file over itself and
+        restarting is not a no-op: it is a gap in supervision, a reset uptime
+        and, for a service mid-task, an interruption -- paid at the very moment
+        one believed nothing was being touched. A parc-wide `upgrade` bounced
+        every service on the machine for it.
+        """
+        installed = app_dir / self.manifest.binary_name()
+        if self.digest(installed) != self.digest(binary):
+            return False
+        # A configuration that has never been placed still has to be, even when
+        # the binary matches -- and the service must then read it.
+        return all(config.resolved_dest(config_dir).is_file()
+                   for config in self.manifest.configs)
 
     def chown_to_user(self, installed: list) -> None:
         """Give back only the files this install actually wrote.
@@ -352,7 +400,12 @@ class Deployer:
         binary = self.ensure_binary(rebuild=rebuild)
         self.stop_existing()
         written = self.install_files(binary, app_dir, self.manifest.config_dir())
+        # An install always registers, even over an identical binary: the whole
+        # point may be that the service is NOT registered yet. Only `update`
+        # can conclude there is nothing to do.
+        self.enrich_configs(self.manifest.config_dir())
         self.chown_to_user(written)
+        self.verify_writable(app_dir)
         self.register(app_dir)
 
         self.report_legacy_binaries()
@@ -362,12 +415,15 @@ class Deployer:
         if self.manifest.status_url:
             print(f"Check with:  curl {self.manifest.status_url}")
 
-    def update(self) -> None:
+    def update(self, force: bool = False) -> None:
         """Rebuild and replace, keeping the service registered.
 
         Distinct from install because it always rebuilds -- an update whose
         whole purpose is to ship new code must not silently reuse the binary
         that happens to be lying in the build directory.
+
+        And it stops when there is nothing to ship. `force` restarts anyway,
+        for the times when restarting IS the intention.
         """
         # « Not installed » must never be concluded from « I was not allowed to
         # ask ». Unelevated on Windows, schtasks answers access-denied for a
@@ -389,10 +445,29 @@ class Deployer:
         print()
         self.check_privileges()
         binary = self.ensure_binary(rebuild=True)
-        self.stop_existing()
         app_dir = self.manifest.app_dir()
-        written = self.install_files(binary, app_dir, self.manifest.config_dir())
+        config_dir = self.manifest.config_dir()
+
+        # Enrichment first, because its outcome is part of the decision: a key
+        # added to a file the running process read at startup means nothing
+        # until it reads it again. It writes only when the reference gained an
+        # option, so on an unchanged version it is silent and costs nothing.
+        config_changed = self.enrich_configs(config_dir)
+
+        if not force and not config_changed and self.already_deployed(
+                binary, app_dir, config_dir):
+            print(f"  binary unchanged: {app_dir / self.manifest.binary_name()}")
+            print("  configurations in place, nothing to enrich")
+            print()
+            print(f"{self.manifest.display_name} is already up to date: "
+                  "nothing deployed, the service was NOT restarted.")
+            print("Use --force to redeploy and restart anyway.")
+            return
+
+        self.stop_existing()
+        written = self.install_files(binary, app_dir, config_dir)
         self.chown_to_user(written)
+        self.verify_writable(app_dir)
         self.register(app_dir)
         print()
         print(f"{self.manifest.display_name} updated.")
