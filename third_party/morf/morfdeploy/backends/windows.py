@@ -192,7 +192,9 @@ class WindowsBackend(ServiceBackend):
             )
         print(f"  Qt runtime deployed beside {installed_binary.name} (windeployqt)")
 
-        self._copy_toolchain_dlls(installed_binary.parent, Path(tool).parent)
+        copied = self._copy_toolchain_dlls(installed_binary.parent, Path(tool).parent)
+        if copied:
+            print(f"  {copied} toolchain DLL(s) copied (transitive dependencies)")
 
     def _find_windeployqt(self, source_binary: Path) -> str | None:
         """Locate windeployqt without relying on it being on PATH.
@@ -258,29 +260,79 @@ class WindowsBackend(ServiceBackend):
                         found.append(Path(value))
         return found
 
-    def _copy_toolchain_dlls(self, app_dir: Path, toolchain_bin: Path) -> None:
-        """Copy any DLL the installed binaries still resolve from the MinGW tree.
+    def _copy_toolchain_dlls(self, app_dir: Path, toolchain_bin: Path) -> int:
+        """Copy the third-party DLLs Qt itself depends on but windeployqt omits.
 
-        Best-effort: it needs ldd from an MSYS2 shell. Absent it, windeployqt's
-        --compiler-runtime has already placed the usual ones, so a missing bash
-        is a narrower net, not a broken install. Mirrors ComponentHub's
-        deploy-mingw.sh, inlined here so morfdeploy carries no external script.
-        The toolchain bin is prepended to PATH so ldd itself resolves.
+        windeployqt deploys the Qt libraries and, with --compiler-runtime, the
+        compiler runtime -- but NOT the third-party libraries those Qt DLLs link
+        against (brotli, double-conversion, ICU, pcre2...). Left out, the service
+        stops at the first of them: 'libbrotlidec.dll introuvable', one dialog at
+        a time. The old fix walked these with ldd from an MSYS2 shell; run from an
+        ordinary PowerShell that shell is absent, and exactly those DLLs went
+        missing.
+
+        objdump replaces it. It ships in the same MinGW bin as windeployqt -- so
+        it is present whenever windeployqt was found -- and needs no shell. We
+        read each binary's import table, and for every imported DLL that exists
+        in the toolchain bin (i.e. is a MinGW/Qt library, not a system one like
+        kernel32), copy it and follow its own imports. The transitive closure
+        settles when nothing new is pulled in.
+
+        Returns the number of DLLs copied, for the caller to report.
         """
-        bash = shutil.which("bash")
-        if bash is None:
-            return
-        env = dict(os.environ)
-        env["PATH"] = str(toolchain_bin) + os.pathsep + env.get("PATH", "")
-        script = (
-            'cd "$1" || exit 0; '
-            'for f in *.exe *.dll; do [ -f "$f" ] && ldd "$f" 2>/dev/null; done '
-            "| grep -iE '/(mingw64|ucrt64|clang64|mingw32)/bin/' "
-            "| awk '{print $3}' | sort -u "
-            '| while read -r dll; do cp -u "$dll" . 2>/dev/null || true; done'
-        )
-        subprocess.run([bash, "-c", script, "bash", str(app_dir)],
-                       env=env, check=False)
+        objdump = toolchain_bin / "objdump.exe"
+        if not objdump.is_file():
+            found = shutil.which("objdump")
+            objdump = Path(found) if found else None
+        if objdump is None:
+            # windeployqt covered Qt and the compiler runtime; without objdump we
+            # cannot widen to the third-party libraries. Say so rather than fail:
+            # a Core-only binary may need nothing more.
+            print("  note: objdump not found; third-party DLLs (if any) not resolved")
+            return 0
+
+        # What the toolchain can supply, by lowercase name -> real path (its
+        # actual case preserved for the copy). System DLLs are simply absent
+        # here, which is how they get skipped.
+        available = {}
+        for entry in toolchain_bin.iterdir():
+            if entry.is_file() and entry.suffix.lower() == ".dll":
+                available.setdefault(entry.name.lower(), entry)
+
+        present = {p.name.lower() for p in app_dir.iterdir() if p.is_file()}
+        queue = [app_dir / n for n in present if n.endswith((".exe", ".dll"))]
+        copied = 0
+        while queue:
+            binary = queue.pop()
+            for dep in self._imports(objdump, binary):
+                key = dep.lower()
+                if key in present:
+                    continue
+                source = available.get(key)
+                if source is None:
+                    continue          # a system DLL, or not from this toolchain
+                dest = app_dir / source.name
+                shutil.copy2(source, dest)
+                present.add(key)
+                queue.append(dest)
+                copied += 1
+        return copied
+
+    @staticmethod
+    def _imports(objdump: Path, binary: Path) -> list:
+        """The DLL names a PE binary imports, read from `objdump -p`.
+
+        objdump prints one 'DLL Name: <x>.dll' line per import table entry; we
+        need nothing else from its output.
+        """
+        result = subprocess.run([str(objdump), "-p", str(binary)],
+                                capture_output=True, text=True, check=False)
+        names = []
+        for line in result.stdout.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("DLL Name:"):
+                names.append(stripped.split(":", 1)[1].strip())
+        return names
 
     # -- Privileges -------------------------------------------------------
 
