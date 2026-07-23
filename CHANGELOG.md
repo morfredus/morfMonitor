@@ -5,6 +5,31 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
+## [0.5.6] – 2026-07-23
+
+### Corrigé
+
+- **L'adresse retenue pour un émetteur multi-domicilié est celle du vrai réseau
+  local.** Un service diffuse sur *toutes* les interfaces de sa machine ; un
+  poste Windows avec WSL ou Hyper-V, un portable sous VPN, en ont plusieurs — et
+  le dernier datagramme reçu gagnait. morfMonitor affichait donc « 172.24.224.1 »
+  (réseau virtuel) pour une machine joignable en « 192.168.1.14 », que les
+  autres superviseurs voyaient d'ailleurs correctement. L'adresse restait exacte
+  au sens de la couche réseau, mais le lien affiché était inutilisable depuis
+  toute autre machine.
+
+  morfMonitor conserve désormais la **meilleure** adresse entendue, pas la
+  dernière : celle qui appartient au même réseau que lui. Son propre réseau est
+  déterminé par l'interface portant la route par défaut — obtenue en
+  « connectant » une socket UDP vers une adresse réservée à la documentation
+  (RFC 5737), ce qui n'émet **aucun paquet** et ne fait que révéler la route.
+  La présence continue d'être rafraîchie à chaque heartbeat ; seule l'adresse
+  résiste. Sans route par défaut, aucune préférence n'est appliquée plutôt
+  qu'une préférence au hasard.
+
+  Vérifié sur le parc réel : PC-Fred, vu depuis lui-même, est enfin annoncé en
+  192.168.1.14. Cette piste, ouverte dans la roadmap, en est retirée.
+
 ## [0.5.5] – 2026-07-23
 
 ### Ajouté

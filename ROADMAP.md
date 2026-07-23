@@ -163,13 +163,6 @@ Cette évolution se fait sans perdre le principe fondateur du projet :
 
 ## Pistes techniques
 
-- **Choisir l'adresse d'un émetteur multi-domicilié.** Un service diffusant sur
-  plusieurs interfaces (WSL, Hyper-V, VPN) fait retenir à morfMonitor l'adresse
-  du dernier datagramme reçu, qui peut appartenir à un réseau virtuel et donc
-  être injoignable depuis le navigateur d'une autre machine. Le cas ne se
-  produit pas sur la cible de production, où une seule interface est active, et
-  n'affecte que le lien — jamais la supervision. Préférer l'interface portant la
-  route du réseau local reste à faire.
 - **Tests de contrat** du serveur HTTP et des collecteurs. Prioritaire : la
   version 0.2.0 a corrigé huit défauts d'affichage qui partageaient une seule
   cause — une interface écrite contre un schéma supposé. Un test comparant les

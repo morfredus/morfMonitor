@@ -11,6 +11,7 @@
 
 #include <QHash>
 #include <QElapsedTimer>
+#include <QHostAddress>
 #include <memory>
 
 class QUdpSocket;
@@ -75,6 +76,16 @@ private:
     // absence est justement ce qu'on veut voir.
     void pruneStaleBeacons();
 
+    // Adresse de CETTE machine sur l'interface portant la route par defaut,
+    // avec sa longueur de prefixe. Sert d'etalon pour juger si l'adresse d'un
+    // emetteur appartient au vrai reseau local ou a un reseau virtuel.
+    void refreshPrimaryAddress();
+    int  addressScore(const QHostAddress& candidate);
+
+    QHostAddress  m_primaryAddress;
+    int           m_primaryPrefix = -1;
+    QElapsedTimer m_primaryAge;
+
     struct BeaconSeen;
     // Ajoute a une entree ce qui permet de la JOINDRE, et rien de plus :
     // morfMonitor publie une adresse, il n'ouvre aucune connexion pour le compte
@@ -131,6 +142,13 @@ private:
         // pas forcement depuis la machine qui observe.
         QString sourceIp;
         quint16 statusPort = 0;
+
+        // Qualite de `sourceIp` : 2 quand elle appartient au meme reseau que
+        // nous, 1 sinon. Un emetteur multi-domicilie diffuse sur TOUTES ses
+        // interfaces ; sans ce classement, le dernier datagramme recu gagnait,
+        // souvent celui d'un reseau virtuel (WSL, Hyper-V, VPN) — une adresse
+        // injoignable depuis n'importe quelle autre machine.
+        int addressScore = 0;
 
         // Capacites annoncees (protocole morfbeacon/1). Un consommateur
         // s'appuie sur elles, jamais sur le nom de l'application.

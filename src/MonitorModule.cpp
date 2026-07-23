@@ -8,6 +8,7 @@
 
 #include <QUdpSocket>
 #include <QNetworkDatagram>
+#include <QNetworkInterface>
 #include <QNetworkAccessManager>
 #include <QNetworkRequest>
 #include <QNetworkReply>
@@ -113,6 +114,59 @@ void MonitorModule::fetchWebUiIfNeeded(const QString& key) {
     });
 }
 
+// --- Choix de l'adresse d'un emetteur multi-domicilie ------------------------
+//
+// Un service diffuse sur TOUTES les interfaces de sa machine. Un poste Windows
+// avec WSL ou Hyper-V, un portable sous VPN, en ont plusieurs — et le dernier
+// datagramme recu gagnait, si bien que morfMonitor retenait volontiers
+// « 172.24.224.1 » (reseau virtuel) pour une machine joignable en
+// « 192.168.1.14 ». L'adresse restait exacte du point de vue de la couche
+// reseau, mais le lien affiche etait inutilisable depuis toute autre machine.
+//
+// L'etalon : l'adresse par laquelle NOUS sortons, c'est-a-dire l'interface qui
+// porte la route par defaut. Une adresse d'emetteur situee dans ce meme reseau
+// est celle par laquelle on peut reellement le joindre.
+void MonitorModule::refreshPrimaryAddress() {
+    // Recalculee de loin en loin : une adresse DHCP change, une interface
+    // apparait. Assez rare pour ne rien couter, assez frequent pour suivre.
+    if (m_primaryPrefix >= 0 && m_primaryAge.isValid() && m_primaryAge.elapsed() < 60000)
+        return;
+
+    // « Connecter » une socket UDP n'emet AUCUN paquet : cela ne fait que fixer
+    // la route, apres quoi localAddress() revele l'adresse que le systeme
+    // utiliserait pour sortir. C'est le seul moyen portable de distinguer le
+    // vrai LAN d'un reseau virtuel, que rien d'autre ne differencie.
+    // La cible est une adresse reservee a la documentation (RFC 5737), jamais
+    // routee : rien ne quitte la machine, ici comme ailleurs.
+    QUdpSocket probe;
+    probe.connectToHost(QHostAddress(QStringLiteral("192.0.2.1")), 9,
+                        QIODevice::ReadOnly);
+    const QHostAddress local = probe.localAddress();
+    probe.close();
+    if (local.isNull() || local.protocol() != QAbstractSocket::IPv4Protocol)
+        return;
+
+    for (const QNetworkInterface& itf : QNetworkInterface::allInterfaces()) {
+        for (const QNetworkAddressEntry& entry : itf.addressEntries()) {
+            if (entry.ip() == local && entry.prefixLength() > 0) {
+                m_primaryAddress = local;
+                m_primaryPrefix  = entry.prefixLength();
+                m_primaryAge.restart();
+                return;
+            }
+        }
+    }
+}
+
+int MonitorModule::addressScore(const QHostAddress& candidate) {
+    refreshPrimaryAddress();
+    // Sans etalon (machine sans route par defaut), toutes les adresses se
+    // valent : on ne prefere rien plutot que de preferer au hasard.
+    if (m_primaryPrefix < 0 || candidate.isNull())
+        return 1;
+    return candidate.isInSubnet(m_primaryAddress, m_primaryPrefix) ? 2 : 1;
+}
+
 void MonitorModule::onBeaconDatagram() {
     while (m_beaconSocket && m_beaconSocket->hasPendingDatagrams()) {
         const QNetworkDatagram dg = m_beaconSocket->receiveDatagram();
@@ -145,6 +199,7 @@ void MonitorModule::onBeaconDatagram() {
         if (const int i = s.sourceIp.lastIndexOf(QLatin1Char(':')); i >= 0 &&
             s.sourceIp.startsWith(QLatin1String("::ffff:")))
             s.sourceIp = s.sourceIp.mid(i + 1);
+        s.addressScore = addressScore(QHostAddress(s.sourceIp));
 
         for (const QJsonValue& c : o.value(QStringLiteral("capabilities")).toArray())
             s.capabilities << c.toString();
@@ -164,6 +219,16 @@ void MonitorModule::onBeaconDatagram() {
         if (const auto it = m_beaconSeen.constFind(key); it != m_beaconSeen.constEnd()) {
             s.webUi        = it->webUi;
             s.webUiFetched = it->webUiFetched && it->version == s.version;
+
+            // Emetteur multi-domicilie : on garde la MEILLEURE adresse entendue,
+            // pas la derniere. Les diffusions arrivent par chaque interface, et
+            // celle du reseau virtuel arrivant apres celle du LAN suffisait a
+            // faire afficher une adresse que personne d'autre ne peut joindre.
+            // La presence, elle, est bien rafraichie : seule l'adresse resiste.
+            if (it->addressScore > s.addressScore && !it->sourceIp.isEmpty()) {
+                s.sourceIp     = it->sourceIp;
+                s.addressScore = it->addressScore;
+            }
         }
         m_beaconSeen.insert(key, s);
         fetchWebUiIfNeeded(key);
