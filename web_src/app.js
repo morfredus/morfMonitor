@@ -300,15 +300,24 @@ function renderRessources(all) {
       `</div>`);
   }
 
-  const expected = { cpu_percent: 'processeur', memory: 'mémoire', load: 'charge' };
+  const expected = { cpu_percent: 'processeur', memory: 'mémoire', load: 'charge moyenne' };
   const missing = Object.keys(expected).filter((k) => r[k] === undefined);
   if (missing.length) {
+    // Depuis que Windows collecte le CPU et la mémoire, il ne manque plus
+    // souvent que la charge moyenne — une notion Unix, non une limite de
+    // collecte. Le message le dit alors précisément, plutôt que d'imputer à
+    // « /proc » une absence qui n'en vient pas.
+    const onlyLoad = missing.length === 1 && missing[0] === 'load';
     parts.push(`<div class="card span-all">${header('Métriques indisponibles')}` +
       unavailable(
         `Non collectées sur cette plateforme : ${missing.map((k) => expected[k]).join(', ')}.`,
-        'Ces mesures proviennent de /proc et /sys : elles ne sont renseignées que ' +
-        'sous Linux, cible de production de morfMonitor. Le service reste fonctionnel ; ' +
-        'seules ces valeurs manquent.') +
+        onlyLoad
+          ? 'La charge moyenne (load average) est une notion Unix, sans équivalent ' +
+            'fidèle sous Windows : le taux d’occupation du processeur répond à la même ' +
+            'question. Le service est pleinement fonctionnel.'
+          : 'Ces mesures proviennent de /proc et /sys : elles ne sont renseignées que ' +
+            'sous Linux, cible de production de morfMonitor. Le service reste fonctionnel ; ' +
+            'seules ces valeurs manquent.') +
       `</div>`);
   }
 

@@ -5,6 +5,44 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
+## [0.5.5] – 2026-07-23
+
+### Ajouté
+
+- **Processeur et mémoire collectés sous Windows.** La page Ressources ne
+  restait plus vide que du CPU et de la RAM sur un poste Windows, faute de
+  `/proc`. Ils viennent désormais de l'API Win32 — `GetSystemTimes` (taux
+  d'occupation, même calcul de delta que `/proc/stat`) et `GlobalMemoryStatusEx`
+  (mémoire physique) — au même format JSON que sous Linux, si bien que
+  l'interface ne connaît toujours pas la plateforme. L'onglet État général
+  gagne aussi l'OS, le noyau et l'uptime (`QSysInfo`, `GetTickCount64`). Toute
+  cette connaissance reste confinée aux collecteurs (`#ifdef` de plus bas
+  niveau), le reste du parc n'en sait rien.
+
+### Notes
+
+- **La charge moyenne n'est pas simulée sous Windows.** Le *load average* est
+  une notion Unix sans équivalent fidèle : plutôt que d'en fabriquer une, la
+  carte « Métriques indisponibles » explique que le taux CPU répond à la même
+  question. De même, le fichier d'échange n'est pas mesuré (les champs
+  `GlobalMemoryStatusEx` ne l'isolent pas ; une première tentative affichait un
+  alarmant « 100 % » — la fausse alerte que morfMonitor existe pour éviter), et
+  la température, qui demanderait WMI, est omise. Rien d'inventé.
+
+## [0.5.4] – 2026-07-23
+
+### Corrigé
+
+- **Le stockage s'affiche de nouveau sous Windows.** La supervision multi-volumes
+  (0.5.2) filtrait les volumes par un périphérique commençant par `/dev/` — ce
+  qui écartait tmpfs et les squashfs des snaps sous Linux, mais aussi **tous**
+  les volumes Windows (`C:`, `D:`…), dont le périphérique ne suit pas cette
+  convention. La page Ressources restait vide de tout stockage sur une machine
+  Windows. Le tri se fait désormais par **type de système de fichiers**
+  (exclusion portable de tmpfs, squashfs, overlay, proc, sysfs…) : `QStorageInfo`
+  est portable, le filtre l'est redevenu. Inchangé sous Linux ; sous Windows,
+  chaque disque réel apparaît à nouveau, jauge et anomalie comprises.
+
 ## [0.5.3] – 2026-07-22
 
 ### Modifié

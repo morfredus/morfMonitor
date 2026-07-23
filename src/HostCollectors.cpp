@@ -20,6 +20,20 @@
 #include <algorithm>
 #include <vector>
 
+// Les collecteurs de ressources parlent au systeme, et le systeme differe :
+// Linux lit /proc et /sys, Windows appelle l'API Win32. C'est la frontiere de
+// plateforme la plus basse du parc, isolee ici pour que le reste — modules,
+// API, interface — n'en sache jamais rien et serve le meme JSON partout.
+#ifdef _WIN32
+#  ifndef WIN32_LEAN_AND_MEAN
+#    define WIN32_LEAN_AND_MEAN
+#  endif
+#  ifndef NOMINMAX
+#    define NOMINMAX
+#  endif
+#  include <windows.h>
+#endif
+
 namespace morfmonitor {
 
 namespace {
@@ -76,13 +90,21 @@ QJsonObject SystemCollector::collect() {
     if (!m_staticDone) {
         QJsonObject s;
         s["hostname"] = QHostInfo::localHostName();
+        s["arch"] = QSysInfo::currentCpuArchitecture();
 
+#ifdef _WIN32
+        // Pas d'/etc/os-release ni de device-tree : QSysInfo donne l'équivalent
+        // portable. « os_id » vaut « windows », homogène avec l'« ID » de
+        // os-release consommé par l'interface.
+        s["os"]     = QSysInfo::prettyProductName();
+        s["os_id"]  = QSysInfo::productType();
+        s["kernel"] = QSysInfo::kernelVersion();
+#else
         const QString osrel = readAll(QStringLiteral("/etc/os-release"));
         s["os"] = osReleaseValue(osrel, QStringLiteral("PRETTY_NAME"));
         s["os_id"] = osReleaseValue(osrel, QStringLiteral("ID"));
 
         s["kernel"] = readAll(QStringLiteral("/proc/sys/kernel/osrelease")).trimmed();
-        s["arch"] = QSysInfo::currentCpuArchitecture();
 
         // Propre au Raspberry Pi ; absent ailleurs, et c'est sans conséquence.
         const QString model = readAll(QStringLiteral("/proc/device-tree/model"));
@@ -91,6 +113,7 @@ QJsonObject SystemCollector::collect() {
             // le JSON s'il était recopié tel quel.
             s["model"] = QString(model).remove(QChar(u'\0')).trimmed();
         }
+#endif
 
         m_static = s;
         m_staticDone = true;
@@ -99,8 +122,12 @@ QJsonObject SystemCollector::collect() {
     QJsonObject o = m_static;
 
     // L'uptime bouge : toujours relu.
+#ifdef _WIN32
+    const double uptime = static_cast<double>(GetTickCount64()) / 1000.0;
+#else
     const QString uptimeRaw = readAll(QStringLiteral("/proc/uptime"));
     const double uptime = uptimeRaw.split(QLatin1Char(' ')).value(0).toDouble();
+#endif
     o["uptime_s"] = uptime;
     o["boot_time"] = QDateTime::currentDateTimeUtc()
                          .addSecs(-static_cast<qint64>(uptime))
@@ -116,6 +143,8 @@ QJsonObject SystemCollector::collect() {
 QJsonObject ResourceCollector::collect() {
     QJsonObject o;
 
+#ifndef _WIN32
+    // === Linux : /proc et /sys ===============================================
     // --- CPU : taux d'occupation ---------------------------------------------
     // /proc/stat ne donne PAS un pourcentage mais des compteurs cumules depuis
     // le demarrage. Le taux est la part de temps non-inactif entre DEUX
@@ -196,26 +225,96 @@ QJsonObject ResourceCollector::collect() {
             o["swap"] = QJsonObject{{"total_b", 0}, {"percent", 0}};
         }
     }
+#else
+    // === Windows : mêmes grandeurs, API Win32 ================================
+    // La cible de production reste Linux (le Pi) ; ces mesures existent pour
+    // qu'un poste Windows du parc ne présente pas une page Ressources vide.
+    //
+    // La charge « load average » n'est PAS reproduite : c'est une moyenne de
+    // file d'exécution propre à Unix, sans équivalent fidèle sous Windows. On
+    // l'omet plutôt que d'en fabriquer une fausse — le taux CPU répond à la
+    // même question, « est-ce occupé ? ». La fréquence courante et la
+    // température, qui demandent des pilotes ou WMI et restent peu fiables,
+    // sont omises pour la même raison d'honnêteté.
+    {
+        FILETIME idleFt, kernelFt, userFt;
+        if (GetSystemTimes(&idleFt, &kernelFt, &userFt)) {
+            auto toU64 = [](const FILETIME& ft) {
+                return (static_cast<quint64>(ft.dwHighDateTime) << 32)
+                     | static_cast<quint64>(ft.dwLowDateTime);
+            };
+            // kernelFt INCLUT le temps d'inactivité : total = kernel + user, et
+            // l'occupation est la part non-inactive entre deux relevés — le même
+            // calcul de delta que /proc/stat, d'où le partage de l'état
+            // précédent (m_prevTotal / m_prevIdle).
+            const quint64 idle  = toU64(idleFt);
+            const quint64 total = toU64(kernelFt) + toU64(userFt);
+            if (m_havePrev && total > m_prevTotal) {
+                const double dTotal = static_cast<double>(total - m_prevTotal);
+                const double dIdle  = static_cast<double>(idle - m_prevIdle);
+                o["cpu_percent"] = qRound((1.0 - dIdle / dTotal) * 1000.0) / 10.0;
+            }
+            m_prevTotal = total;
+            m_prevIdle  = idle;
+            m_havePrev  = true;
+        }
+    }
+
+    {
+        MEMORYSTATUSEX ms;
+        ms.dwLength = sizeof(ms);
+        if (GlobalMemoryStatusEx(&ms)) {
+            const double total = static_cast<double>(ms.ullTotalPhys);
+            const double avail = static_cast<double>(ms.ullAvailPhys);
+            if (total > 0) {
+                QJsonObject m;
+                m["total_b"]     = total;
+                m["available_b"] = avail;
+                m["used_b"]      = total - avail;
+                m["percent"]     = qRound((1.0 - avail / total) * 1000.0) / 10.0;
+                o["memory"] = m;
+            }
+            // Pas de « swap » sous Windows. GlobalMemoryStatusEx ne mesure pas
+            // le fichier d'échange isolément : ses champs pageFile décrivent le
+            // plafond de validation (RAM + pagefile), dont on ne peut pas
+            // déduire l'occupation du pagefile sans se tromper. Une première
+            // tentative affichait « 100 % » — précisément la fausse alerte que
+            // morfMonitor existe pour éviter. On le déclare donc non configuré,
+            // ce qui est neutre, plutôt que de publier un chiffre inventé.
+            o["swap"] = QJsonObject{{"total_b", 0}, {"percent", 0}};
+        }
+    }
+#endif
 
     // --- Disque : tous les volumes REELS montés -----------------------------
     // La racine seule mentait dès que /home est une partition séparée —
     // installation Linux classique sur un portable : « / » à 90 % affole alors
     // que les données ont ailleurs toute la place, et inversement un /home
-    // plein restait invisible. Plutôt que d'ajouter /home en dur (qui n'est
-    // pas un montage séparé sur un Raspberry Pi), on liste chaque système de
-    // fichiers adossé à un périphérique (/dev/…), en écartant les
-    // pseudo-montages : tmpfs, et les squashfs des snaps — en lecture seule,
-    // toujours « pleins » à 100 %, la fausse alerte assurée.
+    // plein restait invisible. On liste donc chaque volume réel, en écartant
+    // les pseudo-montages.
+    //
+    // Le tri se fait par TYPE de système de fichiers, pas par « /dev/ » : ce
+    // dernier excluait certes tmpfs et les squashfs des snaps sous Linux, mais
+    // il écartait aussi TOUS les volumes Windows (« C: », « D: »), dont le
+    // périphérique ne commence pas par /dev/. QStorageInfo est portable ; le
+    // filtre ne devait pas cesser de l'être. La liste des pseudo-systèmes vaut
+    // sur les deux plateformes — inexistants sous Windows, ils n'y retirent
+    // rien.
     {
+        static const QSet<QByteArray> kPseudoFs = {
+            "tmpfs", "devtmpfs", "squashfs", "overlay", "aufs", "ramfs",
+            "proc", "sysfs", "cgroup", "cgroup2", "devpts", "mqueue",
+            "debugfs", "tracefs", "securityfs", "pstore", "autofs", "fuse.snapfuse",
+        };
         struct Vol { QString mount; QJsonObject d; };
         std::vector<Vol> vols;
         QSet<QString> devices;
         for (const QStorageInfo& v : QStorageInfo::mountedVolumes()) {
             if (!v.isValid() || !v.isReady() || v.isReadOnly() || v.bytesTotal() <= 0)
                 continue;
+            if (kPseudoFs.contains(v.fileSystemType().toLower()))
+                continue;   // tmpfs, squashfs des snaps… « pleins » à 100 %, fausse alerte
             const QString device = QString::fromUtf8(v.device());
-            if (!device.startsWith(QLatin1String("/dev/")))
-                continue;
             if (devices.contains(device))
                 continue;   // montage bind : le même volume sous un autre chemin
             devices.insert(device);
@@ -246,9 +345,11 @@ QJsonObject ResourceCollector::collect() {
             o["disks"] = disks;
     }
 
+#ifndef _WIN32
     // --- Températures --------------------------------------------------------
     // CPU depuis le noyau, en millidegrés. Disponible sur toute machine Linux
-    // dotée d'une sonde ; simplement omis ailleurs.
+    // dotée d'une sonde ; simplement omis ailleurs. Sous Windows, la lecture
+    // demanderait WMI ou un pilote et reste peu fiable : omise volontairement.
     {
         QJsonObject t;
         const double cpuMilli = readDouble(
@@ -292,6 +393,7 @@ QJsonObject ResourceCollector::collect() {
         if (!t.isEmpty())
             o["temperature"] = t;
     }
+#endif
 
     o["ts"] = static_cast<double>(QDateTime::currentSecsSinceEpoch());
     return o;
