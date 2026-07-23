@@ -126,6 +126,13 @@ class Deployer:
         print(f"  binary installed: {target}")
         written = [target]
 
+        # The binary alone is not enough where its shared libraries do not come
+        # from a system location: on Windows the Qt and compiler DLLs must sit
+        # beside it. The backend decides -- a no-op wherever the system already
+        # provides them, so this line costs nothing on Linux. Done here, right
+        # after the copy, so an install and an update both get it.
+        self.backend.install_runtime(target)
+
         for config in self.manifest.configs:
             dest = config.resolved_dest(config_dir)
             dest.parent.mkdir(parents=True, exist_ok=True)

@@ -82,11 +82,22 @@ class ServiceBackend(abc.ABC):
         the kind of surprise no message can undo afterwards.
         """
 
-    # -- Privileges -------------------------------------------------------
+    # -- Runtime dependencies ---------------------------------------------
 
-    @abc.abstractmethod
-    def requires_privileges(self) -> bool:
-        """True when the operations above need administrator rights."""
+    def install_runtime(self, installed_binary: Path) -> None:
+        """Place beside the binary any shared libraries it needs to start.
+
+        A no-op by default, and that is correct for every platform whose shared
+        libraries come from a system-wide location: a Linux service finds Qt
+        where the package manager installed it, so the binary alone runs.
+
+        Windows has no such place. A Qt program copied without Qt6Core.dll, the
+        platform plugin and the compiler runtime starts to a 'DLL not found'
+        error that the Service Control Manager reports only as a failed start,
+        with nothing pointing at the missing files. The Windows backend
+        overrides this to gather them; keeping it a no-op here means no other
+        platform pays for a problem it does not have.
+        """
 
     @abc.abstractmethod
     def has_privileges(self) -> bool:

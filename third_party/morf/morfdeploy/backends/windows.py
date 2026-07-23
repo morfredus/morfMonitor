@@ -142,6 +142,64 @@ class WindowsBackend(ServiceBackend):
         else:
             self._run(["schtasks", "/Delete", "/F", "/TN", manifest.service_name], check=False)
 
+    # -- Runtime dependencies ---------------------------------------------
+
+    def install_runtime(self, installed_binary: Path) -> None:
+        """Bring the Qt and MinGW DLLs the service needs next to its binary.
+
+        The reason the base method is a no-op and this one is not: Linux
+        resolves Qt from where the package manager put it, so a copied binary
+        just runs. Windows has no system-wide Qt. An executable installed on its
+        own starts to a 'Qt6Core.dll not found' dialog -- which, for a service,
+        the SCM reports only as a start failure, mentioning none of the missing
+        files. windeployqt, shipped with Qt, reads the executable's imports and
+        places exactly the Qt libraries and plugins it needs beside it.
+
+        windeployqt covers Qt and, with --compiler-runtime, the MinGW runtime
+        (libgcc, libstdc++, libwinpthread). A second, best-effort pass with ldd
+        widens the net to any remaining third-party DLL the binaries still
+        resolve from the toolchain -- the belt-and-suspenders ComponentHub
+        settled on -- and is simply skipped where no MSYS2 shell is present.
+        """
+        tool = (shutil.which("windeployqt")
+                or shutil.which("windeployqt6")
+                or shutil.which("windeployqt-qt6"))
+        if tool is None:
+            raise RuntimeError(
+                "windeployqt is not on PATH, so the Qt runtime cannot be placed\n"
+                f"beside {installed_binary.name}. Installed alone, the service starts\n"
+                "to a missing-DLL error the Service Control Manager reports only as a\n"
+                "failed start, naming none of the absent files.\n\n"
+                "Run this install from the same MSYS2/MinGW shell that built the\n"
+                "binary (windeployqt ships with Qt), or add Qt's bin directory to PATH."
+            )
+
+        self._run([tool, "--no-translations", "--compiler-runtime",
+                   str(installed_binary)])
+        print(f"  Qt runtime deployed beside {installed_binary.name} (windeployqt)")
+
+        self._copy_toolchain_dlls(installed_binary.parent)
+
+    def _copy_toolchain_dlls(self, app_dir: Path) -> None:
+        """Copy any DLL the installed binaries still resolve from the MinGW tree.
+
+        Best-effort: it needs ldd from an MSYS2 shell. Absent it, windeployqt's
+        --compiler-runtime has already placed the usual ones, so a missing bash
+        is a narrower net, not a broken install. Mirrors ComponentHub's
+        deploy-mingw.sh, inlined here so morfdeploy carries no external script.
+        """
+        bash = shutil.which("bash")
+        if bash is None:
+            return
+        script = (
+            'cd "$1" || exit 0; '
+            'for f in *.exe *.dll; do [ -f "$f" ] && ldd "$f" 2>/dev/null; done '
+            "| grep -iE '/(mingw64|ucrt64|clang64|mingw32)/bin/' "
+            "| awk '{print $3}' | sort -u "
+            '| while read -r dll; do cp -u "$dll" . 2>/dev/null || true; done'
+        )
+        subprocess.run([bash, "-c", script, "bash", str(app_dir)], check=False)
+
     # -- Privileges -------------------------------------------------------
 
     def requires_privileges(self) -> bool:
