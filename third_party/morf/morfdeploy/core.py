@@ -130,8 +130,10 @@ class Deployer:
         # from a system location: on Windows the Qt and compiler DLLs must sit
         # beside it. The backend decides -- a no-op wherever the system already
         # provides them, so this line costs nothing on Linux. Done here, right
-        # after the copy, so an install and an update both get it.
-        self.backend.install_runtime(target)
+        # after the copy, so an install and an update both get it. The source
+        # binary is passed too: the deployment tool is found from the build's
+        # CMake cache, which lives beside it, not beside the installed copy.
+        self.backend.install_runtime(target, binary)
 
         for config in self.manifest.configs:
             dest = config.resolved_dest(config_dir)

@@ -84,8 +84,14 @@ class ServiceBackend(abc.ABC):
 
     # -- Runtime dependencies ---------------------------------------------
 
-    def install_runtime(self, installed_binary: Path) -> None:
+    def install_runtime(self, installed_binary: Path, source_binary: Path) -> None:
         """Place beside the binary any shared libraries it needs to start.
+
+        `installed_binary` is the copy in the application directory; the runtime
+        libraries go next to it. `source_binary` is the freshly built one still
+        in the build tree, kept as a parameter because the tools that find those
+        libraries (windeployqt) are located from the build's CMake cache, which
+        sits beside it -- not beside the installed copy.
 
         A no-op by default, and that is correct for every platform whose shared
         libraries come from a system-wide location: a Linux service finds Qt

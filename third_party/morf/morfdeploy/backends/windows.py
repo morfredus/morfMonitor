@@ -31,6 +31,7 @@ producing a service registered to fail.
 from __future__ import annotations
 
 import ctypes
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -144,7 +145,7 @@ class WindowsBackend(ServiceBackend):
 
     # -- Runtime dependencies ---------------------------------------------
 
-    def install_runtime(self, installed_binary: Path) -> None:
+    def install_runtime(self, installed_binary: Path, source_binary: Path) -> None:
         """Bring the Qt and MinGW DLLs the service needs next to its binary.
 
         The reason the base method is a no-op and this one is not: Linux
@@ -161,36 +162,116 @@ class WindowsBackend(ServiceBackend):
         resolve from the toolchain -- the belt-and-suspenders ComponentHub
         settled on -- and is simply skipped where no MSYS2 shell is present.
         """
-        tool = (shutil.which("windeployqt")
-                or shutil.which("windeployqt6")
-                or shutil.which("windeployqt-qt6"))
+        tool = self._find_windeployqt(source_binary)
         if tool is None:
             raise RuntimeError(
-                "windeployqt is not on PATH, so the Qt runtime cannot be placed\n"
+                "windeployqt could not be found, so the Qt runtime cannot be placed\n"
                 f"beside {installed_binary.name}. Installed alone, the service starts\n"
                 "to a missing-DLL error the Service Control Manager reports only as a\n"
                 "failed start, naming none of the absent files.\n\n"
-                "Run this install from the same MSYS2/MinGW shell that built the\n"
-                "binary (windeployqt ships with Qt), or add Qt's bin directory to PATH."
+                "It is normally located automatically from the build's CMake cache.\n"
+                "If Qt was moved since the build, rebuild (service.py install --rebuild)\n"
+                "or add Qt's bin directory to PATH."
             )
 
-        self._run([tool, "--no-translations", "--compiler-runtime",
-                   str(installed_binary)])
+        # windeployqt is run with Qt's own bin directory prepended to PATH, so it
+        # finds objdump for its dependency walk and the compiler-runtime DLLs to
+        # copy -- neither of which is on PATH when the install runs from an
+        # ordinary PowerShell rather than the MSYS2 shell that built the binary.
+        # This is what lets the install work from any terminal.
+        env = dict(os.environ)
+        env["PATH"] = str(Path(tool).parent) + os.pathsep + env.get("PATH", "")
+
+        result = subprocess.run(
+            [tool, "--no-translations", "--compiler-runtime", str(installed_binary)],
+            env=env, check=False,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"windeployqt failed ({result.returncode}) for {installed_binary.name}."
+            )
         print(f"  Qt runtime deployed beside {installed_binary.name} (windeployqt)")
 
-        self._copy_toolchain_dlls(installed_binary.parent)
+        self._copy_toolchain_dlls(installed_binary.parent, Path(tool).parent)
 
-    def _copy_toolchain_dlls(self, app_dir: Path) -> None:
+    def _find_windeployqt(self, source_binary: Path) -> str | None:
+        """Locate windeployqt without relying on it being on PATH.
+
+        1. On PATH -- the MSYS2/MinGW shell that built the binary has it there.
+        2. Beside Qt, found from the build's CMakeCache.txt: `Qt6_DIR` points at
+           <qt>/lib/cmake/Qt6, so windeployqt sits three levels up, in <qt>/bin.
+           This is the same anchor ComponentHub's CMake uses, and it makes the
+           install work from an ordinary terminal, where PATH has no Qt.
+        """
+        for name in ("windeployqt", "windeployqt6", "windeployqt-qt6"):
+            found = shutil.which(name)
+            if found:
+                return found
+
+        cache = self._find_cmake_cache(source_binary)
+        if cache is not None:
+            for qt_dir in self._qt_dirs_from_cache(cache):
+                # <qt>/lib/cmake/Qt6[Core] -> up three -> <qt>, then /bin.
+                qt_bin = qt_dir.parents[2] / "bin"
+                for name in ("windeployqt.exe", "windeployqt6.exe"):
+                    candidate = qt_bin / name
+                    if candidate.is_file():
+                        return str(candidate)
+        return None
+
+    @staticmethod
+    def _find_cmake_cache(source_binary: Path) -> Path | None:
+        """The build's CMakeCache.txt, searched upward from the built binary.
+
+        The binary may sit in build-*/service/ (the C++ services) or in the
+        build root (the simpler ones), so the cache is one or two levels up.
+        Bounded to a few levels: past that, we have left the build tree.
+        """
+        directory = source_binary.parent
+        for _ in range(4):
+            cache = directory / "CMakeCache.txt"
+            if cache.is_file():
+                return cache
+            if directory == directory.parent:
+                break
+            directory = directory.parent
+        return None
+
+    @staticmethod
+    def _qt_dirs_from_cache(cache: Path) -> list:
+        """The Qt cmake-package directories recorded in a CMakeCache.txt.
+
+        Both Qt6_DIR and Qt6Core_DIR are read: a cache may carry either, and
+        both resolve to the same <qt>/bin three levels up.
+        """
+        found = []
+        try:
+            text = cache.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return found
+        for line in text.splitlines():
+            for key in ("Qt6_DIR", "Qt6Core_DIR"):
+                prefix = f"{key}:"
+                if line.startswith(prefix) and "=" in line:
+                    value = line.split("=", 1)[1].strip()
+                    if value:
+                        found.append(Path(value))
+        return found
+
+    def _copy_toolchain_dlls(self, app_dir: Path, toolchain_bin: Path) -> None:
         """Copy any DLL the installed binaries still resolve from the MinGW tree.
 
         Best-effort: it needs ldd from an MSYS2 shell. Absent it, windeployqt's
         --compiler-runtime has already placed the usual ones, so a missing bash
         is a narrower net, not a broken install. Mirrors ComponentHub's
         deploy-mingw.sh, inlined here so morfdeploy carries no external script.
+        The toolchain bin is prepended to PATH so ldd itself resolves.
         """
         bash = shutil.which("bash")
         if bash is None:
             return
+        env = dict(os.environ)
+        env["PATH"] = str(toolchain_bin) + os.pathsep + env.get("PATH", "")
         script = (
             'cd "$1" || exit 0; '
             'for f in *.exe *.dll; do [ -f "$f" ] && ldd "$f" 2>/dev/null; done '
@@ -198,7 +279,8 @@ class WindowsBackend(ServiceBackend):
             "| awk '{print $3}' | sort -u "
             '| while read -r dll; do cp -u "$dll" . 2>/dev/null || true; done'
         )
-        subprocess.run([bash, "-c", script, "bash", str(app_dir)], check=False)
+        subprocess.run([bash, "-c", script, "bash", str(app_dir)],
+                       env=env, check=False)
 
     # -- Privileges -------------------------------------------------------
 
