@@ -166,6 +166,17 @@ private:
         QJsonObject webUi;
         QJsonObject api;
         bool        detailFetched = false;
+
+        // Back-off du pull /status. Un pair qui echoue (occupe, en redemarrage,
+        // a court de sockets) ne doit pas etre re-sonde a chaque heartbeat : sur
+        // une cible contrainte comme un ESP32 en plein scan reseau, cet afflux de
+        // connexions entrantes -- multiplie par le nombre d'observateurs -- peut
+        // epuiser ses sockets et la faire planter, ce qui relance le cycle.
+        // Observer ne doit jamais nuire : on espace les tentatives qui echouent.
+        //   detailTries      : echecs consecutifs (0 = sain, remis a 0 au succes) ;
+        //   detailRetryAfter : ms epoch avant laquelle on ne retente pas.
+        int         detailTries      = 0;
+        qint64      detailRetryAfter = 0;
     };
     // Clé = identité d'INSTANCE (champ « instance » du protocole, ou app@ip à
     // défaut), jamais le seul nom « app » : le même service tournant sur deux

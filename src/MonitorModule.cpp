@@ -84,6 +84,13 @@ void MonitorModule::fetchDetailIfNeeded(const QString& key) {
     if (it->sourceIp.isEmpty() || it->statusPort == 0)
         return;                       // pas de /status a joindre : rien a demander
 
+    // Back-off : tant que le delai depuis le dernier echec n'est pas ecoule, on
+    // ne retente pas. Un pair sain repond du premier coup (detailTries reste 0,
+    // aucun delai) ; seul un pair en difficulte est espace, ce qui le soulage au
+    // lieu de l'achever.
+    if (QDateTime::currentMSecsSinceEpoch() < it->detailRetryAfter)
+        return;
+
     // Marque avant l'envoi : sans cela, chaque heartbeat relancerait une requete
     // tant que la premiere n'a pas repondu.
     it->detailFetched = true;
@@ -102,13 +109,23 @@ void MonitorModule::fetchDetailIfNeeded(const QString& key) {
         if (entry == m_beaconSeen.end())
             return;
         if (reply->error() != QNetworkReply::NoError) {
-            // Echec sans consequence : le service reste supervise, simplement
-            // sans detail. On autorise un nouvel essai au prochain heartbeat.
+            // Echec : on reautorise une tentative, mais plus tard et de plus en
+            // plus tard. 30 s, 60 s, 120 s ... plafonne a 10 min. Sans cet
+            // espacement, deux observateurs re-sondaient un pair defaillant
+            // toutes les 15 s chacun, entretenant sa panne.
             entry->detailFetched = false;
+            entry->detailTries  += 1;
+            const qint64 base  = 30000;   // 30 s
+            const int    shift = qMin(entry->detailTries - 1, 5);
+            const qint64 delay = qMin(base << shift, static_cast<qint64>(600000));
+            entry->detailRetryAfter = QDateTime::currentMSecsSinceEpoch() + delay;
             return;
         }
-        // Le meme /status porte les deux : l'interface (si le service en a une)
-        // et l'API. Un service sans interface laisse simplement web_ui vide.
+        // Succes : on efface le back-off et on lit le detail. Le meme /status
+        // porte les deux : l'interface (si le service en a une) et l'API. Un
+        // service sans interface laisse simplement web_ui vide.
+        entry->detailTries      = 0;
+        entry->detailRetryAfter = 0;
         const QJsonObject o = QJsonDocument::fromJson(reply->readAll()).object();
         entry->webUi = o.value(QStringLiteral("web_ui")).toObject();
         entry->api   = o.value(QStringLiteral("api")).toObject();
@@ -220,7 +237,13 @@ void MonitorModule::onBeaconDatagram() {
         if (const auto it = m_beaconSeen.constFind(key); it != m_beaconSeen.constEnd()) {
             s.webUi         = it->webUi;
             s.api           = it->api;
-            s.detailFetched = it->detailFetched && it->version == s.version;
+            const bool sameVersion = (it->version == s.version);
+            s.detailFetched = it->detailFetched && sameVersion;
+            // On conserve le back-off tant que la version ne change pas. Une
+            // nouvelle version est un service a redecouvrir : on repart a zero,
+            // sans le delai herite de l'ancienne.
+            s.detailTries      = sameVersion ? it->detailTries      : 0;
+            s.detailRetryAfter = sameVersion ? it->detailRetryAfter : 0;
 
             // Emetteur multi-domicilie : on garde la MEILLEURE adresse entendue,
             // pas la derniere. Les diffusions arrivent par chaque interface, et

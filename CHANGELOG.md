@@ -14,6 +14,15 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
   l'utilisateur venait d'ouvrir. Il est maintenant relevé avant la reconstruction
   et restauré à l'identique, par identité d'instance (stable d'un rendu à l'autre).
 
+- **Back-off sur le « pull detail » d'un pair qui échoue.** Le `/status` d'un
+  pair injoignable était re-sondé à chaque heartbeat (toutes les 15 s), et par
+  chaque instance de morfMonitor. Sur une cible contrainte (ESP32 en plein scan
+  réseau), cet afflux de connexions entrantes concurrentes pouvait épuiser ses
+  sockets et la faire planter, ce qui relançait le cycle. Les tentatives qui
+  échouent sont désormais espacées (30 s, 60 s, 120 s... plafonné à 10 min) ;
+  un pair sain répond du premier coup, sans délai. Observer ne doit jamais nuire,
+  quel que soit le nombre d'observateurs.
+
 ## [0.5.8] – 2026-07-26
 ### Ajouté
 
