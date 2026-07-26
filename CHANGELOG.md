@@ -5,6 +5,47 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
+## [0.5.8] – 2026-07-26
+### Ajouté
+
+- **Cartographie de l'API des pairs.** morfMonitor lit désormais le champ `api`
+  du `/status` des services découverts (en plus de `web_ui`) et l'expose dans
+  `/api/services`, chaque entrée complétée d'un `base_url` joignable. Une
+  colonne « API » apparaît dans la page Écosystème : les routes annoncées par
+  chaque service s'y consultent, repliées par défaut. La tour de contrôle voit
+  maintenant *ce que chaque service offre*, pas seulement qu'il est en vie.
+
+### Modifié
+
+- **Le « pull detail » n'est plus réservé aux services `web_ui`.** L'API n'étant
+  pas une capacité annoncée par le heartbeat (qui reste maigre), elle ne se
+  découvre que via `/status` ; morfMonitor interroge donc `/status` une fois par
+  version pour **tout** service annonçant un port, et non plus seulement ceux qui
+  déclarent une interface. Toujours borné (un appel par version), toujours en
+  lecture : morfMonitor observe, ne relaie rien.
+
+## [0.5.7] – 2026-07-26
+
+### Ajouté
+
+- **`/status` déclare l'API d'observation** (`GET /api/system`, `/api/resources`,
+  `/api/network`, `/api/services`, `/api/reboot`, `/api/config`, `/api/all`, sous
+  la base `/api`), en plus de l'interface web déjà annoncée. Un observateur — un
+  autre morfMonitor, un futur portail — découvre ainsi non seulement l'existence
+  et l'interface de ce service, mais comment l'interroger. Toutes les routes sont
+  en lecture : morfMonitor observe, n'agit jamais (morfBeacon 0.5.0).
+
+### Modifié
+
+- **Le détail annoncé (interface web + API) est défini en un seul point**
+  (`SelfDescription.h`, `fillAnnouncedDetail`), appelé par le heartbeat
+  (`Service`) **et** par `/status` (`HttpServer`, via `describeService` de
+  morfBeacon). Le bloc `web_ui` était écrit à la main aux deux endroits, mêmes
+  valeurs : la moindre modification pouvait diverger entre ce que le heartbeat
+  annonce et ce que `/status` décrit. Un observatoire qui s'exempterait de ses
+  propres règles de découverte n'aurait aucune raison d'être cru sur les autres.
+
+
 ## [0.5.6] – 2026-07-23
 
 ### Corrigé

@@ -66,10 +66,11 @@ public:
 private:
     void onBeaconDatagram();
 
-    // Interroge /status d'un service qui annonce « web_ui », une seule fois par
-    // version vue. Sans reponse, le service reste simplement sans lien : une
-    // interface indisponible ne doit pas degrader la supervision.
-    void fetchWebUiIfNeeded(const QString& key);
+    // Interroge /status d'un service une seule fois par version vue, pour en
+    // recolter le DETAIL qu'il annonce : son interface web (« web_ui ») et sa
+    // liste d'API (« api »). Sans reponse, le service reste simplement sans
+    // detail : une description indisponible ne doit pas degrader la supervision.
+    void fetchDetailIfNeeded(const QString& key);
 
     // Oublie les applications simplement ENTENDUES qui ne s'annoncent plus
     // depuis longtemps. Les applications declarees sont conservees : leur
@@ -120,11 +121,14 @@ private:
     // présence en broadcast, donc aucune adresse à connaître et aucune requête
     // à émettre.
     //
-    // Seule exception, et elle est bornée : quand un service annonce la capacité
-    // « web_ui », son /status est interrogé UNE fois pour obtenir le détail de
-    // son interface. C'est le « pull detail » du protocole, pas une sonde
-    // périodique — et cela ne fait de morfMonitor l'intermédiaire de rien : il
-    // lit une description, il ne relaie aucun trafic.
+    // Seule exception, et elle est bornée : dès qu'un service annonce un port
+    // /status, celui-ci est interrogé UNE fois par version pour obtenir le
+    // détail qu'il publie — son interface web et sa liste d'API. C'est le
+    // « pull detail » du protocole, pas une sonde périodique — et cela ne fait
+    // de morfMonitor l'intermédiaire de rien : il lit une description, il ne
+    // relaie aucun trafic. L'API n'étant pas une capacité (le heartbeat reste
+    // maigre), elle ne se découvre que par ce détail : c'est pourquoi le pull
+    // ne peut plus être réservé aux seuls services « web_ui ».
     QUdpSocket*            m_beaconSocket = nullptr;
     QNetworkAccessManager* m_http = nullptr;
     struct BeaconSeen {
@@ -154,11 +158,14 @@ private:
         // s'appuie sur elles, jamais sur le nom de l'application.
         QStringList capabilities;
 
-        // Detail de l'interface Web, obtenu en interrogeant /status une fois la
-        // capacite « web_ui » reperee. Vide tant qu'elle ne l'est pas : le
-        // heartbeat annonce, HTTP detaille.
+        // Detail publie par le service, obtenu en interrogeant son /status une
+        // seule fois par version. Vides tant que le pull n'a pas eu lieu : le
+        // heartbeat annonce la presence, HTTP detaille.
+        //   webUi : interface web (absent des services sans interface) ;
+        //   api   : liste d'API annoncee (methode, chemin, resume).
         QJsonObject webUi;
-        bool        webUiFetched = false;
+        QJsonObject api;
+        bool        detailFetched = false;
     };
     // Clé = identité d'INSTANCE (champ « instance » du protocole, ou app@ip à
     // défaut), jamais le seul nom « app » : le même service tournant sur deux

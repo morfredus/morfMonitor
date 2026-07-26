@@ -77,18 +77,16 @@ bool MonitorModule::isFresh(const Cached& c, int maxAgeMs) const {
 
 // --- Heartbeats morfBeacon ---------------------------------------------------
 
-void MonitorModule::fetchWebUiIfNeeded(const QString& key) {
+void MonitorModule::fetchDetailIfNeeded(const QString& key) {
     const auto it = m_beaconSeen.find(key);
-    if (it == m_beaconSeen.end() || it->webUiFetched)
+    if (it == m_beaconSeen.end() || it->detailFetched)
         return;
-    if (!it->capabilities.contains(QLatin1String("web_ui")))
-        return;                       // pas d'interface annoncee : rien a demander
     if (it->sourceIp.isEmpty() || it->statusPort == 0)
-        return;                       // rien pour construire l'URL
+        return;                       // pas de /status a joindre : rien a demander
 
     // Marque avant l'envoi : sans cela, chaque heartbeat relancerait une requete
     // tant que la premiere n'a pas repondu.
-    it->webUiFetched = true;
+    it->detailFetched = true;
 
     if (!m_http)
         m_http = new QNetworkAccessManager(this);
@@ -105,12 +103,15 @@ void MonitorModule::fetchWebUiIfNeeded(const QString& key) {
             return;
         if (reply->error() != QNetworkReply::NoError) {
             // Echec sans consequence : le service reste supervise, simplement
-            // sans lien. On autorise un nouvel essai au prochain heartbeat.
-            entry->webUiFetched = false;
+            // sans detail. On autorise un nouvel essai au prochain heartbeat.
+            entry->detailFetched = false;
             return;
         }
+        // Le meme /status porte les deux : l'interface (si le service en a une)
+        // et l'API. Un service sans interface laisse simplement web_ui vide.
         const QJsonObject o = QJsonDocument::fromJson(reply->readAll()).object();
         entry->webUi = o.value(QStringLiteral("web_ui")).toObject();
+        entry->api   = o.value(QStringLiteral("api")).toObject();
     });
 }
 
@@ -217,8 +218,9 @@ void MonitorModule::onBeaconDatagram() {
         // « push presence / pull detail » — la presence est bavarde, le detail
         // ne se demande qu'une fois.
         if (const auto it = m_beaconSeen.constFind(key); it != m_beaconSeen.constEnd()) {
-            s.webUi        = it->webUi;
-            s.webUiFetched = it->webUiFetched && it->version == s.version;
+            s.webUi         = it->webUi;
+            s.api           = it->api;
+            s.detailFetched = it->detailFetched && it->version == s.version;
 
             // Emetteur multi-domicilie : on garde la MEILLEURE adresse entendue,
             // pas la derniere. Les diffusions arrivent par chaque interface, et
@@ -231,7 +233,7 @@ void MonitorModule::onBeaconDatagram() {
             }
         }
         m_beaconSeen.insert(key, s);
-        fetchWebUiIfNeeded(key);
+        fetchDetailIfNeeded(key);
     }
     pruneStaleBeacons();
 }
@@ -280,6 +282,15 @@ void MonitorModule::addReachability(QJsonObject& a, const BeaconSeen& s) {
                         .arg(s.sourceIp).arg(port)
                         .arg(ui.value("path").toString(QStringLiteral("/")));
         a["web_ui"] = ui;
+    }
+    // API annoncee, completee de la base a laquelle l'atteindre (meme principe
+    // que web_ui : referencer, sans recomposer). Les chemins des endpoints
+    // restent relatifs ; `base_url` donne le prefixe joignable depuis ici.
+    if (!s.api.isEmpty() && !s.sourceIp.isEmpty()) {
+        QJsonObject api = s.api;
+        api["base_url"] = QStringLiteral("http://%1:%2")
+                              .arg(s.sourceIp).arg(s.statusPort);
+        a["api"] = api;
     }
 }
 

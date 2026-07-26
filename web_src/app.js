@@ -131,6 +131,26 @@ function webUiLink(a) {
   return `<a href="${esc(ui.url)}" target="_blank" rel="noopener"${title}>${label} ↗</a>`;
 }
 
+// Liste d'API qu'un service ANNONCE (champ `api` de son /status, relaye tel quel
+// par /api/services). Purement descriptif : morfMonitor montre ce qu'un service
+// declare offrir, il n'appelle rien. Les chemins sont ceux du service ; la base
+// joignable depuis ici est dans a.api.base_url, pour qui veut composer une URL.
+//
+// Replie par defaut (<details>) : la cartographie ne doit pas noyer l'etat, qui
+// reste l'essentiel. On deplie pour inspecter.
+function apiCell(a) {
+  const api = a.api;
+  const eps = api && Array.isArray(api.endpoints) ? api.endpoints : [];
+  if (!eps.length) return '<span class="info-label">—</span>';
+  const rows = eps.map((e) =>
+    `<div class="mono" style="white-space:nowrap;margin:.15rem 0">` +
+      `<span class="badge badge-off">${esc(e.method || 'GET')}</span> ${esc(e.path || '')}` +
+      (e.summary ? `<span class="info-label"> — ${esc(e.summary)}</span>` : '') +
+    `</div>`).join('');
+  const n = eps.length;
+  return `<details><summary>${n} route${n > 1 ? 's' : ''}</summary>${rows}</details>`;
+}
+
 // Nom d'affichage d'un service : on part du nom qu'il ANNONCE (champ `app` du
 // heartbeat), jamais d'un libellé défini ici. Un service renommé s'affiche
 // alors correctement de lui-même, sans qu'on touche à morfMonitor — la config
@@ -421,7 +441,7 @@ function renderEcosysteme(all) {
       ? `<div class="tbl-wrap"><table><thead><tr>
            <th>Application</th><th class="mono">Machine</th><th class="mono">Adresse</th>
            <th class="mono">Version</th>
-           <th>État</th><th class="mono">Dernier heartbeat</th><th>Interface</th>
+           <th>État</th><th class="mono">Dernier heartbeat</th><th>Interface</th><th>API</th>
          </tr></thead><tbody>` +
         apps.map((a) => `<tr>
           <td>${esc(serviceName(a.app))}${
@@ -449,6 +469,7 @@ function renderEcosysteme(all) {
                                                        : badge('err', 'hors ligne')}</td>
           <td class="mono">${esc(a.last_seen_s === undefined ? '—' : ago(a.last_seen_s))}</td>
           <td>${webUiLink(a)}</td>
+          <td>${apiCell(a)}</td>
         </tr>`).join('') + `</tbody></table></div>` +
         // Un paragraphe par idée, pas un pavé : le texte se consulte, il ne se
         // lit pas d'une traite. La durée n'est jamais écrite en dur — elle
