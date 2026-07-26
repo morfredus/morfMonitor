@@ -5,6 +5,15 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
+## [0.5.9] – 2026-07-26
+### Corrigé
+
+- **Les routes API dépliées restaient ouvertes au rafraîchissement.** La page
+  Écosystème reconstruit tout son tableau à chaque cycle ; l'état ouvert/fermé
+  des `<details>` de la colonne « API » était donc perdu, refermant ce que
+  l'utilisateur venait d'ouvrir. Il est maintenant relevé avant la reconstruction
+  et restauré à l'identique, par identité d'instance (stable d'un rendu à l'autre).
+
 ## [0.5.8] – 2026-07-26
 ### Ajouté
 

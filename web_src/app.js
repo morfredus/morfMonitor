@@ -131,24 +131,38 @@ function webUiLink(a) {
   return `<a href="${esc(ui.url)}" target="_blank" rel="noopener"${title}>${label} ↗</a>`;
 }
 
+// Etat ouvert/ferme des routes API, retenu d'un rendu au suivant. La page
+// reconstruit tout le tableau de l'Ecosysteme en innerHTML a chaque
+// rafraichissement ; sans ce releve, chaque <details> qu'on venait d'ouvrir se
+// refermait aussitot. La cle est l'identite d'INSTANCE, stable entre deux rendus
+// (le meme service sur la meme machine garde donc son etat).
+let openApiRows = new Set();
+
+// Cle stable d'une ligne pour suivre l'etat de sa colonne API.
+function apiRowKey(a) {
+  return a.instance || (a.app + '@' + (a.ip || a.host || ''));
+}
+
 // Liste d'API qu'un service ANNONCE (champ `api` de son /status, relaye tel quel
 // par /api/services). Purement descriptif : morfMonitor montre ce qu'un service
 // declare offrir, il n'appelle rien. Les chemins sont ceux du service ; la base
 // joignable depuis ici est dans a.api.base_url, pour qui veut composer une URL.
 //
 // Replie par defaut (<details>) : la cartographie ne doit pas noyer l'etat, qui
-// reste l'essentiel. On deplie pour inspecter.
+// reste l'essentiel. On deplie pour inspecter, et l'etat survit au rafraichissement.
 function apiCell(a) {
   const api = a.api;
   const eps = api && Array.isArray(api.endpoints) ? api.endpoints : [];
-  if (!eps.length) return '<span class="info-label">—</span>';
+  if (!eps.length) return '<span class="info-label">-</span>';
   const rows = eps.map((e) =>
     `<div class="mono" style="white-space:nowrap;margin:.15rem 0">` +
       `<span class="badge badge-off">${esc(e.method || 'GET')}</span> ${esc(e.path || '')}` +
-      (e.summary ? `<span class="info-label"> — ${esc(e.summary)}</span>` : '') +
+      (e.summary ? `<span class="info-label"> - ${esc(e.summary)}</span>` : '') +
     `</div>`).join('');
   const n = eps.length;
-  return `<details><summary>${n} route${n > 1 ? 's' : ''}</summary>${rows}</details>`;
+  const key = apiRowKey(a);
+  const open = openApiRows.has(key) ? ' open' : '';
+  return `<details data-api-key="${esc(key)}"${open}><summary>${n} route${n > 1 ? 's' : ''}</summary>${rows}</details>`;
 }
 
 // Nom d'affichage d'un service : on part du nom qu'il ANNONCE (champ `app` du
@@ -431,6 +445,14 @@ function renderServices(all) {
 }
 
 function renderEcosysteme(all) {
+  // Releve l'etat des routes depliees AVANT de reconstruire le tableau, pour le
+  // restaurer a l'identique. Sans cela, le rafraichissement periodique refermait
+  // ce que l'utilisateur venait d'ouvrir.
+  openApiRows = new Set();
+  document.querySelectorAll('#c-beacon details[data-api-key]').forEach((d) => {
+    if (d.open) openApiRows.add(d.getAttribute('data-api-key'));
+  });
+
   const s = all.services || {};
   const apps = s.beacon || [];
   const offlineAfter = s.beacon_offline_after_s;
