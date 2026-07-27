@@ -1,11 +1,11 @@
-# Journal des versions — morfMonitor
+# Journal des versions - morfMonitor
 
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
-## [0.5.9] – 2026-07-26
+## [0.5.9] - 2026-07-26
 ### Corrigé
 
 - **Les routes API dépliées restaient ouvertes au rafraîchissement.** La page
@@ -23,7 +23,7 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
   un pair sain répond du premier coup, sans délai. Observer ne doit jamais nuire,
   quel que soit le nombre d'observateurs.
 
-## [0.5.8] – 2026-07-26
+## [0.5.8] - 2026-07-26
 ### Ajouté
 
 - **Cartographie de l'API des pairs.** morfMonitor lit désormais le champ `api`
@@ -42,14 +42,14 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
   déclarent une interface. Toujours borné (un appel par version), toujours en
   lecture : morfMonitor observe, ne relaie rien.
 
-## [0.5.7] – 2026-07-26
+## [0.5.7] - 2026-07-26
 
 ### Ajouté
 
 - **`/status` déclare l'API d'observation** (`GET /api/system`, `/api/resources`,
   `/api/network`, `/api/services`, `/api/reboot`, `/api/config`, `/api/all`, sous
-  la base `/api`), en plus de l'interface web déjà annoncée. Un observateur — un
-  autre morfMonitor, un futur portail — découvre ainsi non seulement l'existence
+  la base `/api`), en plus de l'interface web déjà annoncée. Un observateur - un
+  autre morfMonitor, un futur portail - découvre ainsi non seulement l'existence
   et l'interface de ce service, mais comment l'interroger. Toutes les routes sont
   en lecture : morfMonitor observe, n'agit jamais (morfBeacon 0.5.0).
 
@@ -64,13 +64,13 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
   propres règles de découverte n'aurait aucune raison d'être cru sur les autres.
 
 
-## [0.5.6] – 2026-07-23
+## [0.5.6] - 2026-07-23
 
 ### Corrigé
 
 - **L'adresse retenue pour un émetteur multi-domicilié est celle du vrai réseau
   local.** Un service diffuse sur *toutes* les interfaces de sa machine ; un
-  poste Windows avec WSL ou Hyper-V, un portable sous VPN, en ont plusieurs — et
+  poste Windows avec WSL ou Hyper-V, un portable sous VPN, en ont plusieurs - et
   le dernier datagramme reçu gagnait. morfMonitor affichait donc « 172.24.224.1 »
   (réseau virtuel) pour une machine joignable en « 192.168.1.14 », que les
   autres superviseurs voyaient d'ailleurs correctement. L'adresse restait exacte
@@ -79,7 +79,7 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
 
   morfMonitor conserve désormais la **meilleure** adresse entendue, pas la
   dernière : celle qui appartient au même réseau que lui. Son propre réseau est
-  déterminé par l'interface portant la route par défaut — obtenue en
+  déterminé par l'interface portant la route par défaut - obtenue en
   « connectant » une socket UDP vers une adresse réservée à la documentation
   (RFC 5737), ce qui n'émet **aucun paquet** et ne fait que révéler la route.
   La présence continue d'être rafraîchie à chaque heartbeat ; seule l'adresse
@@ -89,15 +89,15 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
   Vérifié sur le parc réel : PC-Fred, vu depuis lui-même, est enfin annoncé en
   192.168.1.14. Cette piste, ouverte dans la roadmap, en est retirée.
 
-## [0.5.5] – 2026-07-23
+## [0.5.5] - 2026-07-23
 
 ### Ajouté
 
 - **Processeur et mémoire collectés sous Windows.** La page Ressources ne
   restait plus vide que du CPU et de la RAM sur un poste Windows, faute de
-  `/proc`. Ils viennent désormais de l'API Win32 — `GetSystemTimes` (taux
+  `/proc`. Ils viennent désormais de l'API Win32 - `GetSystemTimes` (taux
   d'occupation, même calcul de delta que `/proc/stat`) et `GlobalMemoryStatusEx`
-  (mémoire physique) — au même format JSON que sous Linux, si bien que
+  (mémoire physique) - au même format JSON que sous Linux, si bien que
   l'interface ne connaît toujours pas la plateforme. L'onglet État général
   gagne aussi l'OS, le noyau et l'uptime (`QSysInfo`, `GetTickCount64`). Toute
   cette connaissance reste confinée aux collecteurs (`#ifdef` de plus bas
@@ -110,15 +110,15 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
   carte « Métriques indisponibles » explique que le taux CPU répond à la même
   question. De même, le fichier d'échange n'est pas mesuré (les champs
   `GlobalMemoryStatusEx` ne l'isolent pas ; une première tentative affichait un
-  alarmant « 100 % » — la fausse alerte que morfMonitor existe pour éviter), et
+  alarmant « 100 % » - la fausse alerte que morfMonitor existe pour éviter), et
   la température, qui demanderait WMI, est omise. Rien d'inventé.
 
-## [0.5.4] – 2026-07-23
+## [0.5.4] - 2026-07-23
 
 ### Corrigé
 
 - **Le stockage s'affiche de nouveau sous Windows.** La supervision multi-volumes
-  (0.5.2) filtrait les volumes par un périphérique commençant par `/dev/` — ce
+  (0.5.2) filtrait les volumes par un périphérique commençant par `/dev/` - ce
   qui écartait tmpfs et les squashfs des snaps sous Linux, mais aussi **tous**
   les volumes Windows (`C:`, `D:`…), dont le périphérique ne suit pas cette
   convention. La page Ressources restait vide de tout stockage sur une machine
@@ -127,7 +127,7 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
   est portable, le filtre l'est redevenu. Inchangé sous Linux ; sous Windows,
   chaque disque réel apparaît à nouveau, jauge et anomalie comprises.
 
-## [0.5.3] – 2026-07-22
+## [0.5.3] - 2026-07-22
 
 ### Modifié
 
@@ -135,23 +135,23 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
   (« afficher l'information utile plutôt que toute l'information
   disponible »), origine des données, seuils et tendance du stockage, type de
   machine dans l'Écosystème, et l'évolution vers une console d'état de
-  morfSystem — point d'entrée **en lecture** de l'administration. Trois
+  morfSystem - point d'entrée **en lecture** de l'administration. Trois
   pistes sont explicitement bornées par les arbitrages existants : les
   journaux attendent l'authentification et R5, les alertes restent émises par
   morfNotify, et commander (redémarrer, mettre à jour) reste le rôle de
   morfTools.
 
-## [0.5.2] – 2026-07-22
+## [0.5.2] - 2026-07-22
 
 ### Corrigé
 
 - **Le stockage couvre tous les volumes montés, plus la seule racine.** Sur
-  une machine où `/home` est une partition séparée — installation Linux
-  classique sur un portable — la page Ressources pouvait afficher « / » à
+  une machine où `/home` est une partition séparée - installation Linux
+  classique sur un portable - la page Ressources pouvait afficher « / » à
   90 % et affoler alors que les données avaient ailleurs toute la place, ou à
   l'inverse taire un `/home` plein. L'API expose désormais `disks` : un objet
   par système de fichiers adossé à un périphérique (`/dev/…`), pseudo-montages
-  écartés (tmpfs, squashfs des snaps — en lecture seule, toujours « pleins » à
+  écartés (tmpfs, squashfs des snaps - en lecture seule, toujours « pleins » à
   100 %), montages bind dédupliqués, tri par point de montage. `disk` (la
   seule racine) est conservé pour les consommateurs existants.
 
@@ -161,7 +161,7 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
   d'anomalie par volume** (« Stockage /home » à 92 % est signalé pour
   lui-même, avec son point de montage dans le libellé).
 
-## [0.5.1] – 2026-07-22
+## [0.5.1] - 2026-07-22
 
 ### Modifié
 
@@ -171,7 +171,7 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
   Le pavé d'un seul tenant se consultait mal. Le délai reste tiré de la
   configuration (`beacon.offline_after_s`), jamais écrit en dur.
 
-## [0.5.0] – 2026-07-22
+## [0.5.0] - 2026-07-22
 
 ### Corrigé
 
@@ -180,7 +180,7 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
   même service (un morfMonitor sur le Pi, un autre sur un portable) se
   partageaient une seule entrée, et l'affichage alternait entre les hôtes à
   chaque heartbeat. La découverte est désormais indexée par l'**identité
-  d'instance** — le champ `instance` (`app@host`) que PROTOCOL.md avait prévu
+  d'instance** - le champ `instance` (`app@host`) que PROTOCOL.md avait prévu
   précisément pour ça, ou `app@ip` pour un émetteur qui ne l'annonce pas.
 
 ### Modifié
@@ -200,20 +200,20 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
   finit donc par disparaître de la liste au lieu d'y rester en panne
   perpétuelle.
 
-## [0.4.1] – 2026-07-22
+## [0.4.1] - 2026-07-22
 
 ### Modifié
 
 - **L'onglet Écosystème affiche le nom que chaque service ANNONCE**, plus un
   libellé défini côté morfMonitor. Un service renommé s'affiche désormais
   correctement de lui-même : la configuration n'est plus une seconde source de
-  vérité qui pouvait mentir. Seul le préfixe « morf » est normalisé — minuscule,
-  lettre suivante en majuscule — de sorte que « morfdashboard » et
+  vérité qui pouvait mentir. Seul le préfixe « morf » est normalisé - minuscule,
+  lettre suivante en majuscule - de sorte que « morfdashboard » et
   « morfDashboard » se lisent pareil, les majuscules internes
   (« morfTemplateService ») étant conservées. Un nom sans préfixe morf
   (ComponentHub, MeteoHub) est affiché tel qu'annoncé.
 
-## [0.4.0] – 2026-07-22
+## [0.4.0] - 2026-07-22
 
 ### Corrigé
 
@@ -231,11 +231,11 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
   `enabled` : morfMonitor était le seul des deux à les mélanger.
 
 - **L'interface reflète la même séparation.** Le fait déclaratif passe en
-  pastille près du nom — « non supervisé », à côté du « non déclaré » déjà
-  présent — et la colonne État montre l'état observé. Un service hors ligne
+  pastille près du nom - « non supervisé », à côté du « non déclaré » déjà
+  présent - et la colonne État montre l'état observé. Un service hors ligne
   n'est en rouge que si quelqu'un a promis le contraire.
 
-## [0.3.9] – 2026-07-21
+## [0.3.9] - 2026-07-21
 
 ### Documentation
 
@@ -251,7 +251,7 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
 - **L'avertissement est aussi dans les fichiers que l'on édite.** L'en-tête des
   deux exemples dit désormais que le fichier n'est **pas** lu tel quel, où il
   est déployé, et que le modifier ne change rien tant que le déploiement n'a pas
-  été lancé — la cause la plus fréquente de « j'ai pourtant corrigé ça ».
+  été lancé - la cause la plus fréquente de « j'ai pourtant corrigé ça ».
 
   Celui de `morfmonitor.example.json` était **trompeur** : il citait
   `/etc/morfmonitor/` sans jamais mentionner `/opt/morfmonitor/`, l'emplacement
@@ -261,7 +261,7 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
   explicitement : **déclarer, c'est s'attendre** (`enabled: true` transforme une
   absence en anomalie) et **le fichier réel gagne sur l'exemple**.
 
-## [0.3.8] – 2026-07-21
+## [0.3.8] - 2026-07-21
 
 ### Corrigé
 
@@ -280,7 +280,7 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
   installation neuve plaçait la configuration du service mais pas celle du parc :
   morfMonitor démarrait et ne supervisait **rien**, sans raison apparente. Et un
   paramètre apparu dans la description du parc n'atteignait jamais une
-  installation existante — exactement le défaut que `update` corrigeait déjà
+  installation existante - exactement le défaut que `update` corrigeait déjà
   pour l'autre fichier.
 
   Les deux configurations sont désormais traitées par les trois commandes.
@@ -288,7 +288,7 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
 ### Ajouté
 
 - `deploy-config.sh --if-absent` : ne place que les fichiers manquants, sans
-  jamais écraser. C'est ce dont l'installation a besoin — produire un système
+  jamais écraser. C'est ce dont l'installation a besoin - produire un système
   qui fonctionne sans effacer les réglages d'une installation précédente.
 
 ### Note
@@ -298,7 +298,7 @@ service ajouté à `systemd_services` ou une application ajoutée à `beacon_app
 n'arrive pas par cette voie, car ce serait activer une surveillance non
 demandée. `deploy-config.sh` écrase et les apporte.
 
-## [0.3.7] – 2026-07-21
+## [0.3.7] - 2026-07-21
 
 ### Modifié
 
@@ -309,37 +309,37 @@ demandée. `deploy-config.sh` écrase et les apporte.
 
   ComponentHub et SiteWatch sont lancées de temps en temps sur un poste de
   bureau. Les marquer attendues les faisait signaler en panne dès leur
-  fermeture — un bruit permanent qui finit par masquer les vraies pannes,
+  fermeture - un bruit permanent qui finit par masquer les vraies pannes,
   exactement ce que la correction de la 0.3.2 cherchait à éviter.
 
   Un commentaire explique désormais quand mettre `true` : ce qui tourne en
-  permanence, et rien d'autre. MeteoHub reste à `true` — un capteur météo qui
+  permanence, et rien d'autre. MeteoHub reste à `true` - un capteur météo qui
   s'arrête est une panne.
 
-## [0.3.6] – 2026-07-21
+## [0.3.6] - 2026-07-21
 
 ### Ajouté
 
 - **L'adresse IP de la machine figure sur la page État général.** Elle ne vivait
   que dans l'onglet Réseau. Or c'est la première chose que l'on cherche quand un
-  client externe — SSH, un client FTP, un signet de navigateur — cesse de se
+  client externe - SSH, un client FTP, un signet de navigateur - cesse de se
   connecter après un changement de bail DHCP : la faire chercher dans un second
   onglet transforme une question de trois secondes en enquête.
 
   Seules les interfaces **réellement actives** sont listées, avec leur nom
-  (`192.168.1.105 (wlan0)`). Une interface montée mais sans lien — un `eth0`
-  dont le câble est débranché — n'apparaît pas : afficher une adresse qui ne
+  (`192.168.1.105 (wlan0)`). Une interface montée mais sans lien - un `eth0`
+  dont le câble est débranché - n'apparaît pas : afficher une adresse qui ne
   porte aucun trafic serait pire que ne rien afficher.
 
-## [0.3.5] – 2026-07-21
+## [0.3.5] - 2026-07-21
 
 ### Modifié
 
 - **`deploy-config.sh` déploie désormais les DEUX configurations.** Il ne
   poussait que `morfmonitor.json` vers `/opt` ; la configuration partagée
   passait par un autre script, dans un autre dépôt, sous un autre nom. Cinq
-  points d'entrée coexistaient pour une seule opération — `config-tool`,
-  `shared-config`, `config shared`, `config deploy`, `deploy-config` — et rien
+  points d'entrée coexistaient pour une seule opération - `config-tool`,
+  `shared-config`, `config shared`, `config deploy`, `deploy-config` - et rien
   ne permettait de deviner lequel faisait quoi.
 
   Une commande suffit maintenant :
@@ -351,7 +351,7 @@ demandée. `deploy-config.sh` écrase et les apporte.
   Elle pousse `morfmonitor.json` vers `/opt/morfmonitor/` **et**
   `morfsystem.json` vers `/etc/morfsystem/`, sauvegarde chaque fichier
   existant, affiche les différences appliquées, puis redémarre `morfmonitor`
-  **et** `morfdashboard` — la configuration partagée étant lue par les deux,
+  **et** `morfdashboard` - la configuration partagée étant lue par les deux,
   ne relancer que l'un laisserait l'autre sur l'ancienne description du parc.
 
   `--service` et `--shared` restreignent à l'une des deux.
@@ -360,7 +360,7 @@ demandée. `deploy-config.sh` écrase et les apporte.
   (`MT_SUDO`), vide quand on est déjà root et surchargeable pour déployer vers
   un emplacement accessible sans privilèges.
 
-  Sans cela il n'était testable que sur une machine réelle — et le `sudo` que
+  Sans cela il n'était testable que sur une machine réelle - et le `sudo` que
   fournit Windows 11, qui **renvoie 0 quoi qu'il arrive**, faisait passer un
   test pour concluant alors qu'il ne vérifiait rien : le script annonçait
   « identique » sur deux fichiers différents et une sauvegarde sur un dossier
@@ -371,14 +371,14 @@ demandée. `deploy-config.sh` écrase et les apporte.
   (`update-service`, `config-tool`) sont présentés par le besoin auquel ils
   répondent, pas par leur nom.
 
-## [0.3.4] – 2026-07-21
+## [0.3.4] - 2026-07-21
 
 ### Modifié
 
 - **`deploy-config` n'exige plus d'être préfixé par `sudo`** : il élève
   lui-même les seules écritures système, comme le fait `config.sh shared`. Les
   deux sous-commandes du point d'entrée unifié demandaient jusqu'ici l'inverse
-  l'une de l'autre — une incohérence introduite en les unifiant. La règle est
+  l'une de l'autre - une incohérence introduite en les unifiant. La règle est
   désormais unique : **aucune commande `config` ne se préfixe par `sudo`**.
 
   Lancer tout un script en root pour quelques écritures faisait aussi tourner
@@ -386,8 +386,8 @@ demandée. `deploy-config.sh` écrase et les apporte.
   aucun besoin.
 
   Côté Windows, il n'existe pas d'équivalent : un script ne peut pas élever une
-  seule écriture. Plutôt qu'exiger l'administrateur d'emblée — inutile quand
-  `-AppDir` vise un dossier accessible — l'échec d'écriture est intercepté et
+  seule écriture. Plutôt qu'exiger l'administrateur d'emblée - inutile quand
+  `-AppDir` vise un dossier accessible - l'échec d'écriture est intercepté et
   explique précisément la cause. Un « accès refusé » brut enverrait chercher un
   problème de fichier là où il s'agit de droits.
 
@@ -398,20 +398,20 @@ demandée. `deploy-config.sh` écrase et les apporte.
   l'explique, et présente `network_services` comme le dernier recours pour un
   équipement qui ne s'annonce pas.
 
-## [0.3.3] – 2026-07-21
+## [0.3.3] - 2026-07-21
 
 ### Corrigé
 
 - **Les liens de l'interface étaient illisibles sur le fond sombre.** Seuls ceux
   du pied de page étaient stylés ; ceux des tableaux gardaient le bleu-violet
   par défaut du navigateur, quasi invisible sur `#1e293b`. Ils reprennent
-  désormais la couleur d'accent, avec `:visited` explicite — sans quoi un lien
+  désormais la couleur d'accent, avec `:visited` explicite - sans quoi un lien
   déjà ouvert repassait en violet, ce qui touchait précisément les liens vers
   les interfaces, ceux qu'on ouvre le plus souvent.
 
   Contraste mesuré : **6.83:1**, au-delà du seuil AA (4.5:1).
 
-## [0.3.2] – 2026-07-21
+## [0.3.2] - 2026-07-21
 
 ### Corrigé
 
@@ -422,7 +422,7 @@ demandée. `deploy-config.sh` écrase et les apporte.
   aurait fini par noyer les vraies pannes. Seules les applications **déclarées**
   justifient désormais une alerte.
 
-- **`m_beaconSeen` n'était jamais purgé** — aucun `remove`, `erase` ni `clear`.
+- **`m_beaconSeen` n'était jamais purgé** - aucun `remove`, `erase` ni `clear`.
   Une application entendue une seule fois y restait à vie, et la table ne
   pouvait que croître. Les entrées **non déclarées** sont désormais oubliées
   après une heure sans annonce : assez long pour qu'une découverte reste
@@ -442,15 +442,15 @@ demandée. `deploy-config.sh` écrase et les apporte.
 - **MeteoHub passe de `network_services` à `beacon_apps`** dans
   `morfsystem.example.json`. La sonde TCP existait parce que MeteoHub n'était pas
   découvrable ; il l'est depuis son firmware 1.13.0. La sonde suppose de
-  connaître une adresse à l'avance — l'inverse d'une découverte — et le
+  connaître une adresse à l'avance - l'inverse d'une découverte - et le
   commentaire la présente désormais comme le mécanisme de dernier recours.
 
   Le déplacement n'est pas qu'un nettoyage : une application **déclarée** est
   toujours listée, même jamais entendue, donc son absence se voit. Non déclarée,
-  elle n'apparaît que si elle s'annonce — si elle ne démarre jamais, personne ne
+  elle n'apparaît que si elle s'annonce - si elle ne démarre jamais, personne ne
   l'apprend.
 
-## [0.3.1] – 2026-07-21
+## [0.3.1] - 2026-07-21
 
 ### Corrigé
 
@@ -461,7 +461,7 @@ demandée. `deploy-config.sh` écrase et les apporte.
   La déclaration a révélé un second défaut : morfMonitor sert son **propre**
   `/status` au lieu d'utiliser le `StatusServer` de morfBeacon, et ne
   connaissait donc pas les champs `webUi`. La capacité partait bien dans le
-  heartbeat, mais le détail restait introuvable — un observateur ne pouvait pas
+  heartbeat, mais le détail restait introuvable - un observateur ne pouvait pas
   construire le lien.
 
   Les deux sont corrigés : morfMonitor se déclare comme n'importe quel autre
@@ -476,7 +476,7 @@ demandée. `deploy-config.sh` écrase et les apporte.
   La déclaration est conditionnée à `web_enabled` : annoncer une interface
   désactivée produirait un lien mort.
 
-## [0.3.0] – 2026-07-21
+## [0.3.0] - 2026-07-21
 
 Première étape de l'**observatoire** : morfMonitor ne se contente plus de dire
 quels services vivent, il permet d'atteindre ceux qui exposent une interface.
@@ -502,7 +502,7 @@ Sans rien connaître d'eux, et sans jamais se mettre sur le chemin.
 
   C'est le « pull detail » du protocole, pas une sonde périodique : le détail
   n'est redemandé que si la version du service change. Un échec est sans
-  conséquence — le service reste supervisé, simplement sans lien.
+  conséquence - le service reste supervisé, simplement sans lien.
 
 - `/api/services` expose désormais, par entrée beacon : `ip`, `status_port`,
   `capabilities` et, le cas échéant, `web_ui` complété d'une `url` prête à
@@ -528,7 +528,7 @@ Le cas ne se produit pas sur la cible de production (un Raspberry Pi avec une
 seule interface active) et n'affecte que le lien, jamais la supervision. Une
 sélection préférant l'interface portant la route du réseau local reste à faire.
 
-## [0.2.0] – 2026-07-21
+## [0.2.0] - 2026-07-21
 
 Cette version ajoute une interface Web et corrige une série de défauts qui
 partagent tous une même cause : **du code écrit contre un schéma supposé plutôt
@@ -543,7 +543,7 @@ en production a servi de référence pour tout reprendre.
   Un service de supervision est précisément ce que l'on sonde : une sonde
   externe en HEAD concluait que morfMonitor était en panne alors qu'il
   répondait parfaitement. HEAD suit désormais le même routage que GET, renvoie
-  les mêmes en-têtes — `Content-Length` compris, comme l'exige HTTP — sans le
+  les mêmes en-têtes - `Content-Length` compris, comme l'exige HTTP - sans le
   corps. Les réponses 405 portent un en-tête `Allow`.
 
 - **`Cache-Control: no-store` sur toutes les réponses.** Une réponse `/api/` en
@@ -555,8 +555,8 @@ en production a servi de référence pour tout reprendre.
 - **Interface Web, servie à la racine sur le même port que l'API.** L'ajout de
   services à l'écosystème dépasse ce qu'un écran embarqué peut montrer :
   RaspberryDashboard reste la vue synthétique, l'interface Web devient la vue
-  détaillée. Six pages organisées par domaine — état général, ressources,
-  réseau, services morfSystem, écosystème, diagnostic — plutôt qu'une liste de
+  détaillée. Six pages organisées par domaine - état général, ressources,
+  réseau, services morfSystem, écosystème, diagnostic - plutôt qu'une liste de
   métriques sans structure.
 
   L'écran OLED répond à « est-ce que tout va bien ? ». L'interface Web répond à
@@ -569,7 +569,7 @@ en production a servi de référence pour tout reprendre.
 
   Cette contrainte n'est pas cosmétique. morfMonitor annonce « il n'affiche
   rien » : sa responsabilité est de collecter et d'exposer. Tant que la vue Web
-  reste cliente de l'API, elle n'est qu'une **seconde vue** — extractible vers
+  reste cliente de l'API, elle n'est qu'une **seconde vue** - extractible vers
   un projet séparé sans réécriture, si elle devait un jour le devenir. Le jour
   où elle lirait `MonitorModule` directement, cette propriété serait perdue en
   silence.
@@ -590,24 +590,24 @@ en production a servi de référence pour tout reprendre.
   trois langages de l'écosystème qui tourne à l'identique sous Windows, Linux
   et Raspberry Pi. Les `.ps1` appellent les mêmes `.py`. Réécrire une fusion
   JSON récursive en Bash *et* en PowerShell donnerait deux implémentations
-  libres de diverger, à propos du fichier qui décide si le service fonctionne —
+  libres de diverger, à propos du fichier qui décide si le service fonctionne -
   même raison que `morfTools/scripts/ecosystem-check.py`, partagé par `morf.sh`
   et `morf.ps1`.
 
   `check-config.py` accepte `--hint-style sh|ps1` : l'appelant déclare
-  l'outillage à citer dans ses conseils. `os.name` ne suffisait pas — il décrit
+  l'outillage à citer dans ses conseils. `os.name` ne suffisait pas - il décrit
   l'interpréteur, pas le shell appelant.
 
 - **`scripts/linux/deploy-config.sh` et son équivalent PowerShell.** La voie
   directe : copier la configuration du dépôt par-dessus celle du service, sans
   fusion et sans Python. La source est `config/morfmonitor.json` si ce fichier
   existe, l'exemple sinon. Sauvegarde datée et aperçu plafonné des différences
-  avant écrasement — écraser sans montrer quoi serait une mauvaise façon de
+  avant écrasement - écraser sans montrer quoi serait une mauvaise façon de
   simplifier.
 
 - **`scripts/linux/config-tool.sh` : gestion à la demande de la configuration
   déployée.** L'installation et la mise à jour ne remplacent jamais
-  `morfmonitor.json` — il porte des réglages locaux irrécupérables. C'est la
+  `morfmonitor.json` - il porte des réglages locaux irrécupérables. C'est la
   bonne règle, mais elle laissait un angle mort : `merge-config.py` ajoute les
   clés apparues depuis l'installation, il ne corrige pas une valeur **déjà
   présente devenue invalide**.
@@ -617,7 +617,7 @@ en production a servi de référence pour tout reprendre.
   touchait pas, et le service tournait en répondant 503 partout. Le nouveau
   binaire était bien copié ; la configuration, elle, restait figée.
 
-  Réconcilier une valeur existante ne peut pas être automatique — seul
+  Réconcilier une valeur existante ne peut pas être automatique - seul
   l'utilisateur sait si une valeur est un réglage voulu ou un résidu. L'outil
   rend donc l'opération explicite : `status`, `check`, `diff`, `merge`
   (ajout seul), `reset` (remplacement, confirmation requise). Toute écriture est
@@ -658,7 +658,7 @@ en production a servi de référence pour tout reprendre.
 
 - **Les entrées beacon désactivées étaient peintes en rouge « hors ligne ».**
   Une application volontairement désactivée (`enabled: false`) n'est pas en
-  panne — même confusion que celle corrigée pour les sondes réseau.
+  panne - même confusion que celle corrigée pour les sondes réseau.
 
 - **La carte « Configuration partagée » annonçait « non chargée » en
   permanence.** Elle lisait `all.monitor.config_loaded`, or `/api/all` n'expose
@@ -674,7 +674,7 @@ en production a servi de référence pour tout reprendre.
 
 - **L'interface Web contredisait la réalité sur la page « Services
   morfSystem ».** Les six services affichaient un badge « arrêté » à côté d'une
-  colonne indiquant « active » — une contradiction dans la même ligne — et
+  colonne indiquant « active » - une contradiction dans la même ligne - et
   MeteoHub était noté « injoignable » alors qu'il répondait.
 
   Cause : l'interface avait été écrite contre un schéma JSON **supposé**. Sous
@@ -686,7 +686,7 @@ en production a servi de référence pour tout reprendre.
 
 - **Plus grave que des noms de champs : l'interface écrasait des états que le
   service prend soin de distinguer.** `Supervisor` renvoie quatre états de
-  sonde — `online`, `offline`, `pending`, `disabled` — avec ce commentaire
+  sonde - `online`, `offline`, `pending`, `disabled` - avec ce commentaire
   explicite : « *On ne ment pas : « pas encore sondé » n'est pas « hors
   ligne »* ». Pendant le délai de grâce mDNS du démarrage, une sonde est
   `pending` ; l'affichage binaire la déclarait injoignable, annulant
@@ -700,7 +700,7 @@ en production a servi de référence pour tout reprendre.
   attente : les signaler noierait les vraies pannes sous du bruit prévisible.
 
 - **Les avertissements et les erreurs n'atteignaient jamais le journal.**
-  `err()` était un `QTextStream` sur `stderr` qui n'était jamais vidé — seul
+  `err()` était un `QTextStream` sur `stderr` qui n'était jamais vidé - seul
   `out()` l'était. Un démon systemd ne se terminant pas, tout ce qui passait
   par `err()` restait dans le tampon : type de module inconnu, configuration
   introuvable, échec d'écoute du port. `journalctl -u morfmonitor` ne montrait
@@ -711,7 +711,7 @@ en production a servi de référence pour tout reprendre.
   désormais par `errLine()`, qui vide le flux à chaque appel.
 
 - **Sans configuration, le service démarrait avec un module `example` inconnu
-  de sa propre fabrique** — donc 0 module actif et 503 sur toutes les routes
+  de sa propre fabrique** - donc 0 module actif et 503 sur toutes les routes
   `/api/`. Le repli produisait un service qui *avait l'air* vivant : il
   démarrait, écoutait, annonçait sa présence sur le LAN, mais ne supervisait
   rien. Il déclare maintenant un module `monitor`, la configuration partagée
@@ -721,12 +721,12 @@ en production a servi de référence pour tout reprendre.
   données ».** Sur un 503, elle levait une exception avant de lire le corps de
   la réponse, si bien que le message explicatif prévu pour ce cas était
   inatteignable. Elle affichait « injoignable » pour un service qui répondait
-  parfaitement — envoyant chercher une panne réseau là où il s'agissait d'une
+  parfaitement - envoyant chercher une panne réseau là où il s'agissait d'une
   configuration. Les deux cas sont désormais distingués, et le corps de la
   réponse 503 est lu et affiché avec la marche à suivre.
 
 - **La configuration d'exemple déclarait un module `example`, inconnu de la
-  fabrique de morfMonitor** — un résidu du gabarit, jamais adapté au clonage.
+  fabrique de morfMonitor** - un résidu du gabarit, jamais adapté au clonage.
   Seul le type `monitor` est reconnu. Toute personne copiant
   `morfmonitor.example.json` obtenait donc un service qui démarre normalement,
   annonce sa présence sur le LAN, mais dont **chaque route `/api/` répond 503
@@ -737,7 +737,7 @@ en production a servi de référence pour tout reprendre.
 
 - **Le plan d'adressage du parc quitte ce projet.** Le champ `_comment_port` de
   `config/morfmonitor.example.json` était le seul endroit de l'écosystème où le
-  plan des ports était écrit — alors que morfMonitor n'a aucune autorité sur les
+  plan des ports était écrit - alors que morfMonitor n'a aucune autorité sur les
   autres composants. Cette copie partielle d'un fait valable pour tout le parc
   était déjà incomplète : elle omettait 8789 (morfNotify) et 8787 (défaut du
   serveur de statut morfBeacon). Un développeur la consultant pour choisir un
@@ -748,7 +748,7 @@ en production a servi de référence pour tout reprendre.
   `morf doctor` vérifie que la valeur déclarée ici lui correspond. Le port
   d'écoute de morfMonitor (8790) est inchangé ; seul le commentaire l'est.
 
-## [0.1.1] – 2026-07-20
+## [0.1.1] - 2026-07-20
 
 ### Corrigé
 
@@ -771,7 +771,7 @@ en production a servi de référence pour tout reprendre.
   L'entrée « Guide de création de service mis à jour » de cette même section
   devient sans objet et disparaît avec eux.
 
-## [0.1.0] – 2026-07-20
+## [0.1.0] - 2026-07-20
 
 ### Corrigé
 
@@ -779,7 +779,7 @@ en production a servi de référence pour tout reprendre.
   **8799** du modèle, déjà attribué à morfAnalytics. Une fois morfMonitor
   installé en service, il prenait le port au démarrage et morfAnalytics ne
   pouvait plus écouter : il sortait en erreur et systemd le relançait en
-  boucle — **249 redémarrages** constatés. morfMonitor écoute désormais sur
+  boucle - **249 redémarrages** constatés. morfMonitor écoute désormais sur
   **8790**, et le fichier d'exemple rappelle l'attribution des ports du parc
   (8080 morfSync, 8788 morfSensor, 8790 morfMonitor, 8799 morfAnalytics).
 - **Réglages fantômes dans la configuration partagée.** `monitor.http_port`,
@@ -790,8 +790,8 @@ en production a servi de référence pour tout reprendre.
   sont supprimés, et le fichier partagé décrit désormais uniquement **ce qui est
   supervisé**, pas la manière dont chaque service écoute.
 - **La configuration n'était lue qu'au démarrage.** Un service lancé avant que
-  `/etc/morfsystem/morfsystem.json` existe — ordre de démarrage, installation en
-  cours — restait aveugle jusqu'à son prochain redémarrage : il répondait
+  `/etc/morfsystem/morfsystem.json` existe - ordre de démarrage, installation en
+  cours - restait aveugle jusqu'à son prochain redémarrage : il répondait
   correctement, mais ne supervisait rien, ce qui est le pire des deux mondes.
   Le chargement est désormais retenté tant qu'il n'a pas abouti, et les caches
   bâtis sur une configuration vide sont invalidés dès qu'elle arrive.
@@ -809,7 +809,7 @@ en production a servi de référence pour tout reprendre.
   architecture, modèle de machine, uptime, heure de démarrage.
 - **Collecte des ressources** (`GET /api/resources`) : taux et fréquence CPU,
   charge, mémoire, swap, disque, températures CPU et GPU, et **bits de bridage**
-  du Raspberry Pi (sous-tension, limite thermique) — le diagnostic le plus utile
+  du Raspberry Pi (sous-tension, limite thermique) - le diagnostic le plus utile
   d'une machine instable, absent partout ailleurs.
 - **Collecte réseau** (`GET /api/network`) : interfaces, IPv4, IPv6, adresse
   MAC, état. Les adresses lien-local sont écartées : elles encombrent sans
@@ -835,7 +835,7 @@ en production a servi de référence pour tout reprendre.
   `/proc/meminfo` est instantané, lancer `systemctl` coûte un processus, sonder
   un ESP32 peut prendre une seconde : leur imposer la même cadence gaspillerait
   d'un côté et ferait attendre de l'autre. Sans cache, dix clients rafraîchissant
-  chaque seconde provoqueraient dix lectures système par seconde — l'inverse du
+  chaque seconde provoqueraient dix lectures système par seconde - l'inverse du
   but recherché, qui est de soulager la machine en centralisant.
 
 ### Choix de conception
@@ -847,7 +847,7 @@ en production a servi de référence pour tout reprendre.
   absent, commande manquante) est omise ; le reste continue d'être servi.
 - **La mesure CPU est amorcée au démarrage.** `/proc/stat` ne donne que des
   compteurs cumulés : sans une première lecture d'amorçage, la toute première
-  requête renverrait un CPU absent, que les clients afficheraient comme 0 % —
+  requête renverrait un CPU absent, que les clients afficheraient comme 0 % -
   une valeur fausse, et non « inconnue ».
 
 ### Vérifié sur le matériel

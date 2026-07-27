@@ -7,7 +7,7 @@
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![License](https://img.shields.io/badge/License-GPL--3.0--only-blue)
 
-**morfMonitor — the single source of truth about a machine's state.**
+**morfMonitor - the single source of truth about a machine's state.**
 
 It collects system information, keeps it fresh, and exposes it as JSON. That is
 all. **It displays nothing.**
@@ -38,8 +38,8 @@ browser, a Qt application and an ESP32 equally well.
 morfMonitor serves a web interface at `/`, on the **same port as the API**.
 
 It is not a second service, and not a second collection: it is a **second view
-of the same data**. The page is served as inert assets — no server-side
-templating, no injected values — and fetches `/api/all` and `/status` exactly
+of the same data**. The page is served as inert assets - no server-side
+templating, no injected values - and fetches `/api/all` and `/status` exactly
 like any other client. morfDashboard and the browser read the same routes.
 
 | Page | Question it answers |
@@ -59,13 +59,13 @@ The two interfaces answer different questions, which is why both exist:
 Set `"web_enabled": false` to serve the JSON routes only.
 
 **Exposure.** The interface inherits `bind_address`, which defaults to
-`0.0.0.0` — every network interface on the machine. On a multi-homed or exposed
+`0.0.0.0` - every network interface on the machine. On a multi-homed or exposed
 host, set the LAN address instead. There is no authentication: the trust model
 is the local network, consistent with the ecosystem's LAN-only design.
 
 The diagnostic page deliberately exposes **no raw log viewer**. It reports
 anomalies derived from data the API already returns. Surfacing journald output
-would broaden the exposure profile well beyond metrics — log lines can quote
+would broaden the exposure profile well beyond metrics - log lines can quote
 paths, configuration values and, in error messages, credentials handled by other
 services. That remains a separate decision.
 
@@ -99,7 +99,7 @@ That is the most common cause of "but I already fixed that".
 **Declaring means expecting.** An application in `beacon_apps` with
 `enabled: true` is *expected*: its absence becomes an anomaly, in red, on the
 screen and in the diagnosis. An undeclared application that stops triggers
-nothing — nobody said it should be running. Reserve `true` for what runs
+nothing - nobody said it should be running. Reserve `true` for what runs
 continuously.
 
 **The real file wins over the example.** `install`, `update` and `deploy` use
@@ -112,7 +112,7 @@ the example stops being consulted.
 
 morfMonitor and morfDashboard read **the same file**,
 `/etc/morfsystem/morfsystem.json`. Adding a supervised component requires
-editing that file only — no code change in either program. JSON was chosen
+editing that file only - no code change in either program. JSON was chosen
 precisely so that neither C++ nor Python is privileged.
 
 It replaces the `SERVICE_LABELS`, `NETWORK_SERVICES` and `BEACON_APPS`
@@ -147,7 +147,7 @@ To push just one:
 ```
 
 The source is your real file (`config/morfsystem.json`) when it exists, and the
-example otherwise — so keeping a real file in the clone makes it the reference
+example otherwise - so keeping a real file in the clone makes it the reference
 that gets deployed.
 
 ### The other tools, and when they help
@@ -167,18 +167,18 @@ it after every update.
 
 **`install` and `update` follow the same source rule** as `deploy`: your real
 file when it exists, the example otherwise. All three now handle **both**
-configurations — `install` used to place only the service one, so a fresh
+configurations - `install` used to place only the service one, so a fresh
 install started up supervising nothing.
 
 `install` never replaces an existing file: it only puts down what is missing.
 
 **One limit worth knowing**: `update` adds new **keys**, never new **list
 entries**. A service added to `systemd_services`, or an application added to
-`beacon_apps`, will not arrive through `update` — that would switch on
+`beacon_apps`, will not arrive through `update` - that would switch on
 monitoring you never asked for. Use `deploy-config.sh`, which overwrites.
 
 From morfTools, `python3 ./morfTools/config.py deploy morfMonitor` calls the very same
-script — useful to drive several projects from one place, pointless if you are
+script - useful to drive several projects from one place, pointless if you are
 already inside morfMonitor.
 
 ### Linux and Windows parity
@@ -192,14 +192,14 @@ The **JSON logic stays in Python** (`merge-config.py`, `check-config.py`), calle
 unchanged by both sides. Python is the only one of the three languages in this
 ecosystem that runs identically on Windows, Linux and the Raspberry Pi;
 reimplementing a recursive JSON merge in both Bash and PowerShell would create
-two implementations free to disagree — about the file that decides whether the
+two implementations free to disagree - about the file that decides whether the
 service works at all.
 
 ## Reboot cause
 
 Not all reboots are alike: a power cut does not call for the same reaction as an
 update. morfMonitor cross-references several clues to tell them apart. The
-determination is **fallible by nature** — no single reliable source exists — so
+determination is **fallible by nature** - no single reliable source exists - so
 every answer carries a `confidence` level and the `evidence` used. When nothing
 settles it, the answer is `unknown` rather than a default "normal boot", which
 would hide a power cut.
@@ -227,4 +227,4 @@ welcome (see [CONTRIBUTING.md](CONTRIBUTING.md)).
 
 ## License
 
-GPL-3.0-only — © 2026 morfredus (Frédéric Biron).
+GPL-3.0-only - © 2026 morfredus (Frédéric Biron).

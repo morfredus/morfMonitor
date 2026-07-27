@@ -1,4 +1,4 @@
-# Roadmap — morfMonitor
+# Roadmap - morfMonitor
 
 morfMonitor supervise la machine hôte et expose son état en JSON. Il reste un
 service léger, qui doit tourner en continu sur un Raspberry Pi sans peser sur
@@ -40,7 +40,7 @@ pas d'agrégation de trafic. Les liens de l'interface Web restent de simples
 `href` vers l'adresse propre du service.
 
 Le test qui tranche : **si morfMonitor disparaît, les services continuent de
-fonctionner à l'identique — seule la facilité de navigation disparaît.** Cette
+fonctionner à l'identique - seule la facilité de navigation disparaît.** Cette
 propriété doit rester vraie, et elle se vérifie en coupant le service.
 
 Le mot compte. Un portail concentre progressivement sessions, authentification,
@@ -76,7 +76,7 @@ immédiatement d'où provient une information.
 L'un des premiers effets inattendus de morfMonitor a été la découverte d'un
 disque système presque saturé. L'analyse a montré que l'espace était consommé
 par les instantanés Timeshift. Cette expérience montre qu'un simple indicateur
-d'occupation est déjà très utile — mais qu'il pourrait évoluer.
+d'occupation est déjà très utile - mais qu'il pourrait évoluer.
 
 Des seuils lisibles (la page Diagnostic applique aujourd'hui 75 % / 90 % ;
 la cible envisagée) :
@@ -144,7 +144,7 @@ Trois de ces pistes touchent des arbitrages notés plus bas, et s'y plient :
 - **alertes** : morfNotify reste l'émetteur ; morfMonitor en présenterait
   l'état, il ne déciderait ni n'enverrait rien ;
 - **administrer n'est pas commander** : le point d'entrée est une **vue**.
-  Déclencher — redémarrer un service, lancer une mise à jour — reste le rôle
+  Déclencher - redémarrer un service, lancer une mise à jour - reste le rôle
   de morfTools, et l'exécution reste distribuée et autonome.
 
 ## Vision
@@ -165,12 +165,12 @@ Cette évolution se fait sans perdre le principe fondateur du projet :
 
 - **Tests de contrat** du serveur HTTP et des collecteurs. Prioritaire : la
   version 0.2.0 a corrigé huit défauts d'affichage qui partageaient une seule
-  cause — une interface écrite contre un schéma supposé. Un test comparant les
+  cause - une interface écrite contre un schéma supposé. Un test comparant les
   clés que produit `MonitorModule` à celles que lit `app.js` les aurait tous
   attrapés au premier commit.
 - **CI** (`.github/workflows`) : build multi-plateforme.
 - **Option d'authentification** du serveur HTTP (jeton). Préalable à toute
-  consultation de journaux ; à arbitrer avec R5 — le modèle de confiance
+  consultation de journaux ; à arbitrer avec R5 - le modèle de confiance
   actuel est le réseau local, ce qui reste cohérent tant qu'aucun journal
   n'est exposé.
 - **Rechargement de configuration** (SIGHUP) sans redémarrage du service.
@@ -190,12 +190,12 @@ Cette évolution se fait sans perdre le principe fondateur du projet :
   « pourquoi ? ». Les deux lisent la même API.
 - **Pas de logique de présentation côté serveur.** L'interface Web reste des
   fichiers inertes consommant `/api/`. Le jour où elle lirait `MonitorModule`
-  directement, elle cesserait d'être une seconde vue — et deviendrait
+  directement, elle cesserait d'être une seconde vue - et deviendrait
   inextricable du service.
 - **Pas de médiation d'accès** : ni proxy, ni relais, ni session, ni
   authentification pour le compte d'un autre service (voir l'invariant
   ci-dessus). L'accès distant relèvera d'un composant dédié, qui n'imposera
-  aucune modification aux services existants — ceux-ci continueront d'ignorer
+  aucune modification aux services existants - ceux-ci continueront d'ignorer
   qu'ils sont consultés depuis l'extérieur.
 - **Pas de journaux sans authentification.** La page Diagnostic dérive ses
   anomalies des données déjà exposées ; servir la sortie de journald attendra

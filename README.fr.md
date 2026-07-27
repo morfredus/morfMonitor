@@ -8,7 +8,7 @@
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
 ![License](https://img.shields.io/badge/License-GPL--3.0--only-blue)
 
-**morfMonitor — la source unique de vérité sur l'état d'une machine.**
+**morfMonitor - la source unique de vérité sur l'état d'une machine.**
 
 Il collecte les informations système, les tient à jour, et les expose en JSON.
 C'est tout. **Il n'affiche rien.**
@@ -72,8 +72,8 @@ instable, et il n'apparaît nulle part ailleurs.
 morfMonitor sert une interface Web à la racine, **sur le même port que l'API**.
 
 Ce n'est pas un second service, ni une seconde collecte : c'est une **seconde
-vue des mêmes données**. La page est servie comme des fichiers inertes — aucun
-gabarit, aucune valeur injectée côté serveur — et interroge `/api/all`,
+vue des mêmes données**. La page est servie comme des fichiers inertes - aucun
+gabarit, aucune valeur injectée côté serveur - et interroge `/api/all`,
 `/status` et `/api/config` exactement comme n'importe quel autre client.
 morfDashboard et le navigateur lisent les mêmes routes.
 
@@ -145,7 +145,7 @@ pas été lancé. C'est la cause la plus fréquente de « j'ai pourtant corrigé
 **Déclarer, c'est s'attendre.** Une application dans `beacon_apps` avec
 `enabled: true` est *attendue* : son absence devient une anomalie, en rouge, sur
 l'écran et dans le diagnostic. Une application non déclarée qui s'arrête ne
-déclenche rien — personne n'avait dit qu'elle devait tourner. Réservez `true` à
+déclenche rien - personne n'avait dit qu'elle devait tourner. Réservez `true` à
 ce qui tourne en permanence.
 
 **Le fichier réel gagne sur l'exemple.** `install`, `update` et `deploy`
@@ -160,7 +160,7 @@ morfMonitor et morfDashboard lisent **le même fichier** :
 `/etc/morfsystem/morfsystem.json` (voir `config/morfsystem.example.json`).
 
 C'est la source unique de vérité des composants supervisés. Ajouter un service,
-une sonde ou une application ne demande **que** d'éditer ce fichier — aucune
+une sonde ou une application ne demande **que** d'éditer ce fichier - aucune
 modification de code, dans aucun des deux programmes.
 
 Le format est du JSON, et non un fichier Python ou un en-tête C++, précisément
@@ -178,9 +178,9 @@ apparaître indique exactement quoi ajouter à la configuration.
 ## Cause du redémarrage
 
 Tous les redémarrages ne se valent pas : une coupure de courant n'appelle pas la
-même réaction qu'une mise à jour. morfMonitor croise plusieurs indices — traces
+même réaction qu'une mise à jour. morfMonitor croise plusieurs indices - traces
 d'arrêt dans le journal du démarrage précédent, journal de paquets, traces de
-panique noyau ou de chien de garde — pour distinguer :
+panique noyau ou de chien de garde - pour distinguer :
 
 | Cause | Signification |
 |---|---|
@@ -195,7 +195,7 @@ panique noyau ou de chien de garde — pour distinguer :
 **La détermination est faillible par nature** : il n'existe aucune source unique
 et fiable. Chaque réponse porte donc un champ `confidence` et un champ
 `evidence` décrivant l'indice retenu. Quand rien ne tranche, morfMonitor répond
-`unknown` — une réponse honnête, contrairement à un « démarrage normal » affirmé
+`unknown` - une réponse honnête, contrairement à un « démarrage normal » affirmé
 par défaut, qui masquerait une coupure.
 
 ## Mode dégradé du Dashboard
@@ -206,7 +206,7 @@ contresens.
 
 Si morfMonitor est arrêté, en cours de démarrage ou injoignable, le Dashboard
 reprend automatiquement sa collecte locale. Il revient tout aussi
-automatiquement au mode normal dès que le service répond — **aucun redémarrage
+automatiquement au mode normal dès que le service répond - **aucun redémarrage
 n'est nécessaire**, ce qui compte, puisque c'est pendant un incident qu'on
 regarde l'écran.
 
@@ -239,8 +239,8 @@ sudo ./service.py uninstall    # desinscrit, en conservant votre configuration
 ./service.py status            # ce que le systeme en dit
 ```
 
-Un seul point d'entree partout. Ce qu'est ce service — son nom, son dossier,
-ses configurations — est declare dans `service.json` a cote. Les quatre etapes
+Un seul point d'entree partout. Ce qu'est ce service - son nom, son dossier,
+ses configurations - est declare dans `service.json` a cote. Les quatre etapes
 d'installation vivent une seule fois pour tout le parc ; seul le gestionnaire
 de services change selon la plateforme.
 
@@ -308,14 +308,14 @@ clone en fait donc la référence déployée.
 
 **`install` et `update` suivent la même règle de source** que `deploy` : votre
 fichier réel s'il existe, l'exemple sinon. Et tous trois traitent désormais les
-**deux** configurations — `install` ne plaçait que celle du service, si bien
+**deux** configurations - `install` ne plaçait que celle du service, si bien
 qu'une installation neuve démarrait sans rien superviser.
 
 `install` ne remplace jamais un fichier existant : il ne pose que ce qui manque.
 
 **Une limite à connaître** : `update` ajoute les **clés** nouvelles, jamais les
 **entrées de liste**. Un service ajouté à `systemd_services` ou une application
-ajoutée à `beacon_apps` n'arrivera donc pas par `update` — ce serait activer une
+ajoutée à `beacon_apps` n'arrivera donc pas par `update` - ce serait activer une
 surveillance que vous n'avez pas demandée. Pour les récupérer, utiliser
 `deploy-config.sh`, qui écrase.
 
@@ -327,4 +327,4 @@ son API.
 
 ## Licence
 
-GPL-3.0-only — © 2026 morfredus (Frédéric Biron).
+GPL-3.0-only - © 2026 morfredus (Frédéric Biron).

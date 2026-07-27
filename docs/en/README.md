@@ -1,7 +1,7 @@
 # Documentation (English index)
 
 The in-depth documentation of morfMonitor is currently **available in
-French only**. Translations are welcome — see [CONTRIBUTING.md](../../CONTRIBUTING.md).
+French only**. Translations are welcome - see [CONTRIBUTING.md](../../CONTRIBUTING.md).
 
 Until then, here are the existing guides (in French, under [`docs/fr/`](../fr/)):
 

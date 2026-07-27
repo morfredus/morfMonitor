@@ -1,11 +1,11 @@
-# Architecture — morfMonitor
+# Architecture - morfMonitor
 
 Retour à l'[index de la documentation](README.md).
 
 ---
 
-Service Qt (Core + Network), sans interface. Le métier — la supervision de la
-machine — vit dans un `IModule`, `MonitorModule`, qui s'appuie sur les
+Service Qt (Core + Network), sans interface. Le métier - la supervision de la
+machine - vit dans un `IModule`, `MonitorModule`, qui s'appuie sur les
 collecteurs de `Collectors.h`.
 
 ## Les pièces
@@ -31,7 +31,7 @@ Chargées depuis un fichier JSON. `ServiceConfig` porte les réglages globaux
 (`type`, `id`, `params`) décrit un module à instancier. La configuration
 partagée `/etc/morfsystem/morfsystem.json` est lue par `SharedConfig`.
 
-### `IModule` (interface, QObject) — le point d'extension
+### `IModule` (interface, QObject) - le point d'extension
 
 C'est **ici** que vit le métier. Une sous-classe implémente `start()`, `stop()`
 et `statusJson()` (état exposé dans `/modules`), et peut émettre `updated()`.
@@ -97,11 +97,11 @@ injectée côté serveur.
 
 Ce n'est pas cosmétique. morfMonitor annonce « il n'affiche rien » : sa
 responsabilité est de collecter et d'exposer, pas de présenter. Tant que la vue
-reste cliente de l'API, elle n'est qu'un affichage — extractible vers un projet
+reste cliente de l'API, elle n'est qu'un affichage - extractible vers un projet
 séparé sans réécriture si elle devait un jour le devenir. Le jour où elle lirait
 `MonitorModule` directement, cette propriété serait perdue en silence, et
 « seconde vue » deviendrait faux sans que rien ne le signale.
 
 Les sources vivent dans `web_src/` (convention de l'écosystème : `web_src/`
-contient ce qui est écrit, `web/` ce qui est généré — ce dernier est d'ailleurs
+contient ce qui est écrit, `web/` ce qui est généré - ce dernier est d'ailleurs
 exclu par `.gitignore`).
