@@ -11,12 +11,41 @@
 
   "_comment_systemd": "Services systemd locaux. 'unit' est le nom systemd exact (sans .service), 'label' le texte affiche. Mettre 'enabled' a false desactive la surveillance sans supprimer la ligne.",
   "systemd_services": [
-    { "unit": "morfdashboard", "label": "DashBoard",     "enabled": true },
-    { "unit": "morfsync",      "label": "morfSync",      "enabled": true },
-    { "unit": "morfsensor",    "label": "morfSensor",    "enabled": true },
-    { "unit": "morfnotify",    "label": "morfNotify",    "enabled": true },
-    { "unit": "morfanalytics", "label": "morfAnalytics", "enabled": true },
-    { "unit": "morfmonitor",   "label": "morfMonitor",   "enabled": true }
+{
+  "unit": "morfanalytics",
+  "label": "morfAnalytics",
+  "enabled": true
+},
+{
+  "unit": "morfcollector",
+  "label": "morfCollector",
+  "enabled": true
+},
+{
+  "unit": "morfdashboard",
+  "label": "DashBoard",
+  "enabled": true
+},
+{
+  "unit": "morfmonitor",
+  "label": "morfMonitor",
+  "enabled": true
+},
+{
+  "unit": "morfnotify",
+  "label": "morfNotify",
+  "enabled": true
+},
+{
+  "unit": "morfsensor",
+  "label": "morfSensor",
+  "enabled": true
+},
+{
+  "unit": "morfsync",
+  "label": "morfSync",
+  "enabled": true
+}
   ],
 
   "_comment_network": "Equipements surveilles par sonde reseau : on teste l'ouverture d'un port TCP, 'host' acceptant un nom mDNS ou une IP fixe. C'est le mecanisme de DERNIER RECOURS, pour un equipement qui n'annonce pas sa presence. Il suppose de connaitre son adresse a l'avance -- l'inverse d'une decouverte. Preferer 'beacon_apps' des que l'equipement emet un heartbeat morfbeacon/1 : MeteoHub y est passe (voir plus bas), GatewayLab le peut aussi depuis sa version 1.7.0.",

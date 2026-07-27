@@ -10,18 +10,23 @@
   "_comment_systemd": "Services systemd locaux. 'unit' est le nom systemd exact (sans .service), 'label' le texte affiche. Mettre 'enabled' a false desactive la surveillance sans supprimer la ligne.",
   "systemd_services": [
     {
+      "unit": "morfanalytics",
+      "label": "morfAnalytics",
+      "enabled": true
+    },
+    {
+      "unit": "morfcollector",
+      "label": "morfCollector",
+      "enabled": true
+    },
+    {
       "unit": "morfdashboard",
       "label": "DashBoard",
       "enabled": true
     },
     {
-      "unit": "morfsync",
-      "label": "morfSync",
-      "enabled": true
-    },
-    {
-      "unit": "morfsensor",
-      "label": "morfSensor",
+      "unit": "morfmonitor",
+      "label": "morfMonitor",
       "enabled": true
     },
     {
@@ -30,13 +35,13 @@
       "enabled": true
     },
     {
-      "unit": "morfanalytics",
-      "label": "morfAnalytics",
+      "unit": "morfsensor",
+      "label": "morfSensor",
       "enabled": true
     },
     {
-      "unit": "morfmonitor",
-      "label": "morfMonitor",
+      "unit": "morfsync",
+      "label": "morfSync",
       "enabled": true
     }
   ],
