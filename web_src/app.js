@@ -462,7 +462,7 @@ function renderEcosysteme(all) {
     (apps.length
       ? `<div class="tbl-wrap"><table><thead><tr>
            <th>Application</th><th class="mono">Machine</th><th class="mono">Adresse</th>
-           <th class="mono">Version</th>
+           <th class="mono">Port</th><th class="mono">Version</th>
            <th>État</th><th class="mono">Dernier heartbeat</th><th>Interface</th><th>API</th>
          </tr></thead><tbody>` +
         apps.map((a) => `<tr>
@@ -477,6 +477,12 @@ function renderEcosysteme(all) {
                champ instance du protocole, jamais du seul nom. -->
           <td class="mono">${esc(a.host || '—')}</td>
           <td class="mono">${esc(a.ip || '—')}</td>
+          <!-- Le PORT est celui du /status annoncé dans le heartbeat
+               (champ status_port) : c'est par lui que le service se joint,
+               et il diffère d'un service à l'autre (8790 morfMonitor,
+               8789 morfNotify...). Absent tant qu'aucune instance n'a été
+               entendue (application déclarée mais hors ligne). -->
+          <td class="mono">${a.status_port ? esc(a.status_port) : '—'}</td>
           <td class="mono">${esc(a.version || '—')}</td>
           <!-- L'ÉTAT dit ce qu'on observe, jamais ce qu'on a déclaré. Ces deux
                faits sont indépendants : « est-ce que ça tourne ? » se constate,

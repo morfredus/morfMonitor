@@ -12,6 +12,7 @@ Il s'annonce sur le LAN via morfBeacon et s'installe en service systemd.
 | Document | Contenu |
 |---|---|
 | [Architecture](ARCHITECTURE.md) | Les classes (`IModule`, `MonitorModule`, `ModuleRegistry`, `HttpServer`, `Service`) et le fil d'exécution. |
+| [Accès distant (WireGuard)](ACCES-DISTANT.md) | Atteindre morfMonitor hors du réseau local par un tunnel VPN dédié, sans authentification par service ni intervenant externe. |
 
 ## À la racine du projet
 

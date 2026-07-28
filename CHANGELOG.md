@@ -3,6 +3,29 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.6.2] - 2026-07-28
+
+### Ajouté
+
+- **Colonne « Port » dans la page Écosystème.** Le tableau des services découverts
+  via morfBeacon affiche désormais le port du service (champ `status_port` annoncé
+  dans le heartbeat) entre les colonnes « Adresse » et « Version ». L'information
+  transitait déjà dans le JSON (`addReachability`) mais n'était pas visible ;
+  distinguer deux services d'une même machine (morfMonitor 8790, morfNotify 8789...)
+  demandait jusqu'ici d'ouvrir le lien d'interface. La cellule affiche « - » pour
+  une application déclarée mais hors ligne, dont aucune instance n'a été entendue.
+  Modification d'affichage uniquement : aucun changement du contrat morfBeacon ni
+  du JSON servi.
+
+### Documentation
+
+- **Guide d'accès distant par WireGuard** ([`docs/fr/ACCES-DISTANT.md`](docs/fr/ACCES-DISTANT.md)).
+  Comment atteindre morfMonitor (et le reste du parc) hors du réseau local par un
+  tunnel VPN hébergé sur le Pi, sans authentification propre au service et sans
+  intervenant externe. Applique la doctrine « l'accès distant est un composant
+  dédié » : la confiance est arbitrée à l'entrée du tunnel, les services gardent
+  leur interface LAN inchangée.
+
 ## [0.6.1] - 2026-07-28
 
 ### Modifié
