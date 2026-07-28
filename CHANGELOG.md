@@ -3,6 +3,15 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.6.1] - 2026-07-28
+
+### Modifié
+
+- **Copie vendorée de morfdeploy resynchronisée** depuis morfTools : prise en
+  charge de l'état persistant `/var/lib` dans le déploiement (`manifest.state_dir()`,
+  substitution `__STATE_DIR__`, chemin d'état affiché à l'installation). Aucun
+  changement de comportement du service lui-même.
+
 ## [0.6.0] - 2026-07-28
 
 ### Modifié
