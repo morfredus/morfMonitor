@@ -24,7 +24,7 @@ QStringList SharedConfig::searchPaths() {
     const QString programData = QProcessEnvironment::systemEnvironment()
                                     .value(QStringLiteral("ProgramData"));
     if (!programData.isEmpty())
-        paths << QDir(programData).filePath(QStringLiteral("morfSystem/morfsystem.json"));
+        paths << QDir(programData).filePath(QStringLiteral("morfsystem/morfsystem.json"));
     paths << QStringLiteral("/etc/morfsystem/morfsystem.json")
           << QStringLiteral("morfsystem.json");
     return paths;

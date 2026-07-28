@@ -3,7 +3,28 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
-## [Non publié]
+## [0.6.0] - 2026-07-28
+
+### Modifié
+
+- **Configuration regroupée sous `/etc/morfsystem/<service>`.** Tout le parc
+  partage désormais un point d'entrée UNIQUE dans `/etc` (`/etc/morfsystem/`),
+  qui contient le fichier partagé `morfsystem.json` et un sous-dossier par
+  service, au lieu d'un `/etc/<service>` par service à la racine de `/etc`. Sous
+  Windows : `%ProgramData%\morfsystem\<service>`. Les données restent sous
+  `/opt/<service>`. L'ancien `/etc/<service>` est adopté à l'installation
+  (`migrate_from`).
+
+
+### Corrigé
+
+- **Casse du chemin Windows de la configuration partagée alignée sur le
+  déploiement.** `SharedConfig` cherchait `%ProgramData%/morfSystem/morfsystem.json`
+  (S majuscule) alors que morfdeploy l'installe dans `%ProgramData%/morfsystem/`
+  (minuscule, comme tous les dossiers de service du parc). Sans effet sur NTFS
+  (insensible à la casse), mais divergent de la convention et fragile sur un
+  montage sensible à la casse. Désormais en minuscule, cohérent avec morfDashboard
+  et le reste du parc. Linux (`/etc/morfsystem/morfsystem.json`) était déjà correct.
 
 ## [0.5.9] - 2026-07-26
 ### Corrigé

@@ -15,6 +15,7 @@
       "source": "config/morfmonitor.example.json",
       "dest": "morfmonitor.json",
       "migrate_from": [
+        "/etc/morfmonitor/morfmonitor.json",
         "/opt/morfmonitor/morfmonitor.json"
       ]
     },
@@ -27,9 +28,9 @@
     }
   ],
   "status_url": "http://127.0.0.1:8790/status",
-  "_comment_config_dir": "La configuration vit dans /etc, pas a cote du binaire : c'est ou un administrateur Linux regarde en premier, et la FHS est explicite la-dessus. Effacer /opt/<service> pour reinstaller proprement n'emporte donc plus les reglages.",
+  "_comment_config_dir": "La configuration vit sous /etc/morfsystem/<service> : un point d'entree UNIQUE dans /etc pour tout le parc, et non a cote du binaire dans /opt. Effacer /opt/<service> pour reinstaller proprement n'emporte donc pas les reglages.",
   "config_dir": {
-    "linux": "/etc/morfmonitor",
-    "windows": "%ProgramData%/morfmonitor"
+    "linux": "/etc/morfsystem/morfmonitor",
+    "windows": "%ProgramData%/morfsystem/morfmonitor"
   }
 }

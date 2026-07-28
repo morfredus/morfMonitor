@@ -5,7 +5,7 @@
 #
 # Il y a DEUX fichiers de configuration, et ils ne vont pas au meme endroit :
 #
-#   config/morfmonitor.json  ->  /etc/morfmonitor/morfmonitor.json
+#   config/morfmonitor.json  ->  /etc/morfsystem/morfmonitor/morfmonitor.json
 #       Reglages du service lui-meme : port, adresse d'ecoute, modules.
 #       Lu par morfMonitor seul.
 #
@@ -44,7 +44,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # APP_DIR reste le dossier du BINAIRE, utilise ici seulement pour verifier que
 # le service est bien installe avant de deployer sa configuration.
 APP_DIR="${MORF_APP_DIR:-${MT_APP_DIR:-/opt/morfmonitor}}"
-CONFIG_DIR="${MORF_CONFIG_DIR:-/etc/morfmonitor}"
+CONFIG_DIR="${MORF_CONFIG_DIR:-/etc/morfsystem/morfmonitor}"
 SHARED_DIR="${MT_SHARED_DIR:-/etc/morfsystem}"
 SERVICE_NAME="${MT_SERVICE_NAME:-morfmonitor}"
 

@@ -534,6 +534,16 @@ class Deployer:
         # old configs. Removed last, and only on purge.
         if app_dir.exists():
             self._remove(app_dir)
+        # The configuration directory is this service's own namespace under
+        # /etc/morfsystem/<service>. It can hold files we never installed but the
+        # service wrote at runtime -- a secrets vault, a state file -- which the
+        # per-file removal above leaves behind. On purge we own that directory, so
+        # remove it wholesale, as we do the application directory. The name guard
+        # keeps a shared parent (/etc/morfsystem itself) untouched: it is never
+        # named after a single service.
+        config_dir = self.manifest.config_dir()
+        if config_dir.exists() and config_dir.name == self.manifest.service_name:
+            self._remove(config_dir)
         print("\nService and configuration removed.")
 
     @staticmethod

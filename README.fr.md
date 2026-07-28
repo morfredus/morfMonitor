@@ -2,7 +2,7 @@
 
 *Lire dans une autre langue : [English](README.md) · **Français** (ce document).*
 
-[![Version](https://img.shields.io/badge/version-0.5.9-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.6.0-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -121,7 +121,7 @@ Presque toutes les surprises viennent du **même malentendu** : le service ne li
 jamais les fichiers du dépôt. Il lit ceux qui ont été **déployés**.
 
 ```
-    config/morfmonitor.json   ──déploiement──>   /etc/morfmonitor/morfmonitor.json   ← lu
+    config/morfmonitor.json   ──déploiement──>   /etc/morfsystem/morfmonitor/morfmonitor.json   ← lu
     config/morfsystem.json    ──déploiement──>   /etc/morfsystem/morfsystem.json     ← lu
 ```
 
@@ -269,7 +269,7 @@ Il y a **deux fichiers**, et ils ne vont pas au même endroit :
 
 | Fichier du dépôt | Destination | Contenu | Lu par |
 |---|---|---|---|
-| `config/morfmonitor.json` | `/etc/morfmonitor/` | port, adresse d'écoute, modules | morfMonitor |
+| `config/morfmonitor.json` | `/etc/morfsystem/morfmonitor/` | port, adresse d'écoute, modules | morfMonitor |
 | `config/morfsystem.json` | `/etc/morfsystem/` | ce qui est **supervisé** | morfMonitor **et** morfDashboard |
 
 Une seule commande pousse les deux :

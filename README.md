@@ -2,7 +2,7 @@
 
 *Read in another language: **English** (this document) · [Français](README.fr.md).*
 
-[![Version](https://img.shields.io/badge/version-0.5.9-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.6.0-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![License](https://img.shields.io/badge/License-GPL--3.0--only-blue)
@@ -75,7 +75,7 @@ Nearly every surprise comes from the **same misunderstanding**: the service neve
 reads the repository files. It reads the **deployed** ones.
 
 ```
-    config/morfmonitor.json   ──deploy──>   /etc/morfmonitor/morfmonitor.json   ← read
+    config/morfmonitor.json   ──deploy──>   /etc/morfsystem/morfmonitor/morfmonitor.json   ← read
     config/morfsystem.json    ──deploy──>   /etc/morfsystem/morfsystem.json     ← read
 ```
 
@@ -124,7 +124,7 @@ There are **two files**, and they do not go to the same place:
 
 | Repository file | Destination | Contents | Read by |
 |---|---|---|---|
-| `config/morfmonitor.json` | `/etc/morfmonitor/` | port, bind address, modules | morfMonitor |
+| `config/morfmonitor.json` | `/etc/morfsystem/morfmonitor/` | port, bind address, modules | morfMonitor |
 | `config/morfsystem.json` | `/etc/morfsystem/` | what is **supervised** | morfMonitor **and** morfDashboard |
 
 One command pushes both:

@@ -48,7 +48,8 @@ QString findDefaultConfig() {
         QDir(exeDir).filePath("morfmonitor.json"),
         QDir(exeDir).filePath("config/morfmonitor.json"),
 #ifdef Q_OS_UNIX
-        QStringLiteral("/etc/morfmonitor/morfmonitor.json"),
+        QStringLiteral("/etc/morfsystem/morfmonitor/morfmonitor.json"),
+        QStringLiteral("/etc/morfmonitor/morfmonitor.json"),   // ancien emplacement (avant le regroupement sous /etc/morfsystem)
 #endif
     };
     for (const QString& c : candidates)
