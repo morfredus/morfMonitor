@@ -102,6 +102,7 @@ class Manifest:
     binary: str
     app_dirs: dict = field(default_factory=dict)
     config_dirs: dict = field(default_factory=dict)
+    state_dirs: dict = field(default_factory=dict)
     configs: tuple = ()
     description: str = ""
     status_url: str = ""
@@ -171,6 +172,32 @@ class Manifest:
             return Path(base) / self.service_name
         return Path("/etc") / self.service_name
 
+    def state_dir(self) -> Path:
+        """Where THIS service's PERSISTENT STATE lives -- separate from both its
+        binary and its configuration.
+
+        The FHS is explicit: variable data a service generates itself (generated
+        keys, encrypted vaults, sync sequences, collection cursors, dedup
+        indexes, last-run timestamps) belongs under /var/lib, not in /etc (which
+        is the administrator's read-only reference) nor in /opt (which is the
+        program). Putting state in /etc is exactly what left morfCollector's
+        vault unwritable under a root-owned /etc/morfsystem: a service running as
+        its own user could never create its key.
+
+        On Linux this pairs with the unit's `StateDirectory=morfsystem/<service>`,
+        which systemd creates owned by the service User with the right mode and
+        exposes as $STATE_DIRECTORY. This method reports the same path so the
+        install summary and any explicit __STATE_DIR__ substitution agree with it.
+        """
+        key = {"Windows": "windows", "Darwin": "darwin"}.get(platform.system(), "linux")
+        declared = self.state_dirs.get(key)
+        if declared:
+            return Path(os.path.expandvars(declared))
+        if key == "windows":
+            base = os.environ.get("ProgramData", r"C:\ProgramData")
+            return Path(base) / "morfsystem" / self.service_name / "state"
+        return Path("/var/lib/morfsystem") / self.service_name
+
     def binary_name(self) -> str:
         """The executable's file name, with the platform's extension."""
         if platform.system() == "Windows" and not self.binary.endswith(".exe"):
@@ -218,6 +245,7 @@ class Manifest:
             binary=raw["binary"],
             app_dirs=raw.get("app_dir") or {},
             config_dirs=raw.get("config_dir") or {},
+            state_dirs=raw.get("state_dir") or {},
             configs=configs,
             description=raw.get("description", ""),
             status_url=raw.get("status_url", ""),

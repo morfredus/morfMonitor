@@ -394,6 +394,7 @@ class Deployer:
         print(f"  source: {self.manifest.repo_root}")
         print(f"  binaire : {app_dir}")
         print(f"  config  : {self.manifest.config_dir()}")
+        print(f"  etat    : {self.manifest.state_dir()}")
         print()
 
         self.check_privileges()

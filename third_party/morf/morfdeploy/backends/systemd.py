@@ -87,6 +87,10 @@ class SystemdBackend(ServiceBackend):
             # both paths: __APP_DIR__ for what it executes, __CONFIG_DIR__ for
             # what it reads.
             ("__CONFIG_DIR__", str(manifest.config_dir())),
+            # Persistent state lives under /var/lib, never in /etc. A unit that
+            # passes its state root explicitly (rather than reading systemd's
+            # $STATE_DIRECTORY) gets it here; both resolve to the same path.
+            ("__STATE_DIR__", str(manifest.state_dir())),
             ("__RUN_HOME__", str(home)),
         ):
             unit = unit.replace(token, value)
