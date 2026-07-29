@@ -42,11 +42,20 @@ def _load(path: Path) -> dict:
 
 
 def _merge(reference: dict, current: dict, prefix: str,
-           added: list, obsolete: list) -> None:
+           added: list, obsolete: list, deep_lists: bool = False) -> None:
     """Recursively add missing keys into `current`; record what changed.
 
     `current` is mutated in place. Existing values are never touched. Nested
-    objects recurse; every other type -- including lists -- is atomic.
+    objects recurse; every other type is atomic.
+
+    Lists are atomic by default (`deep_lists=False`) -- the standing rule of the
+    `update` action, which adds keys but never list entries. When `deep_lists`
+    is set (the explicit `config` action), a list of objects is matched item by
+    item on its `id` and the SAME rule is applied inside each matching object:
+    missing keys are added, existing values are kept, and NO new entry is ever
+    appended. This is what lets a new module parameter (say `morfsync_url`)
+    reach a module the user already has, without ever switching on a module,
+    probe or service nobody asked for.
     """
     for key, ref_value in reference.items():
         path = prefix + key
@@ -54,9 +63,11 @@ def _merge(reference: dict, current: dict, prefix: str,
             current[key] = ref_value
             added.append(path)
         elif isinstance(ref_value, dict) and isinstance(current[key], dict):
-            _merge(ref_value, current[key], path + ".", added, obsolete)
-        # else: the key exists and is not a sub-object -- the user's value
-        # stands, whatever it is. A list stays the user's list.
+            _merge(ref_value, current[key], path + ".", added, obsolete, deep_lists)
+        elif deep_lists and isinstance(ref_value, list) and isinstance(current[key], list):
+            _merge_list(ref_value, current[key], path, added, obsolete)
+        # else: the key exists and is not a sub-object (nor a list we deep-merge)
+        # -- the user's value stands, whatever it is.
 
     for key in current:
         if key not in reference:
@@ -65,13 +76,46 @@ def _merge(reference: dict, current: dict, prefix: str,
             obsolete.append(prefix + key)
 
 
-def merge_config(reference: Path, installed: Path, backup: bool = True) -> tuple:
+def _merge_list(ref_list: list, cur_list: list, path: str,
+                added: list, obsolete: list) -> None:
+    """Deep-merge two lists of objects by matching their `id`.
+
+    Only objects the installed list ALREADY holds are enriched (matched on
+    `id`); a reference entry the installed list lacks is deliberately NOT added,
+    so this never enables something the user did not choose. Items without an
+    `id`, or non-object items, are left exactly as they are -- there is no
+    reliable way to pair them, and guessing would be worse than doing nothing.
+    """
+    current_by_id = {
+        item["id"]: item
+        for item in cur_list
+        if isinstance(item, dict) and "id" in item
+    }
+    for ref_item in ref_list:
+        if not isinstance(ref_item, dict):
+            continue
+        item_id = ref_item.get("id")
+        if item_id is None:
+            continue
+        target = current_by_id.get(item_id)
+        if target is not None:
+            _merge(ref_item, target, f"{path}[{item_id}].", added, obsolete,
+                   deep_lists=True)
+
+
+def merge_config(reference: Path, installed: Path, backup: bool = True,
+                 deep_lists: bool = False) -> tuple:
     """Add to `installed` the keys `reference` has and it lacks.
 
     Returns (added, obsolete): dotted key paths added, and dotted key paths the
     installed file carries that the reference no longer mentions. The file is
     rewritten only when something was added, and a timestamped backup is made
     first -- non-destructive by construction, but a config is worth the belt.
+
+    `deep_lists` extends the merge into lists of objects, matched by `id` (see
+    `_merge`). The `update` action leaves it off (lists atomic, the parc rule);
+    the explicit `config` action turns it on to propagate new keys INSIDE a
+    module the user already has -- still never adding a list entry.
     """
     ref = _load(reference)
     cur = _load(installed)
@@ -82,7 +126,7 @@ def merge_config(reference: Path, installed: Path, backup: bool = True) -> tuple
 
     added: list = []
     obsolete: list = []
-    _merge(ref, cur, "", added, obsolete)
+    _merge(ref, cur, "", added, obsolete, deep_lists)
 
     if added:
         if backup:

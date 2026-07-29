@@ -204,7 +204,7 @@ class Deployer:
 
         return written
 
-    def enrich_configs(self, config_dir: Path) -> bool:
+    def enrich_configs(self, config_dir: Path, deep_lists: bool = False) -> bool:
         """Bring every installed configuration up to the new version's keys.
 
         Runs after the configs are in place, in install and update alike: a
@@ -235,7 +235,7 @@ class Deployer:
                 continue
 
             try:
-                added, obsolete = merge_config(reference, dest)
+                added, obsolete = merge_config(reference, dest, deep_lists=deep_lists)
             except (OSError, ValueError) as exc:
                 print(f"  could not enrich {dest}: {exc}")
                 continue
@@ -472,6 +472,111 @@ class Deployer:
         self.register(app_dir)
         print()
         print(f"{self.manifest.display_name} updated.")
+
+    def config(self, mode: str = "merge", force: bool = False) -> None:
+        """Refresh an installed service's configuration from the repository.
+
+        Fills the gap between `update` (which ships code and adds only
+        top-level keys) and editing the deployed file by hand: a scripted,
+        repeatable way to take a new version's settings into account WITHOUT
+        reinstalling. Two modes, non-destructive by default -- a timestamped
+        `.bak` is written before any change:
+
+          merge (default): deep-enrich the deployed config with the keys this
+            version's example introduced, INCLUDING new keys inside a module the
+            user already has (matched by id). Existing values are always kept,
+            and no list entry is ever added. This is how a new option such as a
+            module's `morfsync_url` reaches an installation on its own.
+
+          push (requires --force): replace the deployed config with the
+            repository's. The occasional, deliberate "start from the shipped
+            config again".
+
+        Reads only what is on disk; the service is restarted only if something
+        actually changed, because a new key means nothing until the process
+        reads it again.
+        """
+        if not self.backend.can_query_installation(self.manifest):
+            raise DeployError(
+                f"Cannot tell whether {self.manifest.display_name} is installed: "
+                "this process is not allowed to ask the service manager.\n"
+                + self.backend.privilege_hint()
+            )
+        if not self.backend.is_installed(self.manifest):
+            raise DeployError(
+                f"{self.manifest.display_name} is not installed on this machine.\n"
+                "There is no deployed configuration to update. Run install first."
+            )
+        self.check_privileges()
+        config_dir = self.manifest.config_dir()
+        print(f"Configuring {self.manifest.display_name} ({self.backend.name})")
+        print(f"  config  : {config_dir}")
+        print()
+
+        if mode == "push":
+            if not force:
+                raise DeployError(
+                    "config push REPLACES the deployed configuration with the "
+                    "repository's copy.\n"
+                    "Pass --force to confirm (a timestamped backup is written "
+                    "first).\n"
+                    "To only add this version's new keys while keeping your "
+                    "settings, use 'config' with no mode (merge)."
+                )
+            changed = self._push_configs(config_dir)
+        else:  # merge -- the safe default
+            changed = self.enrich_configs(config_dir, deep_lists=True)
+            if not changed:
+                print("  every key of this version is already present.")
+
+        print()
+        if changed:
+            print("  restarting to apply the configuration...")
+            self.backend.stop(self.manifest)
+            self.backend.start(self.manifest)
+            print()
+            print(f"{self.manifest.display_name} reconfigured.")
+        else:
+            print(f"{self.manifest.display_name}: nothing changed, "
+                  "the service was NOT restarted.")
+
+    def _push_configs(self, config_dir: Path) -> bool:
+        """Overwrite each deployed configuration with the repository's copy.
+
+        A timestamped backup of the deployed file is written first. The source
+        is the repository's real config when it ships one, otherwise the example
+        -- the same resolution as a fresh install, so `push` and `install`
+        deliver the same bytes.
+        """
+        from datetime import datetime
+
+        changed = False
+        for config in self.manifest.configs:
+            dest = config.resolved_dest(config_dir)
+
+            source = self.manifest.repo_root / config.source
+            if config.source.endswith(".example.json"):
+                real = Path(str(source).replace(".example.json", ".json"))
+                if real.exists():
+                    source = real
+            if not source.exists():
+                print(f"  no repository source for {dest.name}, kept as-is")
+                continue
+
+            if dest.exists():
+                stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+                backup = dest.with_name(f"{dest.name}.bak-{stamp}")
+                shutil.copy2(dest, backup)
+                print(f"  backup:          {backup}")
+
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, dest)
+            dest.chmod(0o644)
+            print(f"  config replaced: {dest}")
+            print(f"                <- {source}")
+            changed = True
+
+        return changed
 
     def config_footprint(self) -> list:
         """Every configuration location this service has ever used.

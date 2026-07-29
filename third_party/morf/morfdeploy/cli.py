@@ -24,8 +24,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "action",
-        choices=("install", "update", "uninstall", "status", "is-installed"),
+        choices=("install", "update", "uninstall", "status", "is-installed", "config"),
         help="What to do",
+    )
+    parser.add_argument(
+        "mode",
+        nargs="?",
+        choices=("merge", "push"),
+        default=None,
+        help="config: 'merge' (default, add this version's new keys, keep yours) "
+             "or 'push' (replace the deployed config from the repo; needs --force)",
     )
     parser.add_argument(
         "--repo",
@@ -41,7 +49,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--force",
         action="store_true",
-        help="update: redeploy and restart even when nothing changed",
+        help="update: redeploy and restart even when nothing changed. "
+             "config push: confirm replacing the deployed config",
     )
     parser.add_argument(
         "--purge",
@@ -85,6 +94,8 @@ def main(argv: list | None = None) -> int:
             deployer.install(rebuild=args.rebuild)
         elif args.action == "update":
             deployer.update(force=args.force)
+        elif args.action == "config":
+            deployer.config(mode=args.mode or "merge", force=args.force)
         elif args.action == "uninstall":
             if args.backup is not None and not args.purge:
                 print("--backup only applies with --purge "
