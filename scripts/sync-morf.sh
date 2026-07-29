@@ -33,4 +33,27 @@ else
 fi
 
 sync_one morfBeacon "$BEACON_SRC" "$ROOT/third_party/morf/beacon"
+
+# Le coeur de deploiement (morfdeploy) vient de morfTools et n'a ni include/ ni
+# src/ : c'est un paquet Python, copie tel quel. Sans cette resynchronisation,
+# la copie vendoree derive du jour ou morfTools evolue -- « morf doctor » le
+# signale, mais autant ne pas creer l'ecart.
+if [ -d "$SRC_BASE/morfTools" ]; then
+  TOOLS_SRC="$SRC_BASE/morfTools"
+else
+  TOOLS_SRC="$SRC_BASE/morfTools_travail"
+fi
+DEPLOY_SRC="$TOOLS_SRC/lib/morfdeploy"
+DEPLOY_DST="$ROOT/third_party/morf/morfdeploy"
+if [ -d "$DEPLOY_SRC" ]; then
+  rm -rf "$DEPLOY_DST"
+  mkdir -p "$DEPLOY_DST"
+  cp -r "$DEPLOY_SRC/." "$DEPLOY_DST/"
+  find "$DEPLOY_DST" -name __pycache__ -type d -prune -exec rm -rf {} +
+  echo "OK  morfdeploy"
+else
+  echo "!! Source introuvable pour morfdeploy : $DEPLOY_SRC" >&2
+  echo "   (definir MORF_SRC_BASE si les depots sont ailleurs)" >&2
+fi
+
 echo "Synchronisation terminée. Le CMakeLists vendoré n'est pas modifié."

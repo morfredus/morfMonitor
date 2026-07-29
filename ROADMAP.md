@@ -139,8 +139,9 @@ de l'ensemble de l'écosystème.
 Trois de ces pistes touchent des arbitrages notés plus bas, et s'y plient :
 
 - **journaux** : les servir élargit le profil d'exposition bien au-delà de
-  métriques ; cette piste est suspendue à une authentification du serveur HTTP
-  et à l'arbitrage R5 (modèle de confiance du parc) ;
+  métriques ; cette piste est suspendue à une **authentification du serveur
+  HTTP**. L'accès distant, lui, est tranché (R5 : VPN WireGuard) - c'est bien
+  l'auth du service, distincte, qui reste le verrou ;
 - **alertes** : morfNotify reste l'émetteur ; morfMonitor en présenterait
   l'état, il ne déciderait ni n'enverrait rien ;
 - **administrer n'est pas commander** : le point d'entrée est une **vue**.
@@ -170,9 +171,10 @@ Cette évolution se fait sans perdre le principe fondateur du projet :
   attrapés au premier commit.
 - **CI** (`.github/workflows`) : build multi-plateforme.
 - **Option d'authentification** du serveur HTTP (jeton). Préalable à toute
-  consultation de journaux ; à arbitrer avec R5 - le modèle de confiance
-  actuel est le réseau local, ce qui reste cohérent tant qu'aucun journal
-  n'est exposé.
+  consultation de journaux, et sujet **distinct** de l'accès distant (déjà
+  tranché : VPN WireGuard). Le modèle « confiance = réseau local » reste
+  cohérent tant qu'aucun journal n'est exposé ; cette auth est précisément ce
+  qui manque pour pouvoir l'exposer.
 - **Rechargement de configuration** (SIGHUP) sans redémarrage du service.
 - **Historisation courte** des métriques, socle des tendances ci-dessus.
 
@@ -194,11 +196,11 @@ Cette évolution se fait sans perdre le principe fondateur du projet :
   inextricable du service.
 - **Pas de médiation d'accès** : ni proxy, ni relais, ni session, ni
   authentification pour le compte d'un autre service (voir l'invariant
-  ci-dessus). L'accès distant relèvera d'un composant dédié, qui n'imposera
-  aucune modification aux services existants - ceux-ci continueront d'ignorer
-  qu'ils sont consultés depuis l'extérieur.
+  ci-dessus). L'accès distant relève d'un composant dédié (VPN WireGuard, R5
+  tranché), qui n'impose aucune modification aux services existants - ceux-ci
+  continuent d'ignorer qu'ils sont consultés depuis l'extérieur.
 - **Pas de journaux sans authentification.** La page Diagnostic dérive ses
   anomalies des données déjà exposées ; servir la sortie de journald attendra
-  l'authentification et l'arbitrage R5.
+  l'authentification du serveur HTTP (l'accès distant, R5, est tranché).
 - **Pas de dépendance externe au-delà de Qt** (morfBeacon reste vendoré ; les
   assets Web passent par Qt Core, sans Qt Widgets).
