@@ -192,6 +192,19 @@ function stateBadge(state) {
   return badge('err', state);
 }
 
+// État MATÉRIEL rapporté par le service (contrat morfBeacon : bloc hardware).
+// On affiche le libellé TEL QUEL, sans jamais déduire la présence : « — » quand
+// le service ne gère aucun matériel (bloc absent). « none » (aucun matériel
+// attendu) est neutre, PAS une alerte ; seul « degraded » est en orange.
+function hardwareCell(a) {
+  const hw = a.hardware;
+  if (!hw || !hw.state) return '—';
+  const label = hw.label || hw.state;
+  if (hw.state === 'present')  return badge('ok',   label);
+  if (hw.state === 'degraded') return badge('warn', label);
+  return badge('off', label);            // 'none' : configuration valide, neutre
+}
+
 // --- rendu des pages --------------------------------------------------------
 
 // Adresses IPv4 des interfaces REELLEMENT actives, sous la forme
@@ -463,7 +476,7 @@ function renderEcosysteme(all) {
       ? `<div class="tbl-wrap"><table><thead><tr>
            <th>Application</th><th class="mono">Machine</th><th class="mono">Adresse</th>
            <th class="mono">Port</th><th class="mono">Version</th>
-           <th>État</th><th class="mono">Dernier heartbeat</th><th>Interface</th><th>API</th>
+           <th>État</th><th>Matériel</th><th class="mono">Dernier heartbeat</th><th>Interface</th><th>API</th>
          </tr></thead><tbody>` +
         apps.map((a) => `<tr>
           <td>${esc(serviceName(a.app))}${
@@ -495,6 +508,9 @@ function renderEcosysteme(all) {
           <td>${a.online ? stateBadge(a.state || 'ok')
                 : (a.enabled === false || !a.declared) ? badge('off', 'hors ligne')
                                                        : badge('err', 'hors ligne')}</td>
+          <!-- Matériel : ce que le SERVICE déclare (present/none/degraded), affiché
+               tel quel. morfMonitor n'infère jamais la présence du matériel. -->
+          <td>${a.online ? hardwareCell(a) : '—'}</td>
           <td class="mono">${esc(a.last_seen_s === undefined ? '—' : ago(a.last_seen_s))}</td>
           <td>${webUiLink(a)}</td>
           <td>${apiCell(a)}</td>

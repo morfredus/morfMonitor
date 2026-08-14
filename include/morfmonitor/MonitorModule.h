@@ -161,10 +161,14 @@ private:
         // Detail publie par le service, obtenu en interrogeant son /status une
         // seule fois par version. Vides tant que le pull n'a pas eu lieu : le
         // heartbeat annonce la presence, HTTP detaille.
-        //   webUi : interface web (absent des services sans interface) ;
-        //   api   : liste d'API annoncee (methode, chemin, resume).
+        //   webUi    : interface web (absent des services sans interface) ;
+        //   api      : liste d'API annoncee (methode, chemin, resume) ;
+        //   hardware : etat du materiel gere par le service (present/none/degraded).
+        //              Rempli tel quel, JAMAIS deduit ici : le service reste seul
+        //              juge de son materiel ; morfMonitor ne fait que l'afficher.
         QJsonObject webUi;
         QJsonObject api;
+        QJsonObject hardware;
         bool        detailFetched = false;
 
         // Back-off du pull /status. Un pair qui echoue (occupe, en redemarrage,

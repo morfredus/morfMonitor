@@ -3,6 +3,41 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.7.2] - 2026-08-14
+
+### Corrigé
+
+- Description de l'unité systemd : suppression du reste de patron « (a adapter) »
+  et remplacement du tiret cadratin par un tiret simple.
+
+## [0.7.1] - 2026-08-14
+
+### Corrigé
+
+- Ajout de **morfPhoto** à la liste des services systemd supervisés
+  (`config/morfsystem.json`) : le service tournait mais n'apparaissait pas dans
+  l'onglet « Services morfSystem », faute d'être déclaré dans la source de vérité
+  partagée. Le déploiement de la config (`scripts/linux/deploy-config.sh`) reste
+  nécessaire pour que le `/etc/morfsystem/morfsystem.json` du Pi prenne en compte
+  l'ajout.
+
+## [0.7.0] - 2026-08-13
+
+### Ajouté
+
+- **État matériel dans la vue Écosystème.** morfMonitor lit le bloc `hardware`
+  publié par chaque service (contrat morfBeacon) et l'affiche dans une colonne
+  « Matériel » (`/api/services` porte aussi ce bloc). Il ne déduit JAMAIS la
+  présence du matériel : il restitue tel quel ce que le service déclare. Un
+  service sans matériel n'affiche rien ; « aucun capteur » (none) est neutre, pas
+  une alerte ; seul « capteur absent » (degraded) est signalé. Permet de
+  distinguer `pi4fred · morfSensor · ok · capteur présent` de
+  `pi4dev · morfSensor · ok · aucun capteur`.
+
+### Modifié
+
+- Rafraîchissement de la dépendance vendorée morfBeacon (0.6.0, contrat `hardware`).
+
 ## [0.6.2] - 2026-07-28
 
 ### Ajouté

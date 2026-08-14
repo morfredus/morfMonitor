@@ -43,14 +43,24 @@ if [ -d "$SRC_BASE/morfTools" ]; then
 else
   TOOLS_SRC="$SRC_BASE/morfTools_travail"
 fi
-DEPLOY_SRC="$TOOLS_SRC/lib/morfdeploy"
+# Coeur de deploiement (morfdeploy) : source de verite = depot dedie « morfDeploy »
+# (promu sur le modele de morfBeacon). Repli transitoire sur morfTools/lib/morfdeploy
+# tant que la migration du parc n'est pas terminee.
+if [ -d "$SRC_BASE/morfDeploy" ]; then
+  DEPLOY_SRC="$SRC_BASE/morfDeploy/morfdeploy"        ; DEPLOY_VER="$SRC_BASE/morfDeploy/VERSION"
+elif [ -d "$SRC_BASE/morfDeploy_travail" ]; then
+  DEPLOY_SRC="$SRC_BASE/morfDeploy_travail/morfdeploy"; DEPLOY_VER="$SRC_BASE/morfDeploy_travail/VERSION"
+else
+  DEPLOY_SRC="$TOOLS_SRC/lib/morfdeploy"              ; DEPLOY_VER=""
+fi
 DEPLOY_DST="$ROOT/third_party/morf/morfdeploy"
 if [ -d "$DEPLOY_SRC" ]; then
   rm -rf "$DEPLOY_DST"
   mkdir -p "$DEPLOY_DST"
   cp -r "$DEPLOY_SRC/." "$DEPLOY_DST/"
   find "$DEPLOY_DST" -name __pycache__ -type d -prune -exec rm -rf {} +
-  echo "OK  morfdeploy"
+  [ -n "$DEPLOY_VER" ] && [ -f "$DEPLOY_VER" ] && cp "$DEPLOY_VER" "$DEPLOY_DST/VERSION"
+  echo "OK  morfdeploy$([ -f "$DEPLOY_DST/VERSION" ] && echo "  (version $(cat "$DEPLOY_DST/VERSION"))")"
 else
   echo "!! Source introuvable pour morfdeploy : $DEPLOY_SRC" >&2
   echo "   (definir MORF_SRC_BASE si les depots sont ailleurs)" >&2

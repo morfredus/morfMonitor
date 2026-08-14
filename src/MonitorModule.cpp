@@ -127,8 +127,9 @@ void MonitorModule::fetchDetailIfNeeded(const QString& key) {
         entry->detailTries      = 0;
         entry->detailRetryAfter = 0;
         const QJsonObject o = QJsonDocument::fromJson(reply->readAll()).object();
-        entry->webUi = o.value(QStringLiteral("web_ui")).toObject();
-        entry->api   = o.value(QStringLiteral("api")).toObject();
+        entry->webUi    = o.value(QStringLiteral("web_ui")).toObject();
+        entry->api      = o.value(QStringLiteral("api")).toObject();
+        entry->hardware = o.value(QStringLiteral("hardware")).toObject();
     });
 }
 
@@ -237,6 +238,7 @@ void MonitorModule::onBeaconDatagram() {
         if (const auto it = m_beaconSeen.constFind(key); it != m_beaconSeen.constEnd()) {
             s.webUi         = it->webUi;
             s.api           = it->api;
+            s.hardware      = it->hardware;
             const bool sameVersion = (it->version == s.version);
             s.detailFetched = it->detailFetched && sameVersion;
             // On conserve le back-off tant que la version ne change pas. Une
@@ -315,6 +317,11 @@ void MonitorModule::addReachability(QJsonObject& a, const BeaconSeen& s) {
                               .arg(s.sourceIp).arg(s.statusPort);
         a["api"] = api;
     }
+    // Etat du materiel rapporte par le service (present/none/degraded + label),
+    // relaye TEL QUEL. morfMonitor ne deduit jamais la presence du materiel :
+    // absence de bloc => rien a afficher, ce n'est pas une anomalie.
+    if (!s.hardware.isEmpty())
+        a["hardware"] = s.hardware;
 }
 
 QJsonObject MonitorModule::beaconAppsJson() const {

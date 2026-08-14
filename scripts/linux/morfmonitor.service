@@ -6,7 +6,7 @@
 # __RUN_USER__ et __APP_DIR__.
 
 [Unit]
-Description=morfMonitor — service morfSystem (a adapter)
+Description=morfMonitor - supervision de la machine et des services morfSystem
 After=local-fs.target network-online.target
 Wants=network-online.target
 

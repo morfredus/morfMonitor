@@ -35,6 +35,11 @@
       "enabled": true
     },
     {
+      "unit": "morfphoto",
+      "label": "morfPhoto",
+      "enabled": true
+    },
+    {
       "unit": "morfsensor",
       "label": "morfSensor",
       "enabled": true
