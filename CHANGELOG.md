@@ -3,6 +3,19 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.8.1] - 2026-08-14
+
+### Corrigé
+
+- **Troncature des grandes réponses HTTP** dans `HttpServer::reply()`. Resynchronisation
+  du correctif issu du patron `morfTemplateService`. morfMonitor sert des pages HTML
+  (tableau de bord) qui dépassent le tampon socket (~20 Ko) : la connexion était fermée
+  sans drainer le tampon d'écriture et la fin de page arrivait coupée côté client. On
+  attend désormais que `bytesToWrite()` retombe à zéro avant `disconnectFromHost()`.
+- Resynchronisation de la copie vendorée de **morfBeacon** (`third_party/morf/beacon`)
+  en 0.6.1 : même classe de bug corrigée dans son `StatusServer` (grande réponse
+  `/status` coupée faute de drainage du tampon d'écriture).
+
 ## [0.8.0] - 2026-08-14
 
 ### Ajouté
