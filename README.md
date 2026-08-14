@@ -47,6 +47,7 @@ Every active systemd service therefore carries a `resources` block in
     "cpu_percent": 3.2,
     "cpu_time_usec": 763000000,
     "memory_bytes": 88709530,
+    "memory_source": "cgroup",
     "tasks": 4
   }
 }
@@ -57,6 +58,15 @@ cores); `cpu_time_usec` is the cumulative CPU time since start, a stable counter
 for morfAnalytics to historise. A **stopped** service exposes no `resources`
 block: "inactive, not applicable" is not "active, at zero". morfMonitor observes
 and exposes the present moment; evolution over time belongs to morfAnalytics.
+
+`memory_source` tells where `memory_bytes` comes from: `cgroup` when systemd
+provides the measure (`memory.current`, the most accurate), or `pss_sum` as a
+fallback. That fallback exists because Raspberry Pi OS boots with the `memory`
+cgroup controller disabled by default (`cgroup_disable=memory`): systemd then
+cannot report memory, so morfMonitor sums the PSS of the service's processes. To
+get the more accurate `cgroup` measure, enable the controller: remove
+`cgroup_disable=memory` (and add `cgroup_enable=memory`) in
+`/boot/firmware/cmdline.txt`, then reboot.
 
 ## Web interface
 

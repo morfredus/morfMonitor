@@ -56,6 +56,62 @@ bool parseSystemdU64(const QString& raw, quint64& out) {
     return true;
 }
 
+// Repli memoire quand systemd ne donne pas MemoryCurrent (contrôleur cgroup
+// « memory » desactive au boot, cas par defaut de Raspberry Pi OS : le noyau
+// demarre avec `cgroup_disable=memory`, si bien que le fichier memory.current
+// n'existe meme pas). On somme alors la memoire des processus du cgroup de
+// l'unite, un par un.
+//
+// On additionne le PSS (Proportional Set Size), PAS le RSS : tous les services
+// du parc sont des binaires Qt qui PARTAGENT les memes bibliotheques. Le RSS
+// compterait ces pages partagees en entier dans CHAQUE service, gonflant chaque
+// mesure de plusieurs dizaines de Mio. Le PSS repartit une page partagee entre
+// ses N utilisateurs : la somme sur le cgroup est alors fidele a ce que le
+// service coute vraiment.
+//
+// smaps_rollup n'est lisible que pour un processus du meme utilisateur (ou avec
+// CAP_SYS_PTRACE). Dans le parc morfSystem, tous les services tournent sous le
+// meme compte : morfMonitor lit donc sans privilege particulier. Sur une machine
+// ou ce ne serait pas le cas, la lecture echoue silencieusement et la valeur est
+// simplement omise, jamais un chiffre faux.
+//
+// `cgPath` est le ControlGroup rapporte par systemd, p. ex.
+// « /system.slice/morfphoto.service ». Renvoie -1 si rien n'a pu etre lu.
+qint64 memoryPssFromCgroup(const QString& cgPath) {
+    if (cgPath.isEmpty())
+        return -1;
+
+    QFile procs(QStringLiteral("/sys/fs/cgroup") + cgPath + QStringLiteral("/cgroup.procs"));
+    if (!procs.open(QIODevice::ReadOnly | QIODevice::Text))
+        return -1;
+
+    qint64 totalKb = 0;
+    bool   anyRead = false;
+    const QStringList pids = QString::fromUtf8(procs.readAll())
+                                 .split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+    for (const QString& pid : pids) {
+        QFile roll(QStringLiteral("/proc/") + pid.trimmed() + QStringLiteral("/smaps_rollup"));
+        if (!roll.open(QIODevice::ReadOnly | QIODevice::Text))
+            continue;   // processus disparu entre-temps, ou illisible : on l'ignore
+        for (const QString& line : QString::fromUtf8(roll.readAll())
+                                       .split(QLatin1Char('\n'))) {
+            // La ligne totale est « Pss: ». Ne PAS confondre avec « Pss_Anon: »,
+            // « Pss_File: », « Pss_Shmem: » qui la detaillent et la doubleraient.
+            if (!line.startsWith(QLatin1String("Pss:")))
+                continue;
+            const QStringList f = line.split(QRegularExpression(QStringLiteral("\\s+")),
+                                             Qt::SkipEmptyParts);
+            if (f.size() >= 2) {
+                totalKb += f.at(1).toLongLong();   // valeur en kB
+                anyRead = true;
+            }
+            break;   // une seule ligne « Pss: » par rollup
+        }
+    }
+
+    return anyRead ? totalKb * 1024 : -1;
+}
+
 } // namespace
 
 QJsonObject Supervisor::collectSystemd() {
@@ -87,16 +143,17 @@ QJsonObject Supervisor::collectSystemd() {
     QHash<QString, quint64> memBytes;   // MemoryCurrent
     QHash<QString, quint64> cpuNsec;    // CPUUsageNSec (temps CPU cumule)
     QHash<QString, quint64> tasks;      // TasksCurrent
+    QHash<QString, QString> ctrlGroup;  // ControlGroup (chemin du cgroup de l'unite)
     if (!units.isEmpty()) {
         QStringList args{QStringLiteral("show"),
                          QStringLiteral("--property=Id,ActiveState,SubState,"
-                                        "MemoryCurrent,CPUUsageNSec,TasksCurrent"),
+                                        "MemoryCurrent,CPUUsageNSec,TasksCurrent,ControlGroup"),
                          QStringLiteral("--no-pager")};
         args << units;
         const QString out = runCommand(QStringLiteral("systemctl"), args);
 
         // `systemctl show` sépare les unités par une ligne vide.
-        QString id, active, sub, mem, cpu, tsk;
+        QString id, active, sub, mem, cpu, tsk, cg;
         const QStringList lines = out.split(QLatin1Char('\n'));
         for (int i = 0; i <= lines.size(); ++i) {
             const QString line = (i < lines.size()) ? lines.at(i).trimmed() : QString();
@@ -108,9 +165,10 @@ QJsonObject Supervisor::collectSystemd() {
                     if (parseSystemdU64(mem, v)) memBytes.insert(id, v);
                     if (parseSystemdU64(cpu, v)) cpuNsec.insert(id, v);
                     if (parseSystemdU64(tsk, v)) tasks.insert(id, v);
+                    if (!cg.isEmpty()) ctrlGroup.insert(id, cg);
                 }
                 id.clear(); active.clear(); sub.clear();
-                mem.clear(); cpu.clear(); tsk.clear();
+                mem.clear(); cpu.clear(); tsk.clear(); cg.clear();
                 continue;
             }
             if (line.startsWith(QLatin1String("Id=")))                 id = line.mid(3);
@@ -119,6 +177,7 @@ QJsonObject Supervisor::collectSystemd() {
             else if (line.startsWith(QLatin1String("MemoryCurrent="))) mem = line.mid(14);
             else if (line.startsWith(QLatin1String("CPUUsageNSec=")))  cpu = line.mid(13);
             else if (line.startsWith(QLatin1String("TasksCurrent=")))  tsk = line.mid(13);
+            else if (line.startsWith(QLatin1String("ControlGroup=")))  cg  = line.mid(13);
         }
     }
 
@@ -152,8 +211,25 @@ QJsonObject Supervisor::collectSystemd() {
         if (active) {
             seenUnits.insert(d.unit);
             QJsonObject res;
-            if (memBytes.contains(key))
-                res["memory_bytes"] = static_cast<double>(memBytes.value(key));
+
+            // Memoire : d'abord la mesure systemd (memory.current du cgroup v2),
+            // la plus juste car elle dedoublonne les pages partagees et inclut ce
+            // que le noyau impute au cgroup. A defaut (contrôleur « memory »
+            // desactive), on somme le PSS des processus du cgroup. `memory_source`
+            // dit laquelle : un consommateur comme morfAnalytics ne doit pas
+            // comparer deux mesures de nature differente au fil d'un changement de
+            // configuration de la machine.
+            if (memBytes.contains(key)) {
+                res["memory_bytes"]  = static_cast<double>(memBytes.value(key));
+                res["memory_source"] = QStringLiteral("cgroup");
+            } else {
+                const qint64 pss = memoryPssFromCgroup(ctrlGroup.value(key));
+                if (pss >= 0) {
+                    res["memory_bytes"]  = static_cast<double>(pss);
+                    res["memory_source"] = QStringLiteral("pss_sum");
+                }
+            }
+
             if (tasks.contains(key))
                 res["tasks"] = static_cast<double>(tasks.value(key));
 

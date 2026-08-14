@@ -81,6 +81,7 @@ son **cgroup complet** (pas seulement son processus principal) :
     "cpu_percent": 3.2,
     "cpu_time_usec": 763000000,
     "memory_bytes": 88709530,
+    "memory_source": "cgroup",
     "tasks": 4
   }
 }
@@ -92,6 +93,15 @@ compteur stable que morfAnalytics historisera. Un service **arrêté** n'expose
 aucun bloc `resources` : « inactif, non applicable » n'est pas « actif, à zéro ».
 morfMonitor observe et expose l'instant présent ; l'évolution dans le temps
 appartient à morfAnalytics.
+
+`memory_source` dit d'où vient `memory_bytes` : `cgroup` quand systemd fournit
+la mesure (`memory.current`, la plus juste), ou `pss_sum` en repli. Ce repli
+existe parce que Raspberry Pi OS démarre par défaut avec le contrôleur cgroup
+`memory` désactivé (`cgroup_disable=memory`) : systemd ne peut alors pas donner
+la mémoire, et morfMonitor somme le PSS des processus du service. Pour obtenir la
+mesure `cgroup`, plus précise, activer le contrôleur : retirer
+`cgroup_disable=memory` (et ajouter `cgroup_enable=memory`) dans
+`/boot/firmware/cmdline.txt`, puis redémarrer.
 
 ## Interface Web
 

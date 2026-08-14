@@ -14,11 +14,24 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
   - `cpu_time_usec` : temps CPU cumulé depuis le démarrage du service, compteur
     stable destiné à morfAnalytics ;
   - `memory_bytes` : mémoire réellement utilisée, en octets bruts ;
+  - `memory_source` : provenance de la mémoire, `cgroup` (mesure systemd) ou
+    `pss_sum` (repli, voir ci-dessous) ;
   - `tasks` : nombre de processus/threads de l'unité.
   Les mesures portent sur le **cgroup complet** de l'unité (via `MemoryCurrent`,
   `CPUUsageNSec`, `TasksCurrent` de systemd), pas sur le seul PID principal, et
   sont récoltées dans l'appel `systemctl show` déjà existant, donc sans
-  processus supplémentaire. Un service arrêté ou désactivé n'expose **pas** de
+  processus supplémentaire.
+- **Repli mémoire par somme de PSS.** Le contrôleur cgroup `memory` est
+  désactivé par défaut sur Raspberry Pi OS (`cgroup_disable=memory` dans la ligne
+  de commande du noyau) : systemd renvoie alors `MemoryCurrent=[not set]` et la
+  mémoire par service resterait vide. Quand la mesure systemd manque, morfMonitor
+  somme désormais le **PSS** (Proportional Set Size) des processus du cgroup de
+  l'unité (`cgroup.procs` → `/proc/<pid>/smaps_rollup`). Le PSS, et non le RSS :
+  tous les services du parc étant des binaires Qt qui partagent leurs
+  bibliothèques, le RSS compterait ces pages partagées en entier dans chaque
+  service. La lecture n'exige aucun privilège tant que les services tournent sous
+  le même compte (cas du parc) ; sinon la valeur est simplement omise, jamais
+  fausse. `memory_source` indique laquelle des deux sources a servi. Un service arrêté ou désactivé n'expose **pas** de
   bloc `resources` : « inactif + non applicable » reste distinct de « actif + 0 ».
   L'ajout est rétrocompatible (nouvelles clés, aucune modification des champs
   existants). L'onglet « Services morfSystem » affiche deux nouvelles colonnes
