@@ -12,6 +12,9 @@
 #include <QJsonArray>
 #include <QFile>
 #include <QRegularExpression>
+#include <QSet>
+
+#include <limits>
 
 namespace morfmonitor {
 
@@ -34,7 +37,28 @@ QString runCommand(const QString& program, const QStringList& args, int timeoutM
 //  Services systemd
 // =============================================================================
 
-QJsonObject Supervisor::collectSystemd() const {
+namespace {
+
+// systemd note les compteurs indisponibles par une valeur sentinelle (le champ
+// n'est pas compte, l'unite est inactive, l'accounting est desactive) : soit la
+// chaine vide ou « [not set] », soit UINT64_MAX. La distinguer d'une vraie
+// valeur evite de publier un « 0 octet » trompeur la ou il n'y a simplement rien
+// a mesurer.
+bool parseSystemdU64(const QString& raw, quint64& out) {
+    const QString v = raw.trimmed();
+    if (v.isEmpty() || v == QLatin1String("[not set]"))
+        return false;
+    bool ok = false;
+    const quint64 n = v.toULongLong(&ok);
+    if (!ok || n == std::numeric_limits<quint64>::max())
+        return false;
+    out = n;
+    return true;
+}
+
+} // namespace
+
+QJsonObject Supervisor::collectSystemd() {
     QJsonObject o;
     QJsonArray arr;
     if (!m_config) {
@@ -44,7 +68,9 @@ QJsonObject Supervisor::collectSystemd() const {
 
     // Un seul appel a systemctl pour TOUTES les unites, plutot qu'un appel par
     // service : lancer un processus coute cher, et le faire six fois toutes les
-    // cinq secondes se verrait sur un Raspberry Pi.
+    // cinq secondes se verrait sur un Raspberry Pi. Les proprietes de
+    // consommation (memoire, temps CPU, taches) sont demandees dans CE MEME
+    // appel : elles ne coutent donc rien de plus qu'un etat seul.
     QStringList units;
     for (const SystemdServiceDef& d : m_config->systemdServices()) {
         if (d.enabled)
@@ -53,15 +79,24 @@ QJsonObject Supervisor::collectSystemd() const {
 
     QHash<QString, QString> activeState;
     QHash<QString, QString> subState;
+    // Compteurs de consommation, par unite. systemd agrege ces valeurs sur le
+    // CGROUP COMPLET de l'unite, pas sur son seul PID principal : c'est
+    // exactement ce que l'on veut mesurer : « combien consomme le service »,
+    // pas « combien consomme son processus principal », mesure qui resterait
+    // juste meme si l'implementation interne du service evoluait.
+    QHash<QString, quint64> memBytes;   // MemoryCurrent
+    QHash<QString, quint64> cpuNsec;    // CPUUsageNSec (temps CPU cumule)
+    QHash<QString, quint64> tasks;      // TasksCurrent
     if (!units.isEmpty()) {
         QStringList args{QStringLiteral("show"),
-                         QStringLiteral("--property=Id,ActiveState,SubState"),
+                         QStringLiteral("--property=Id,ActiveState,SubState,"
+                                        "MemoryCurrent,CPUUsageNSec,TasksCurrent"),
                          QStringLiteral("--no-pager")};
         args << units;
         const QString out = runCommand(QStringLiteral("systemctl"), args);
 
         // `systemctl show` sépare les unités par une ligne vide.
-        QString id, active, sub;
+        QString id, active, sub, mem, cpu, tsk;
         const QStringList lines = out.split(QLatin1Char('\n'));
         for (int i = 0; i <= lines.size(); ++i) {
             const QString line = (i < lines.size()) ? lines.at(i).trimmed() : QString();
@@ -69,15 +104,26 @@ QJsonObject Supervisor::collectSystemd() const {
                 if (!id.isEmpty()) {
                     activeState.insert(id, active);
                     subState.insert(id, sub);
+                    quint64 v = 0;
+                    if (parseSystemdU64(mem, v)) memBytes.insert(id, v);
+                    if (parseSystemdU64(cpu, v)) cpuNsec.insert(id, v);
+                    if (parseSystemdU64(tsk, v)) tasks.insert(id, v);
                 }
                 id.clear(); active.clear(); sub.clear();
+                mem.clear(); cpu.clear(); tsk.clear();
                 continue;
             }
-            if (line.startsWith(QLatin1String("Id=")))               id = line.mid(3);
-            else if (line.startsWith(QLatin1String("ActiveState="))) active = line.mid(12);
-            else if (line.startsWith(QLatin1String("SubState=")))    sub = line.mid(9);
+            if (line.startsWith(QLatin1String("Id=")))                 id = line.mid(3);
+            else if (line.startsWith(QLatin1String("ActiveState=")))   active = line.mid(12);
+            else if (line.startsWith(QLatin1String("SubState=")))      sub = line.mid(9);
+            else if (line.startsWith(QLatin1String("MemoryCurrent="))) mem = line.mid(14);
+            else if (line.startsWith(QLatin1String("CPUUsageNSec=")))  cpu = line.mid(13);
+            else if (line.startsWith(QLatin1String("TasksCurrent=")))  tsk = line.mid(13);
         }
     }
+
+    const qint64 nowMsec = QDateTime::currentMSecsSinceEpoch();
+    QSet<QString> seenUnits;
 
     for (const SystemdServiceDef& d : m_config->systemdServices()) {
         QJsonObject s;
@@ -92,10 +138,66 @@ QJsonObject Supervisor::collectSystemd() const {
         }
         const QString key = d.unit + QStringLiteral(".service");
         const QString state = activeState.value(key);
+        const bool active = (state == QLatin1String("active"));
         s["state"]     = state.isEmpty() ? QStringLiteral("unknown") : state;
         s["sub_state"] = subState.value(key);
-        s["active"]    = (state == QLatin1String("active"));
+        s["active"]    = active;
+
+        // Consommation par service. On ne l'expose QUE pour une unite active :
+        // un service arrete n'a pas une consommation nulle, il n'a PAS de
+        // consommation. Distinguer « actif + 0 » de « inactif + non applicable »
+        // est un choix explicite du contrat : l'absence du bloc `resources` dit
+        // « non applicable », un `resources` present avec des zeros dirait « rien
+        // ne tourne, et je l'ai mesure ».
+        if (active) {
+            seenUnits.insert(d.unit);
+            QJsonObject res;
+            if (memBytes.contains(key))
+                res["memory_bytes"] = static_cast<double>(memBytes.value(key));
+            if (tasks.contains(key))
+                res["tasks"] = static_cast<double>(tasks.value(key));
+
+            if (cpuNsec.contains(key)) {
+                const quint64 nsec = cpuNsec.value(key);
+                // Temps CPU cumule : compteur stable, directement exploitable par
+                // morfAnalytics qui en fera la difference entre deux mesures. On
+                // le publie en microsecondes, unite du contrat.
+                res["cpu_time_usec"] = static_cast<double>(nsec / 1000);
+
+                // Taux instantane : deduit du delta depuis le releve precedent de
+                // CETTE unite. Sans precedent (premier passage, unite qui vient de
+                // demarrer), on omet : un 0 % affiche serait faux, « inconnu » est
+                // honnete.
+                const auto prev = m_cpuSamples.constFind(d.unit);
+                if (prev != m_cpuSamples.constEnd() && nowMsec > prev->atMsec
+                        && nsec >= prev->cpuNsec) {
+                    const double dNsec = static_cast<double>(nsec - prev->cpuNsec);
+                    const double dMsec = static_cast<double>(nowMsec - prev->atMsec);
+                    // dNsec/1e6 ms de CPU sur dMsec ms de temps reel => *100 pour
+                    // un pourcentage. Peut depasser 100 % sur plusieurs coeurs :
+                    // c'est correct et voulu (un service sur deux coeurs = 200 %),
+                    // exactement comme `top`.
+                    res["cpu_percent"] = qRound(dNsec / (dMsec * 1e4) * 10.0) / 10.0;
+                }
+                m_cpuSamples.insert(d.unit, CpuSample{nsec, nowMsec});
+            }
+
+            if (!res.isEmpty())
+                s["resources"] = res;
+        }
+
         arr.append(s);
+    }
+
+    // Oublie l'historique CPU des unites qui ne sont plus actives (arretees,
+    // desactivees, retirees de la configuration) : sinon un service redemarre
+    // apres une longue pause verrait son premier taux calcule sur un delta enorme
+    // et un compteur CPU remis a zero, produisant une valeur absurde.
+    for (auto it = m_cpuSamples.begin(); it != m_cpuSamples.end();) {
+        if (!seenUnits.contains(it.key()))
+            it = m_cpuSamples.erase(it);
+        else
+            ++it;
     }
 
     o["services"] = arr;

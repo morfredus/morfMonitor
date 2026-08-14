@@ -3,6 +3,27 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.8.0] - 2026-08-14
+
+### Ajouté
+
+- **Consommation par service** dans la supervision systemd. Chaque unité active
+  expose désormais un bloc `resources` dans `/status` :
+  - `cpu_percent` : taux CPU instantané, déduit de la différence de temps CPU
+    entre deux relevés (peut dépasser 100 % sur plusieurs cœurs) ;
+  - `cpu_time_usec` : temps CPU cumulé depuis le démarrage du service, compteur
+    stable destiné à morfAnalytics ;
+  - `memory_bytes` : mémoire réellement utilisée, en octets bruts ;
+  - `tasks` : nombre de processus/threads de l'unité.
+  Les mesures portent sur le **cgroup complet** de l'unité (via `MemoryCurrent`,
+  `CPUUsageNSec`, `TasksCurrent` de systemd), pas sur le seul PID principal, et
+  sont récoltées dans l'appel `systemctl show` déjà existant, donc sans
+  processus supplémentaire. Un service arrêté ou désactivé n'expose **pas** de
+  bloc `resources` : « inactif + non applicable » reste distinct de « actif + 0 ».
+  L'ajout est rétrocompatible (nouvelles clés, aucune modification des champs
+  existants). L'onglet « Services morfSystem » affiche deux nouvelles colonnes
+  CPU et Mémoire. L'historisation reste du ressort de morfAnalytics.
+
 ## [0.7.2] - 2026-08-14
 
 ### Corrigé

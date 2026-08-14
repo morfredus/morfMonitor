@@ -95,6 +95,34 @@ function systemdBadge(u) {
   return badge('off', s || 'inconnu');
 }
 
+// Consommation d'un service : CPU instantane et memoire du CGROUP complet de
+// l'unite, telles que morfMonitor les mesure via systemd. Le bloc `resources`
+// est ABSENT pour un service arrete ou desactive : non pas « 0 % », mais « non
+// applicable, rien ne tourne ». On rend alors « — », qui dit la meme chose sans
+// laisser croire a une mesure a zero.
+function svcCpu(res) {
+  if (!res || typeof res.cpu_percent !== 'number') {
+    // Compteur cumule sans taux : premier releve de l'unite, le taux instantane
+    // ne peut pas encore etre calcule (il faut deux mesures). On montre au moins
+    // le temps CPU cumule s'il existe.
+    if (res && typeof res.cpu_time_usec === 'number') {
+      const d = duration(res.cpu_time_usec / 1e6);
+      return d ? `<span title="temps CPU cumulé">${esc(d)}</span>` : '—';
+    }
+    return '—';
+  }
+  // Le temps CPU cumule accompagne le taux en infobulle : instantane pour la
+  // charge actuelle, cumule pour le contexte, sans surcharger la colonne.
+  const cum = typeof res.cpu_time_usec === 'number' ? duration(res.cpu_time_usec / 1e6) : null;
+  const title = cum ? ` title="temps CPU cumulé : ${esc(cum)}"` : '';
+  return `<span${title}>${res.cpu_percent.toFixed(1)} %</span>`;
+}
+
+function svcMem(res) {
+  if (!res || typeof res.memory_bytes !== 'number') return '—';
+  return esc(bytes(res.memory_bytes) || '—');
+}
+
 // Etat d'une sonde reseau. Le backend distingue quatre cas et prend soin de ne
 // PAS confondre « pas encore sonde » et « hors ligne » (delai de grace mDNS au
 // demarrage). Les ecraser en un booleen annulait cette precaution et affichait
@@ -414,12 +442,15 @@ function renderServices(all) {
   el('c-systemd').innerHTML = header('Services systemd', `${units.length} supervisés`) +
     (units.length
       ? `<div class="tbl-wrap"><table><thead><tr>
-           <th>Service</th><th class="mono">Unité</th><th>État</th><th class="mono">Détail</th>
+           <th>Service</th><th class="mono">Unité</th><th>État</th>
+           <th class="mono">CPU</th><th class="mono">Mémoire</th><th class="mono">Détail</th>
          </tr></thead><tbody>` +
         units.map((u) => `<tr>
           <td>${esc(u.label || u.unit)}</td>
           <td class="mono">${esc(u.unit || '—')}</td>
           <td>${systemdBadge(u)}</td>
+          <td class="mono">${svcCpu(u.resources)}</td>
+          <td class="mono">${svcMem(u.resources)}</td>
           <td class="mono">${esc(u.sub_state || u.state || '—')}</td>
         </tr>`).join('') + `</tbody></table></div>`
       : unavailable('Aucun service systemd supervisé.',

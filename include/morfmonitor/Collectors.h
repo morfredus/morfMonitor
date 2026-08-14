@@ -63,7 +63,11 @@ class Supervisor {
 public:
     explicit Supervisor(const SharedConfig* config) : m_config(config) {}
 
-    QJsonObject collectSystemd() const;
+    // Non-`const` : la mesure de la consommation par service memorise, pour
+    // chaque unite, le temps CPU cumule et l'instant du dernier releve. Le CPU
+    // instantane n'est PAS lisible directement : comme pour /proc/stat, il se
+    // deduit de la difference entre deux mesures successives.
+    QJsonObject collectSystemd();
 
     // Sonde TCP. Lente par nature (resolution mDNS + connexion), donc appelee a
     // une cadence bien plus basse que les ressources.
@@ -71,6 +75,18 @@ public:
 
 private:
     const SharedConfig* m_config;
+
+    // Etat pour le calcul du CPU instantane par service. systemd n'expose que le
+    // temps CPU CUMULE (CPUUsageNSec) : le taux est la part de temps processeur
+    // consommee entre deux releves, rapportee au temps ecoule. La premiere
+    // mesure d'une unite ne peut donc rien produire : on omet alors cpu_percent
+    // plutot que d'afficher un 0 % qui serait faux, exactement comme le fait
+    // ResourceCollector pour le CPU global de la machine.
+    struct CpuSample {
+        quint64 cpuNsec = 0;      // CPUUsageNSec du dernier releve
+        qint64  atMsec  = 0;      // instant du releve (ms epoch), pour le delta
+    };
+    QHash<QString, CpuSample> m_cpuSamples;   // clef = nom d'unite (sans .service)
 };
 
 // --- Cause du dernier redemarrage --------------------------------------------

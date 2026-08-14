@@ -2,7 +2,7 @@
 
 *Lire dans une autre langue : [English](README.md) · **Français** (ce document).*
 
-[![Version](https://img.shields.io/badge/version-0.7.2-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.8.0-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -34,7 +34,7 @@ affichent les mêmes données sans dupliquer une ligne.
 | `GET /api/system` | nom d'hôte, OS, noyau, architecture, modèle, uptime, heure de démarrage |
 | `GET /api/resources` | CPU (%, fréquence), charge, mémoire, swap, disque, températures, bridage |
 | `GET /api/network` | interfaces, IPv4, IPv6, adresse MAC, état |
-| `GET /api/services` | services systemd, sondes réseau, applications découvertes par morfBeacon |
+| `GET /api/services` | services systemd (avec leur consommation CPU/mémoire), sondes réseau, applications découvertes par morfBeacon |
 | `GET /api/reboot` | cause du dernier redémarrage, avec son degré de confiance |
 | `GET /api/config` | configuration effective (ce qui est supervisé) |
 | `GET /api/all` | tout, en une seule requête |
@@ -66,6 +66,32 @@ curl http://localhost:8790/api/resources
 `throttling` mérite un mot : ce sont les bits de bridage du Raspberry Pi
 (sous-tension, limite thermique). C'est le diagnostic le plus utile d'un Pi
 instable, et il n'apparaît nulle part ailleurs.
+
+### La consommation par service
+
+Connaître la charge globale du Pi ne dit pas *qui* la produit. Chaque service
+systemd actif porte donc, dans `/api/services`, un bloc `resources` mesuré sur
+son **cgroup complet** (pas seulement son processus principal) :
+
+```json
+{
+  "unit": "morfphoto",
+  "state": "active",
+  "resources": {
+    "cpu_percent": 3.2,
+    "cpu_time_usec": 763000000,
+    "memory_bytes": 88709530,
+    "tasks": 4
+  }
+}
+```
+
+`cpu_percent` est le taux instantané (il peut dépasser 100 % sur plusieurs
+cœurs) ; `cpu_time_usec` est le temps CPU cumulé depuis le démarrage, un
+compteur stable que morfAnalytics historisera. Un service **arrêté** n'expose
+aucun bloc `resources` : « inactif, non applicable » n'est pas « actif, à zéro ».
+morfMonitor observe et expose l'instant présent ; l'évolution dans le temps
+appartient à morfAnalytics.
 
 ## Interface Web
 

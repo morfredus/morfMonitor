@@ -2,7 +2,7 @@
 
 *Read in another language: **English** (this document) · [Français](README.fr.md).*
 
-[![Version](https://img.shields.io/badge/version-0.7.2-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.8.0-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![License](https://img.shields.io/badge/License-GPL--3.0--only-blue)
@@ -22,7 +22,7 @@ system itself. They all read morfMonitor instead.
 | `GET /api/system` | hostname, OS, kernel, architecture, model, uptime, boot time |
 | `GET /api/resources` | CPU (%, frequency), load, memory, swap, disk, temperatures, throttling |
 | `GET /api/network` | interfaces, IPv4, IPv6, MAC address, state |
-| `GET /api/services` | systemd services, network probes, morfBeacon-discovered apps |
+| `GET /api/services` | systemd services (with their CPU/memory usage), network probes, morfBeacon-discovered apps |
 | `GET /api/reboot` | cause of the last reboot, with a confidence level |
 | `GET /api/config` | effective configuration (what is supervised) |
 | `GET /api/all` | everything, in a single request |
@@ -32,6 +32,31 @@ Plus the framework routes: `GET /status` (morfBeacon-compatible), `/healthz`,
 
 The API is deliberately independent of any interface: it serves a TFT screen, a
 browser, a Qt application and an ESP32 equally well.
+
+### Per-service usage
+
+Knowing the Pi's overall load does not tell you *which* service produces it.
+Every active systemd service therefore carries a `resources` block in
+`/api/services`, measured over its **full cgroup** (not just its main process):
+
+```json
+{
+  "unit": "morfphoto",
+  "state": "active",
+  "resources": {
+    "cpu_percent": 3.2,
+    "cpu_time_usec": 763000000,
+    "memory_bytes": 88709530,
+    "tasks": 4
+  }
+}
+```
+
+`cpu_percent` is the instantaneous rate (it can exceed 100% across several
+cores); `cpu_time_usec` is the cumulative CPU time since start, a stable counter
+for morfAnalytics to historise. A **stopped** service exposes no `resources`
+block: "inactive, not applicable" is not "active, at zero". morfMonitor observes
+and exposes the present moment; evolution over time belongs to morfAnalytics.
 
 ## Web interface
 
