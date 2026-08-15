@@ -64,6 +64,8 @@
   "beacon_apps": [
     { "app": "ComponentHub", "label": "ComponentHub", "enabled": false },
     { "app": "SiteWatch",    "label": "SiteWatch",    "enabled": false },
+    { "app": "Photo Hub",    "label": "PhotoHub",    "enabled": false },
+    { "app": "morfPhoto",    "label": "morfPhoto",    "enabled": false },
     { "app": "MeteoHub S3",  "label": "MeteoHub",     "enabled": true }
   ],
 
