@@ -73,46 +73,6 @@
       "enabled": false
     },
     {
-      "app": "PhotoHub",
-      "label": "PhotoHub",
-      "enabled": true
-    },
-    {
-      "app": "morfPhoto",
-      "label": "morfPhoto",
-      "enabled": true
-    },
-    {
-      "app": "morfAnalytics ",
-      "label": "morfAnalytics ",
-      "enabled": true
-    },
-    {
-      "app": "morfNotify ",
-      "label": "morfNotify ",
-      "enabled": true
-    },
-    {
-      "app": "morfCollector ",
-      "label": "morfCollector ",
-      "enabled": true
-    },
-    {
-      "app": "morfCollector ",
-      "label": "morfCollector ",
-      "enabled": true
-    },
-    {
-      "app": "morfCollector ",
-      "label": "morfCollector ",
-      "enabled": true
-    },
-    {
-      "app": "morfCollector ",
-      "label": "morfCollector ",
-      "enabled": true
-    },
-    {
       "app": "MeteoHub S3",
       "label": "MeteoHub",
       "enabled": true
