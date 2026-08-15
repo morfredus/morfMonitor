@@ -3,6 +3,23 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.8.4] - 2026-08-15
+
+### Modifié
+
+- **Tout le parc déclaré dans `beacon_apps`** (config partagée `morfsystem.json` et son
+  exemple), pour que les services n'apparaissent plus « non déclaré » dans l'onglet
+  Écosystème.
+  - Services permanents à `enabled: true` (pleinement supervisés, absence = anomalie) :
+    `morfMonitor`, `morfPhoto`, `morfAnalytics`, `morfCollector`, `morfNotify`,
+    `morfSensor`, `morfSync`, `morfDashboard`.
+  - Applications de bureau à `enabled: false` (déclarées mais non alertées à la
+    fermeture) : `ComponentHub`, `SiteWatch`, et désormais **`PhotoHub`** (qui s'annonce
+    depuis PhotoHub 0.6.3).
+  - Le champ `app` reprend exactement le nom annoncé dans le heartbeat. Rappel : ce
+    changement de config ne prend effet sur le Pi qu'après `deploy-config.sh --shared`
+    (qui écrase le fichier déployé) puis redémarrage de morfMonitor.
+
 ## [0.8.3] - 2026-08-15
 
 ### Ajouté

@@ -76,7 +76,18 @@
       "app": "MeteoHub S3",
       "label": "MeteoHub",
       "enabled": true
-    }
+    },
+
+    { "app": "PhotoHub", "label": "PhotoHub", "enabled": false },
+
+    { "app": "morfMonitor",   "label": "morfMonitor",   "enabled": true },
+    { "app": "morfPhoto",     "label": "morfPhoto",     "enabled": true },
+    { "app": "morfAnalytics", "label": "morfAnalytics", "enabled": true },
+    { "app": "morfCollector", "label": "morfCollector", "enabled": true },
+    { "app": "morfNotify",    "label": "morfNotify",    "enabled": true },
+    { "app": "morfSensor",    "label": "morfSensor",    "enabled": true },
+    { "app": "morfSync",      "label": "morfSync",      "enabled": true },
+    { "app": "morfDashboard", "label": "morfDashboard", "enabled": true }
   ],
   "_comment_ports": "Le port d'ecoute de morfMonitor n'est PAS ici : il appartient a sa configuration propre (morfmonitor.json). Ce fichier decrit ce qui est SUPERVISE, pas comment chaque service ecoute."
 }
