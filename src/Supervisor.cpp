@@ -16,6 +16,18 @@
 
 #include <limits>
 
+#ifdef _WIN32
+#  ifndef WIN32_LEAN_AND_MEAN
+#    define WIN32_LEAN_AND_MEAN
+#  endif
+#  ifndef NOMINMAX
+#    define NOMINMAX
+#  endif
+#  include <windows.h>
+#  include <tlhelp32.h>   // CreateToolhelp32Snapshot : enumeration des processus
+#  include <psapi.h>      // GetProcessMemoryInfo : working set d'un processus
+#endif
+
 namespace morfmonitor {
 
 namespace {
@@ -115,6 +127,10 @@ qint64 memoryPssFromCgroup(const QString& cgPath) {
 } // namespace
 
 QJsonObject Supervisor::collectSystemd() {
+#ifdef _WIN32
+    // Pas de systemd sous Windows : on sert l'equivalent par processus.
+    return collectWindowsServices();
+#else
     QJsonObject o;
     QJsonArray arr;
     if (!m_config) {
@@ -144,16 +160,24 @@ QJsonObject Supervisor::collectSystemd() {
     QHash<QString, quint64> cpuNsec;    // CPUUsageNSec (temps CPU cumule)
     QHash<QString, quint64> tasks;      // TasksCurrent
     QHash<QString, QString> ctrlGroup;  // ControlGroup (chemin du cgroup de l'unite)
+    // Identite et vie de l'unite, demandees dans le MEME appel (cout nul) : le PID
+    // principal, l'instant d'activation (monotone, pour en deduire l'uptime) et le
+    // nombre de redemarrages. Utiles a morfAnalytics pour distinguer un service
+    // stable d'un service qui redemarre en boucle.
+    QHash<QString, quint64> mainPid;         // MainPID
+    QHash<QString, quint64> activeEnterMono; // ActiveEnterTimestampMonotonic (usec depuis boot)
+    QHash<QString, quint64> nRestarts;       // NRestarts (compteur cumule)
     if (!units.isEmpty()) {
         QStringList args{QStringLiteral("show"),
                          QStringLiteral("--property=Id,ActiveState,SubState,"
-                                        "MemoryCurrent,CPUUsageNSec,TasksCurrent,ControlGroup"),
+                                        "MemoryCurrent,CPUUsageNSec,TasksCurrent,ControlGroup,"
+                                        "MainPID,ActiveEnterTimestampMonotonic,NRestarts"),
                          QStringLiteral("--no-pager")};
         args << units;
         const QString out = runCommand(QStringLiteral("systemctl"), args);
 
         // `systemctl show` sépare les unités par une ligne vide.
-        QString id, active, sub, mem, cpu, tsk, cg;
+        QString id, active, sub, mem, cpu, tsk, cg, pid, aet, nr;
         const QStringList lines = out.split(QLatin1Char('\n'));
         for (int i = 0; i <= lines.size(); ++i) {
             const QString line = (i < lines.size()) ? lines.at(i).trimmed() : QString();
@@ -165,10 +189,14 @@ QJsonObject Supervisor::collectSystemd() {
                     if (parseSystemdU64(mem, v)) memBytes.insert(id, v);
                     if (parseSystemdU64(cpu, v)) cpuNsec.insert(id, v);
                     if (parseSystemdU64(tsk, v)) tasks.insert(id, v);
+                    if (parseSystemdU64(pid, v)) mainPid.insert(id, v);
+                    if (parseSystemdU64(aet, v)) activeEnterMono.insert(id, v);
+                    if (parseSystemdU64(nr,  v)) nRestarts.insert(id, v);
                     if (!cg.isEmpty()) ctrlGroup.insert(id, cg);
                 }
                 id.clear(); active.clear(); sub.clear();
                 mem.clear(); cpu.clear(); tsk.clear(); cg.clear();
+                pid.clear(); aet.clear(); nr.clear();
                 continue;
             }
             if (line.startsWith(QLatin1String("Id=")))                 id = line.mid(3);
@@ -178,11 +206,31 @@ QJsonObject Supervisor::collectSystemd() {
             else if (line.startsWith(QLatin1String("CPUUsageNSec=")))  cpu = line.mid(13);
             else if (line.startsWith(QLatin1String("TasksCurrent=")))  tsk = line.mid(13);
             else if (line.startsWith(QLatin1String("ControlGroup=")))  cg  = line.mid(13);
+            else if (line.startsWith(QLatin1String("MainPID=")))       pid = line.mid(8);
+            // Le prefixe le plus long d'abord : "ActiveEnterTimestampMonotonic="
+            // contient "ActiveEnterTimestamp=" en sous-chaine.
+            else if (line.startsWith(QLatin1String("ActiveEnterTimestampMonotonic="))) aet = line.mid(30);
+            else if (line.startsWith(QLatin1String("NRestarts=")))     nr  = line.mid(10);
         }
     }
 
     const qint64 nowMsec = QDateTime::currentMSecsSinceEpoch();
     QSet<QString> seenUnits;
+
+    // Uptime systeme (horloge monotone, secondes depuis le boot). systemd donne
+    // l'instant d'activation de chaque unite en microsecondes monotones : l'uptime
+    // du service en est la difference. On lit /proc/uptime une seule fois. Absent
+    // hors Linux : l'uptime par service est alors simplement omis.
+    double sysUptimeSec = -1.0;
+    {
+        QFile up(QStringLiteral("/proc/uptime"));
+        if (up.open(QIODevice::ReadOnly)) {
+            bool ok = false;
+            const double v = QString::fromUtf8(up.readAll())
+                                 .section(QLatin1Char(' '), 0, 0).toDouble(&ok);
+            if (ok) sysUptimeSec = v;
+        }
+    }
 
     for (const SystemdServiceDef& d : m_config->systemdServices()) {
         QJsonObject s;
@@ -202,6 +250,12 @@ QJsonObject Supervisor::collectSystemd() {
         s["sub_state"] = subState.value(key);
         s["active"]    = active;
 
+        // Nombre de redemarrages : exploitable meme unite inactive. Un service qui
+        // redemarre en boucle est un signal fort ; morfAnalytics historisera ce
+        // compteur pour reperer les periodes d'instabilite.
+        if (nRestarts.contains(key))
+            s["restarts"] = static_cast<double>(nRestarts.value(key));
+
         // Consommation par service. On ne l'expose QUE pour une unite active :
         // un service arrete n'a pas une consommation nulle, il n'a PAS de
         // consommation. Distinguer « actif + 0 » de « inactif + non applicable »
@@ -210,6 +264,19 @@ QJsonObject Supervisor::collectSystemd() {
         // ne tourne, et je l'ai mesure ».
         if (active) {
             seenUnits.insert(d.unit);
+
+            // PID principal et uptime du service : identite « vivante » de l'unite,
+            // au niveau du service (pas dans `resources`, qui ne porte que la
+            // consommation). Omis si non disponibles plutot que faux.
+            if (mainPid.contains(key) && mainPid.value(key) > 0)
+                s["pid"] = static_cast<double>(mainPid.value(key));
+            if (sysUptimeSec >= 0 && activeEnterMono.contains(key)) {
+                const double sinceBootSec = static_cast<double>(activeEnterMono.value(key)) / 1e6;
+                const double up = sysUptimeSec - sinceBootSec;
+                if (up >= 0)
+                    s["uptime_s"] = qRound(up);
+            }
+
             QJsonObject res;
 
             // Memoire : d'abord la mesure systemd (memory.current du cgroup v2),
@@ -275,6 +342,139 @@ QJsonObject Supervisor::collectSystemd() {
         else
             ++it;
     }
+
+    o["services"] = arr;
+    o["ts"] = static_cast<double>(QDateTime::currentSecsSinceEpoch());
+    return o;
+#endif // !_WIN32
+}
+
+// -----------------------------------------------------------------------------
+//  Equivalent Windows de la supervision par service.
+//
+// Windows n'a pas systemd : on associe chaque service configure (nom d'unite) a
+// un processus dont l'image est <unit>.exe. C'est volontairement MOINS detaille
+// que sous Linux (un service = son processus principal, pas son cgroup complet),
+// mais le contrat de sortie est le meme : state, active, pid, uptime_s et un bloc
+// resources {cpu_percent, cpu_time_usec, memory_bytes, memory_source}. Une donnee
+// indisponible est omise, jamais remplacee par un 0 trompeur.
+// -----------------------------------------------------------------------------
+QJsonObject Supervisor::collectWindowsServices() {
+    QJsonObject o;
+    QJsonArray arr;
+    if (!m_config) {
+        o["services"] = arr;
+        return o;
+    }
+
+#ifdef _WIN32
+    // Un seul instantane des processus pour toutes les unites : image -> PID.
+    QHash<QString, DWORD> pidByImage;
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap != INVALID_HANDLE_VALUE) {
+        PROCESSENTRY32W pe;
+        pe.dwSize = sizeof(pe);
+        if (Process32FirstW(snap, &pe)) {
+            do {
+                QString img = QString::fromWCharArray(pe.szExeFile);
+                if (img.endsWith(QLatin1String(".exe"), Qt::CaseInsensitive))
+                    img.chop(4);
+                // Premier processus vu pour un nom donne : suffisant pour un service
+                // a processus unique, cas visé par cet equivalent.
+                pidByImage.insert(img.toLower(), pe.th32ProcessID);
+            } while (Process32NextW(snap, &pe));
+        }
+        CloseHandle(snap);
+    }
+
+    const qint64 nowMsec = QDateTime::currentMSecsSinceEpoch();
+    QSet<QString> seenUnits;
+
+    for (const SystemdServiceDef& d : m_config->systemdServices()) {
+        QJsonObject s;
+        s["unit"]    = d.unit;
+        s["label"]   = d.label;
+        s["enabled"] = d.enabled;
+        if (!d.enabled) {
+            s["state"]  = QStringLiteral("disabled");
+            s["active"] = false;
+            arr.append(s);
+            continue;
+        }
+
+        const DWORD pid = pidByImage.value(d.unit.toLower(), 0);
+        const bool active = (pid != 0);
+        // Windows n'a pas la granularite d'etat de systemd : présent = actif,
+        // absent = inactif. On ne prétend pas distinguer failed/activating.
+        s["state"]  = active ? QStringLiteral("active") : QStringLiteral("inactive");
+        s["active"] = active;
+
+        if (active) {
+            seenUnits.insert(d.unit);
+            s["pid"] = static_cast<double>(pid);
+
+            HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+            if (h) {
+                QJsonObject res;
+                FILETIME ftCreate, ftExit, ftKernel, ftUser;
+                if (GetProcessTimes(h, &ftCreate, &ftExit, &ftKernel, &ftUser)) {
+                    // Uptime : maintenant - instant de creation. FILETIME compte des
+                    // intervalles de 100 ns depuis 1601 ; l'ecart avec l'epoch Unix
+                    // est 11644473600 s.
+                    ULARGE_INTEGER cre;
+                    cre.LowPart  = ftCreate.dwLowDateTime;
+                    cre.HighPart = ftCreate.dwHighDateTime;
+                    const qint64 createMs =
+                        static_cast<qint64>(cre.QuadPart / 10000ULL) - 11644473600000LL;
+                    const qint64 up = (nowMsec - createMs) / 1000;
+                    if (up >= 0)
+                        s["uptime_s"] = static_cast<double>(up);
+
+                    // Temps CPU cumule (noyau + utilisateur), en unites de 100 ns.
+                    ULARGE_INTEGER k, u;
+                    k.LowPart = ftKernel.dwLowDateTime; k.HighPart = ftKernel.dwHighDateTime;
+                    u.LowPart = ftUser.dwLowDateTime;   u.HighPart = ftUser.dwHighDateTime;
+                    const quint64 cpu100ns = k.QuadPart + u.QuadPart;
+                    res["cpu_time_usec"] = static_cast<double>(cpu100ns / 10ULL);
+
+                    // Taux instantane : delta depuis le releve precedent de CETTE
+                    // unite (meme logique que sous Linux). Omis au premier passage.
+                    const auto prev = m_cpuSamples.constFind(d.unit);
+                    if (prev != m_cpuSamples.constEnd() && nowMsec > prev->atMsec
+                            && cpu100ns >= prev->cpuNsec) {
+                        const double dCpuMs = static_cast<double>(cpu100ns - prev->cpuNsec) / 10000.0;
+                        const double dMsec  = static_cast<double>(nowMsec - prev->atMsec);
+                        res["cpu_percent"] = qRound(dCpuMs / dMsec * 1000.0) / 10.0;
+                    }
+                    m_cpuSamples.insert(d.unit, CpuSample{cpu100ns, nowMsec});
+                }
+
+                PROCESS_MEMORY_COUNTERS pmc;
+                if (GetProcessMemoryInfo(h, &pmc, sizeof(pmc))) {
+                    // Working set : la mesure Windows la plus proche de « RAM du
+                    // service ». Nature differente du cgroup Linux, d'ou un
+                    // memory_source distinct que morfAnalytics ne comparera pas a lui.
+                    res["memory_bytes"]  = static_cast<double>(pmc.WorkingSetSize);
+                    res["memory_source"] = QStringLiteral("working_set");
+                }
+
+                if (!res.isEmpty())
+                    s["resources"] = res;
+                CloseHandle(h);
+            }
+        }
+        arr.append(s);
+    }
+
+    // Oublie l'historique CPU des unites qui ne tournent plus (meme raison que
+    // sous Linux : eviter un delta absurde apres une longue absence).
+    for (auto it = m_cpuSamples.begin(); it != m_cpuSamples.end();) {
+        if (!seenUnits.contains(it.key()))
+            it = m_cpuSamples.erase(it);
+        else
+            ++it;
+    }
+#endif // _WIN32
 
     o["services"] = arr;
     o["ts"] = static_cast<double>(QDateTime::currentSecsSinceEpoch());

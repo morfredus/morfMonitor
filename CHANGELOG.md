@@ -3,6 +3,42 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.8.3] - 2026-08-15
+
+### Ajouté
+
+- **Équivalents Windows (moins détaillés) des champs bruts de la phase 0.** Les
+  ajouts 0.8.2 reposaient sur `systemctl` et `/sys` (Linux). Windows est désormais
+  couvert par l'API Win32, avec le même contrat de sortie et la même règle « donnée
+  absente = champ omis, jamais un 0 ».
+  - **Réseau (`/api/network`)** : compteurs `rx_bytes`, `tx_bytes`, `rx_errors`,
+    `tx_errors` par interface via `GetIfTable` (iphlpapi), appariés par index
+    d'interface. Compteurs 32 bits (contre 64 bits sous Linux).
+  - **Par service (`/api/services`)** : faute de systemd, chaque unité configurée est
+    associée à un processus dont l'image est `<unit>.exe` (énumération via
+    `CreateToolhelp32Snapshot`). On en tire `state`, `active`, `pid`, `uptime_s`
+    (`GetProcessTimes`) et `resources` {`cpu_percent`, `cpu_time_usec`, `memory_bytes`
+    avec `memory_source = "working_set"`}. Un service = son processus principal
+    (moins détaillé que le cgroup complet sous Linux).
+- Liaison conditionnelle des bibliothèques Windows `iphlpapi` et `psapi`.
+
+## [0.8.2] - 2026-08-15
+
+### Ajouté
+
+- **Champs bruts additifs pour l'historisation par morfAnalytics Monitor** (phase 0).
+  Tous rétrocompatibles, sans déplacer aucun calcul dans morfMonitor.
+  - **Par service (`/api/services`)** : `pid` (MainPID), `uptime_s` (déduit de
+    `ActiveEnterTimestampMonotonic` et de `/proc/uptime`) et `restarts` (`NRestarts`).
+    Obtenus dans l'appel `systemctl show` **déjà existant** (propriétés ajoutées à la
+    même commande) : aucun processus supplémentaire. `pid`/`uptime_s` uniquement pour
+    une unité active ; `restarts` exposé même à l'arrêt. Champs omis, jamais faux,
+    quand la donnée manque.
+  - **Réseau (`/api/network`)** : compteurs cumulés bruts par interface `rx_bytes`,
+    `tx_bytes`, `rx_errors`, `tx_errors`, lus dans `/sys/class/net/<itf>/statistics/`.
+    morfMonitor ne calcule aucun débit : un débit est un delta, laissé à morfAnalytics.
+    Omis hors Linux.
+
 ## [0.8.1] - 2026-08-14
 
 ### Corrigé

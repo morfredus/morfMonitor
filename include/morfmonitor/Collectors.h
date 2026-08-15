@@ -74,6 +74,11 @@ public:
     QJsonObject collectProbes(qint64 uptimeSeconds) const;
 
 private:
+    // Equivalent Windows (moins detaille) de collectSystemd : Windows n'a pas de
+    // systemd, on associe chaque service configure a un processus dont l'image est
+    // <unit>.exe et on en tire etat, PID, uptime, memoire (working set) et CPU.
+    QJsonObject collectWindowsServices();
+
     const SharedConfig* m_config;
 
     // Etat pour le calcul du CPU instantane par service. systemd n'expose que le

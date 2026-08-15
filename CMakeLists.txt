@@ -80,6 +80,13 @@ target_link_libraries(morfMonitor
     PUBLIC  Qt6::Core Qt6::Network
     PRIVATE morfBeacon::morfBeacon)
 
+# Sous Windows, les equivalents des sondes Linux passent par l'API Win32 :
+#   iphlpapi -> compteurs de trafic reseau (GetIfTable2)
+#   psapi    -> memoire d'un processus (GetProcessMemoryInfo)
+if(WIN32)
+    target_link_libraries(morfMonitor PRIVATE iphlpapi psapi)
+endif()
+
 # Numero de version accessible depuis le code.
 target_compile_definitions(morfMonitor PUBLIC MORFMONITOR_VERSION="${PROJECT_VERSION}")
 

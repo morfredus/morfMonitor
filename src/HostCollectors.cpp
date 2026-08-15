@@ -32,6 +32,7 @@
 #    define NOMINMAX
 #  endif
 #  include <windows.h>
+#  include <iphlpapi.h>   // GetIfTable2 : compteurs de trafic par interface
 #endif
 
 namespace morfmonitor {
@@ -407,6 +408,34 @@ QJsonObject NetworkCollector::collect() {
     QJsonObject o;
     QJsonArray interfaces;
 
+#ifdef _WIN32
+    // Equivalent Windows de /sys/class/net : compteurs de trafic cumules par
+    // interface via iphlpapi (GetIfTable, present dans iphlpapi.h sans dependance
+    // winsock). On lit la table UNE fois, indexee par l'INDEX d'interface, qui
+    // correspond a QNetworkInterface::index() : appariement fiable, contrairement
+    // aux noms. Compteurs 32 bits (dwInOctets/...) : moins detaille que les 64 bits
+    // de Linux (ils peuvent reboucler a 4 Gio), mais morfAnalytics travaille par
+    // delta et sait deja distinguer une donnee absente d'un zero.
+    QHash<quint32, QJsonObject> winTraffic;
+    {
+        DWORD size = 0;
+        GetIfTable(nullptr, &size, FALSE);   // premier appel : taille requise
+        QByteArray buf(static_cast<int>(size), Qt::Uninitialized);
+        auto* table = reinterpret_cast<PMIB_IFTABLE>(buf.data());
+        if (size > 0 && GetIfTable(table, &size, FALSE) == NO_ERROR) {
+            for (DWORD i = 0; i < table->dwNumEntries; ++i) {
+                const MIB_IFROW& r = table->table[i];
+                winTraffic.insert(static_cast<quint32>(r.dwIndex), QJsonObject{
+                    {"rx_bytes",  static_cast<double>(r.dwInOctets)},
+                    {"tx_bytes",  static_cast<double>(r.dwOutOctets)},
+                    {"rx_errors", static_cast<double>(r.dwInErrors)},
+                    {"tx_errors", static_cast<double>(r.dwOutErrors)},
+                });
+            }
+        }
+    }
+#endif
+
     for (const QNetworkInterface& itf : QNetworkInterface::allInterfaces()) {
         // La boucle locale n'apprend rien sur la connectivité de la machine.
         if (itf.flags().testFlag(QNetworkInterface::IsLoopBack))
@@ -431,6 +460,31 @@ QJsonObject NetworkCollector::collect() {
         }
         i["ipv4"] = v4;
         i["ipv6"] = v6;
+
+        // Compteurs de trafic CUMULES, valeurs BRUTES. morfMonitor ne calcule aucun
+        // debit : c'est morfAnalytics qui fera la difference entre deux releves (un
+        // debit est un delta). Donnee manquante = champ omis, jamais un 0 trompeur.
+#ifndef _WIN32
+        // Linux : /sys/class/net/<itf>/statistics/.
+        const QString stats = QStringLiteral("/sys/class/net/") + itf.name()
+                            + QStringLiteral("/statistics/");
+        const double rxB = readDouble(stats + QStringLiteral("rx_bytes"));
+        const double txB = readDouble(stats + QStringLiteral("tx_bytes"));
+        if (rxB >= 0) i["rx_bytes"] = rxB;
+        if (txB >= 0) i["tx_bytes"] = txB;
+        const double rxE = readDouble(stats + QStringLiteral("rx_errors"));
+        const double txE = readDouble(stats + QStringLiteral("tx_errors"));
+        if (rxE >= 0) i["rx_errors"] = rxE;
+        if (txE >= 0) i["tx_errors"] = txE;
+#else
+        // Windows : table iphlpapi lue plus haut, indexee par index d'interface.
+        const QJsonObject c = winTraffic.value(static_cast<quint32>(itf.index()));
+        for (const QString& k : {QStringLiteral("rx_bytes"), QStringLiteral("tx_bytes"),
+                                 QStringLiteral("rx_errors"), QStringLiteral("tx_errors")})
+            if (c.contains(k))
+                i[k] = c.value(k);
+#endif
+
         interfaces.append(i);
     }
 
