@@ -18,6 +18,10 @@ WorkingDirectory=__APP_DIR__
 ExecStart=__APP_DIR__/morfmonitor --config __CONFIG_DIR__/morfmonitor.json
 Restart=always
 RestartSec=5
+# Etat editable du service (registre persistant des machines connues du parc).
+# systemd cree /var/lib/morfmonitor, l'attribue au compte du service et exporte
+# STATE_DIRECTORY : la config reste en lecture seule sous /etc, l'etat vit ici.
+StateDirectory=morfmonitor
 StandardOutput=journal
 StandardError=journal
 

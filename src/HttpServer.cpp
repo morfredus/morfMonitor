@@ -132,13 +132,15 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
     const QByteArray verb = isHead ? QByteArray("GET") : method;
     sock->setProperty("head", isHead);
 
-    // ---- Exemple de route POST (a remplacer par vos endpoints metier) ----
-    if (path == "/example") {
+    // ---- Route POST : oublier une machine du registre --------------------
+    // Geste explicite de l'utilisateur (« Oublier cette machine »), le seul moyen
+    // de retirer une machine reellement partie du parc. Corps : {"host":"pi4dev"}.
+    if (path == "/api/machines/forget") {
         if (verb != "POST") {
             code = 405; reason = "Method Not Allowed";
-            out = "{\"error\":\"use POST /example\",\"allow\":\"POST\"}";
+            out = "{\"error\":\"use POST /api/machines/forget\",\"allow\":\"POST\"}";
         } else {
-            out = handleExamplePost(body, code, reason);
+            out = handleForgetMachine(body, code, reason);
         }
     }
     // ---- Routes GET (et HEAD) --------------------------------------------
@@ -203,18 +205,34 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
     reply(sock, code, reason, out);
 }
 
-QByteArray HttpServer::handleExamplePost(const QByteArray& body, int& code, QByteArray& reason) const {
-    // >>> EXEMPLE : parse un corps JSON et repond. A remplacer par votre metier.
+QByteArray HttpServer::handleForgetMachine(const QByteArray& body, int& code, QByteArray& reason) {
     QJsonParseError pe{};
     const QJsonDocument doc = QJsonDocument::fromJson(body, &pe);
     if (pe.error != QJsonParseError::NoError || !doc.isObject()) {
         code = 400; reason = "Bad Request";
         return "{\"error\":\"corps JSON invalide\"}";
     }
-    QJsonObject o;
-    o["received"] = doc.object();
-    o["ts"]       = static_cast<double>(QDateTime::currentSecsSinceEpoch());
-    return toJson(o);
+    const QString host = doc.object().value(QStringLiteral("host")).toString();
+    if (host.isEmpty()) {
+        code = 400; reason = "Bad Request";
+        return "{\"error\":\"champ 'host' requis\"}";
+    }
+    auto* mon = m_registry
+        ? qobject_cast<MonitorModule*>(m_registry->firstOfType(QStringLiteral("monitor")))
+        : nullptr;
+    if (!mon) {
+        code = 503; reason = "Service Unavailable";
+        return "{\"error\":\"aucun module de supervision actif\"}";
+    }
+    const bool removed = mon->forgetMachine(host);
+    if (!removed) {
+        // Machine inconnue : rien a oublier. 404 plutot qu'une fausse reussite,
+        // pour que l'interface ne pretende pas avoir agi sur du vide.
+        code = 404; reason = "Not Found";
+        return toJson(QJsonObject{{"error", QStringLiteral("machine inconnue")},
+                                  {"host", host}});
+    }
+    return toJson(QJsonObject{{"forgotten", host}, {"ok", true}});
 }
 
 QByteArray HttpServer::buildStatusJson() const {

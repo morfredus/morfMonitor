@@ -54,14 +54,16 @@
   "_comment_probe_grace": "Delai de grace avant la premiere sonde reseau, en secondes d'uptime. Une sonde resout un nom mDNS par multicast : on laisse le WiFi s'associer et se stabiliser pour ne pas perturber sa connexion au demarrage.",
   "network_probe_grace_s": 45,
 
-  "_comment_beacon": "Applications annoncant leur presence par heartbeat morfBeacon (broadcast UDP). Aucune adresse a connaitre : on ECOUTE. 'app' est le nom annonce dans le champ 'app' du heartbeat.",
+  "_comment_beacon": "Applications annoncant leur presence par heartbeat morfBeacon (broadcast UDP). Aucune adresse a connaitre : on ECOUTE. 'app' est le nom annonce dans le champ 'app' du heartbeat. 'archive_after_days' : une machine (role host) apprise par beacon est memorisee ; absente depuis ce nombre de jours, elle passe en 'archivee' (rangee hors de la vue principale, JAMAIS supprimee -- seul le bouton 'Oublier' la retire). 0 desactive l'archivage automatique.",
   "beacon": {
     "port": 45454,
-    "offline_after_s": 60
+    "offline_after_s": 60,
+    "archive_after_days": 30
   },
   "_comment_beacon_apps": "Applications ATTENDUES sur le LAN. Declarer n'est pas la meme chose qu'entendre : une application declaree est toujours listee, meme jamais entendue, donc son absence se voit. Une application non declaree n'apparait que si elle s'annonce -- si elle ne demarre jamais, personne ne l'apprend. Ne declarer que ce dont l'absence doit alerter.",
   "_comment_enabled": "'enabled' signifie « je m'attends a ce que cette application tourne ». A true, son absence devient une ANOMALIE : elle apparait en rouge et remonte dans le diagnostic et sur l'ecran. Reserver true a ce qui tourne en permanence. Une application de BUREAU, lancee de temps en temps, doit rester a false : sinon elle est signalee en panne des qu'elle est fermee, et ce bruit permanent finit par masquer les vraies pannes.",
   "_comment_beacon_apps_services": "Les services du parc tournent en permanence : les declarer a 'enabled: true' les fait apparaitre pleinement supervises dans l'onglet Ecosysteme (aucune pastille), et leur absence devient une anomalie visible. Les applications de bureau (ComponentHub, SiteWatch, PhotoHub) restent a 'false' : lancees ponctuellement, elles ne doivent pas etre signalees en panne a chaque fermeture. Le champ 'app' doit correspondre EXACTEMENT au nom annonce dans le heartbeat.",
+  "_comment_beacon_apps_host": "Champ 'host' FACULTATIF, deux natures d'attente. Sans 'host' : attente de PRESENCE (« attendu quelque part dans le parc ») -- une instance saine sur n'importe quelle machine satisfait le contrat, deplacer le service d'un poste a l'autre ne declenche aucune alerte, mais une absence TOTALE devient « introuvable ». Avec 'host' : attente de PLACEMENT (« attendu sur CETTE machine ») -- absent de cet hote alors qu'il est en ligne devient une anomalie attribuable ; si l'hote est eteint, ce n'est pas le service qui est en cause mais la machine (une seule ligne dans « Machines du parc », pas huit alertes). Ex. : { \"app\": \"morfPhoto\", \"enabled\": true, \"host\": \"pi4fred\" }.",
   "beacon_apps": [
     { "app": "ComponentHub", "label": "ComponentHub", "enabled": false },
     { "app": "SiteWatch",    "label": "SiteWatch",    "enabled": false },

@@ -7,6 +7,8 @@
 #include "morfmonitor/MonitorModule.h"
 
 #include <QUdpSocket>
+#include <QStandardPaths>
+#include <QDir>
 #include <QNetworkDatagram>
 #include <QNetworkInterface>
 #include <QNetworkAccessManager>
@@ -36,6 +38,10 @@ bool MonitorModule::start() {
     m_config.load(m_configPath);
     m_supervisor = std::make_unique<Supervisor>(&m_config);
 
+    // Memoire persistante des machines : chargee au demarrage pour que le parc
+    // deja connu reapparaisse immediatement, meme si aucune machine n'emet encore.
+    m_machines.load(resolveStateDir());
+
     m_beaconSocket = new QUdpSocket(this);
     // ShareAddress : d'autres programmes de la machine (le Dashboard en mode
     // dégradé, par exemple) écoutent le même port de diffusion.
@@ -57,10 +63,36 @@ bool MonitorModule::start() {
 
 void MonitorModule::stop() {
     m_running = false;
+    // Persiste la derniere annonce de chaque machine avant de partir : au
+    // prochain demarrage, « vu il y a ... » repart d'une base fraiche.
+    m_machines.flush();
     if (m_beaconSocket) {
         m_beaconSocket->close();
         m_beaconSocket = nullptr; // détruit par l'arbre QObject
     }
+}
+
+// Dossier d'etat inscriptible. Sous systemd, `StateDirectory=morfmonitor` fournit
+// /var/lib/morfmonitor et exporte STATE_DIRECTORY : on l'honore en priorite, dans
+// le respect de la doctrine du parc (config en lecture seule sous /etc, etat
+// editable sous /var/lib). A defaut (execution hors service, developpement,
+// Windows), on retombe sur l'emplacement de donnees applicatif standard.
+QString MonitorModule::resolveStateDir() const {
+    const QByteArray env = qgetenv("STATE_DIRECTORY");
+    if (!env.isEmpty()) {
+        // systemd peut en lister plusieurs, separes par « : » ; on prend le premier.
+        const QString first = QString::fromLocal8Bit(env).split(QLatin1Char(':')).value(0);
+        if (!first.isEmpty())
+            return first;
+    }
+    const QString base = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    if (base.isEmpty())
+        return QString();   // aucun emplacement : persistance desactivee, sans echec
+    return QDir(base).filePath(QStringLiteral("morfmonitor"));
+}
+
+bool MonitorModule::forgetMachine(const QString& host) {
+    return m_machines.forget(host);
 }
 
 qint64 MonitorModule::uptimeSeconds() const {
@@ -206,6 +238,9 @@ void MonitorModule::onBeaconDatagram() {
         s.instance   = o.value(QStringLiteral("instance")).toString();
         s.version    = o.value(QStringLiteral("version")).toString();
         s.host       = o.value(QStringLiteral("host")).toString();
+        // Role de l'emetteur. Absent (annonce d'avant morfBeacon 0.7.0) => "host",
+        // le defaut historique : toute annonce etait un service sur une machine.
+        s.role       = o.value(QStringLiteral("role")).toString(QStringLiteral("host"));
         s.state      = o.value(QStringLiteral("state")).toString();
         s.statusPort = static_cast<quint16>(o.value(QStringLiteral("status_port")).toInt());
 
@@ -258,6 +293,14 @@ void MonitorModule::onBeaconDatagram() {
             }
         }
         m_beaconSeen.insert(key, s);
+
+        // Apprentissage du parc : un heartbeat de POSTE (role « host ») memorise
+        // sa machine dans le registre persistant. Les equipements (« device ») ne
+        // sont pas des machines et n'y entrent pas. Aucune declaration manuelle :
+        // le parc se construit a partir de ce qui s'annonce reellement.
+        if (s.role != QLatin1String("device") && !s.host.isEmpty())
+            m_machines.observe(s.host, s.lastSeen);
+
         fetchDetailIfNeeded(key);
     }
     pruneStaleBeacons();
@@ -330,6 +373,20 @@ QJsonObject MonitorModule::beaconAppsJson() const {
     const qint64 now = QDateTime::currentSecsSinceEpoch();
     const int offlineAfter = m_config.beaconOfflineAfterS();
 
+    // Presence par hote : un poste generaliste ("host") est considere en ligne
+    // tant qu'au moins un de ses services host emet un heartbeat frais. Un poste
+    // eteint voit donc TOUS ses services disparaitre ensemble, ce qui permet a un
+    // consommateur de le presenter comme UNE machine hors ligne plutot que N
+    // pannes independantes. Les equipements ("device") ne rendent pas un hote
+    // present : un ESP32 vit sa propre presence, il n'est pas une machine hote.
+    QSet<QString> onlineHosts;
+    for (auto it = m_beaconSeen.constBegin(); it != m_beaconSeen.constEnd(); ++it) {
+        if (it->role == QLatin1String("device"))
+            continue;
+        if (!it->host.isEmpty() && (now - it->lastSeen) < offlineAfter)
+            onlineHosts.insert(it->host);
+    }
+
     // Une entree par INSTANCE entendue : le meme service tournant sur deux
     // machines produit deux lignes, chacune avec son hote, son adresse et son
     // heartbeat. Regroupees sous un seul nom, elles s'ecrasaient l'une l'autre
@@ -347,53 +404,84 @@ QJsonObject MonitorModule::beaconAppsJson() const {
                                ? s.app + QLatin1Char('@') + s.sourceIp : s.instance;
         a["version"]     = s.version;
         a["host"]        = s.host;
+        a["role"]        = s.role.isEmpty() ? QStringLiteral("host") : s.role;
+        // host_online : l'hote de CETTE entree est-il present ? Il distingue
+        // « service en panne sur une machine vivante » (vraie anomalie) de
+        // « machine entierement eteinte » (un seul fait, a presenter comme tel).
+        // Pour un device, l'hote est l'equipement lui-meme : la notion se confond
+        // alors avec sa propre presence.
+        a["host_online"] = (s.role == QLatin1String("device"))
+                               ? (age < offlineAfter)
+                               : onlineHosts.contains(s.host);
         a["state"]       = s.state;
         addReachability(a, s);
     };
 
-    // 1. Les applications déclarées : toujours listées, en ligne ou non. Une
-    //    application attendue mais absente est une information ; l'omettre la
-    //    ferait disparaître silencieusement de l'affichage. Quand plusieurs
-    //    instances s'annoncent, chacune a sa ligne ; quand aucune ne se fait
-    //    entendre, la déclaration à elle seule produit la ligne « hors ligne ».
-    QSet<QString> declared;
+    // Resout la declaration qui COUVRE une instance : un PLACEMENT exact (meme app
+    // ET meme hote) l'emporte sur une PRESENCE (meme app, hote non precise). Sans
+    // declaration, l'instance est « non declaree » (outil de decouverte).
+    const auto declFor = [&](const QString& app,
+                             const QString& host) -> const BeaconAppDef* {
+        const BeaconAppDef* presence = nullptr;
+        for (const BeaconAppDef& d : m_config.beaconApps()) {
+            if (d.app != app)
+                continue;
+            if (!d.host.isEmpty()) {
+                if (d.host == host)
+                    return &d;          // placement exact : la meilleure couverture
+            } else if (!presence) {
+                presence = &d;          // presence : couverture de repli
+            }
+        }
+        return presence;
+    };
+
+    // 1. Une ligne par INSTANCE entendue. Chaque instance porte l'etat declaratif
+    //    (enabled/declared) de la declaration qui la couvre. Le meme service sur
+    //    deux machines fait deux lignes, chacune avec son hote et sa presence.
+    for (auto it = m_beaconSeen.constBegin(); it != m_beaconSeen.constEnd(); ++it) {
+        const BeaconAppDef* d = declFor(it->app, it->host);
+        QJsonObject a;
+        a["app"]      = it->app;
+        a["label"]    = d ? d->label : it->app;
+        a["declared"] = (d != nullptr);
+        if (d)
+            a["enabled"] = d->enabled;
+        fill(a, *it);
+        arr.append(a);
+    }
+
+    // 2. Les declarations INSATISFAITES : attendues, mais qu'aucune instance ne
+    //    couvre. La declaration a elle seule produit alors une ligne « hors ligne »,
+    //    pour que l'absence se voie au lieu de disparaitre en silence.
+    //      - PRESENCE (host vide) : insatisfaite si AUCUNE instance de l'app n'est
+    //        entendue, ou qu'elle soit -> ligne sans hote (« introuvable »).
+    //      - PLACEMENT (host precis) : insatisfaite si aucune instance de l'app sur
+    //        CET hote -> ligne portant l'hote et sa presence, pour distinguer
+    //        « absent d'une machine vivante » (anomalie) de « machine eteinte ».
     for (const BeaconAppDef& d : m_config.beaconApps()) {
-        declared.insert(d.app);
-        bool heard = false;
+        bool satisfied = false;
         for (auto it = m_beaconSeen.constBegin(); it != m_beaconSeen.constEnd(); ++it) {
             if (it->app != d.app)
                 continue;
-            heard = true;
-            QJsonObject a;
-            a["app"]      = d.app;
-            a["label"]    = d.label;
-            a["enabled"]  = d.enabled;
-            a["declared"] = true;
-            fill(a, *it);
-            arr.append(a);
+            if (d.host.isEmpty() || d.host == it->host) {
+                satisfied = true;
+                break;
+            }
         }
-        if (!heard) {
-            QJsonObject a;
-            a["app"]      = d.app;
-            a["label"]    = d.label;
-            a["enabled"]  = d.enabled;
-            a["declared"] = true;
-            a["online"]   = false;
-            arr.append(a);
-        }
-    }
-
-    // 2. Les instances entendues d'applications NON déclarées, marquées comme
-    //    telles. C'est un outil de découverte : brancher un nouveau service et
-    //    le voir apparaître ici indique quoi ajouter à la configuration.
-    for (auto it = m_beaconSeen.constBegin(); it != m_beaconSeen.constEnd(); ++it) {
-        if (declared.contains(it->app))
+        if (satisfied)
             continue;
         QJsonObject a;
-        a["app"]      = it->app;
-        a["label"]    = it->app;
-        a["declared"] = false;
-        fill(a, *it);
+        a["app"]      = d.app;
+        a["label"]    = d.label;
+        a["enabled"]  = d.enabled;
+        a["declared"] = true;
+        a["online"]   = false;
+        if (!d.host.isEmpty()) {
+            a["host"]        = d.host;
+            a["role"]        = QStringLiteral("host");
+            a["host_online"] = onlineHosts.contains(d.host);
+        }
         arr.append(a);
     }
 
@@ -464,7 +552,15 @@ QJsonObject MonitorModule::servicesJson() {
     o["beacon"] = beacon.value(QStringLiteral("apps"));
     o["beacon_offline_after_s"] = beacon.value(QStringLiteral("offline_after_s"));
 
-    o["ts"] = static_cast<double>(QDateTime::currentSecsSinceEpoch());
+    // Machines connues du parc (apprises par beacon, persistantes). Elles portent
+    // l'etat par MACHINE : un poste entierement eteint est UNE ligne « hors ligne »,
+    // pas la disparition de chacun de ses services. L'archivage automatique range
+    // hors de la vue une machine absente depuis longtemps, sans la supprimer.
+    const qint64 now = QDateTime::currentSecsSinceEpoch();
+    o["machines"] = m_machines.machinesJson(now, m_config.beaconOfflineAfterS(),
+                                            m_config.machineArchiveAfterS());
+
+    o["ts"] = static_cast<double>(now);
     return o;
 }
 

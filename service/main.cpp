@@ -156,7 +156,7 @@ int main(int argc, char** argv) {
     out() << "morfMonitor v" << morfmonitor::version() << " demarre : "
           << service.moduleCount() << " module(s), API http://"
           << config.bindAddress << ':' << service.httpPort()
-          << "/  (GET /status /healthz /modules ; POST /example)\n";
+          << "/  (GET /status /healthz /modules /api/... ; POST /api/machines/forget)\n";
     out().flush();
 
     return app.exec();

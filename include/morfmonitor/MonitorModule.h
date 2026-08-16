@@ -8,6 +8,7 @@
 #include "morfmonitor/IModule.h"
 #include "morfmonitor/SharedConfig.h"
 #include "morfmonitor/Collectors.h"
+#include "morfmonitor/MachineRegistry.h"
 
 #include <QHash>
 #include <QElapsedTimer>
@@ -63,8 +64,17 @@ public:
 
     const SharedConfig& config() const { return m_config; }
 
+    // Retire definitivement une machine du registre (« Oublier cette machine »).
+    // Geste explicite de l'utilisateur, expose par une route POST. Retourne false
+    // si la machine etait inconnue.
+    bool forgetMachine(const QString& host);
+
 private:
     void onBeaconDatagram();
+
+    // Dossier d'etat inscriptible du service (registre des machines). STATE_DIRECTORY
+    // (systemd) en priorite, sinon l'emplacement de donnees applicatif standard.
+    QString resolveStateDir() const;
 
     // Interroge /status d'un service une seule fois par version vue, pour en
     // recolter le DETAIL qu'il annonce : son interface web (« web_ui ») et sa
@@ -137,6 +147,13 @@ private:
         QString instance;       // identite « app@host » du protocole, si annoncee
         QString version;
         QString host;
+        // Role de l'emetteur dans le parc (contrat morfbeacon/1) : "host" (machine
+        // generaliste hebergeant des services) ou "device" (equipement autonome,
+        // ESP32, capteur). Absent d'une annonce ancienne => "host". Sert a
+        // distinguer « poste hors ligne » (tous ses services host disparaissent
+        // ensemble) de « equipement absent », et a definir le « local » d'un
+        // tableau de bord.
+        QString role;
         QString state;
 
         // Adresse REELLE de l'emetteur, relevee a la reception du datagramme, et
@@ -188,6 +205,11 @@ private:
     // l'une l'autre à chaque heartbeat — l'affichage alternait entre les hôtes
     // toutes les quinze secondes. PROTOCOL.md avait prévu le champ pour ça.
     QHash<QString, BeaconSeen> m_beaconSeen;
+
+    // Memoire persistante des machines (role « host ») decouvertes par beacon :
+    // une machine eteinte reste connue, et un poste entier hors ligne se presente
+    // comme UNE machine plutot que par la disparition de chacun de ses services.
+    MachineRegistry m_machines;
 };
 
 } // namespace morfmonitor

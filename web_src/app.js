@@ -52,6 +52,17 @@ function ago(sec) {
   return `il y a ${Math.round(sec / 60)} min`;
 }
 
+// Comme `ago`, mais monte jusqu'aux heures et aux jours : une machine eteinte
+// peut n'avoir plus ete vue depuis longtemps, et « il y a 4320 min » ne se lit
+// pas. Reserve aux machines, dont l'absence se compte en heures, pas en minutes.
+function agoLong(sec) {
+  if (typeof sec !== 'number') return '—';
+  if (sec < 60) return `il y a ${Math.round(sec)} s`;
+  if (sec < 3600) return `il y a ${Math.round(sec / 60)} min`;
+  if (sec < 86400) return `il y a ${Math.round(sec / 3600)} h`;
+  return `il y a ${Math.round(sec / 86400)} j`;
+}
+
 function row(label, value) {
   return `<div class="info-row"><span class="info-label">${esc(label)}</span>` +
          `<span class="info-value">${value ?? '—'}</span></div>`;
@@ -488,6 +499,64 @@ function renderServices(all) {
           'équipement qui ne s’annonce pas.'));
 }
 
+// Etat lisible d'une machine du parc (registre persistant appris par beacon).
+function machineStateBadge(m) {
+  if (m.state === 'active')   return badge('ok',  'active');
+  if (m.state === 'archived') return badge('off', 'archivée');
+  return badge('warn', 'éteinte');   // offline : connue, mais silencieuse
+}
+
+// Machines du parc : la memoire, par MACHINE, de ce que morfMonitor a decouvert.
+// Un poste entierement eteint tient ici en UNE ligne (« pi4dev — éteinte — vue il
+// y a 3 h »), au lieu de faire clignoter en rouge chacun de ses services dans le
+// tableau ci-dessous. L'absence d'une machine connue est elle-meme une
+// information ; on la garde, sans la confondre avec une panne de service.
+function renderMachines(all) {
+  const s = all.services || {};
+  const machines = (s.machines || []).slice()
+    // Actives d'abord, puis par nom : la vue reste stable d'un rafraichissement
+    // a l'autre, et ce qui vit remonte au-dessus de ce qui dort.
+    .sort((a, b) => (a.online === b.online)
+      ? String(a.host).localeCompare(String(b.host))
+      : (a.online ? -1 : 1));
+
+  const active = machines.filter((m) => m.state === 'active').length;
+
+  el('c-machines').innerHTML =
+    header('Machines du parc', `${machines.length} connue${machines.length > 1 ? 's' : ''}` +
+      (machines.length ? ` · ${active} active${active > 1 ? 's' : ''}` : '')) +
+    (machines.length
+      ? `<div class="tbl-wrap"><table><thead><tr>
+           <th class="mono">Machine</th><th>État</th>
+           <th class="mono">Vue</th><th></th>
+         </tr></thead><tbody>` +
+        machines.map((m) => `<tr>
+          <td class="mono">${esc(m.host)}</td>
+          <td>${machineStateBadge(m)}</td>
+          <td class="mono">${m.online ? '—' : esc(agoLong(m.last_seen_s))}</td>
+          <td>${m.state === 'active' ? ''
+            : `<button class="btn-forget" data-host="${esc(m.host)}" title="Retirer cette machine du parc">Oublier</button>`}</td>
+        </tr>`).join('') + `</tbody></table></div>` +
+        `<div class="unavailable" style="margin-top:.8rem">` +
+        `<p style="margin:0">Ces machines sont apprises seules à partir des annonces ` +
+        `morfBeacon : aucune n’est déclarée à la main. Une machine éteinte reste ` +
+        `mémorisée, puis passe en <em>archivée</em> après une longue absence, sans ` +
+        `être supprimée. <strong>Oublier</strong> la retire définitivement — à ` +
+        `n’utiliser que pour une machine réellement partie du parc.</p></div>`
+      : unavailable('Aucune machine connue pour l’instant.',
+          'Dès qu’un poste (rôle host) diffuse un heartbeat morfBeacon, il est mémorisé ici.'));
+}
+
+// Une machine est-elle eteinte, du point de vue du registre ? Sert a masquer du
+// tableau des services les entrees d'un poste hors ligne : la machine parle pour
+// elles dans la carte « Machines du parc », inutile de repeindre huit lignes.
+function offlineHosts(all) {
+  const s = all.services || {};
+  const set = new Set();
+  (s.machines || []).forEach((m) => { if (!m.online) set.add(m.host); });
+  return set;
+}
+
 function renderEcosysteme(all) {
   // Releve l'etat des routes depliees AVANT de reconstruire le tableau, pour le
   // restaurer a l'identique. Sans cela, le rafraichissement periodique refermait
@@ -498,11 +567,21 @@ function renderEcosysteme(all) {
   });
 
   const s = all.services || {};
-  const apps = s.beacon || [];
+  // Masque les services portes par une machine ETEINTE : la carte « Machines du
+  // parc » les represente deja par une seule ligne. On ne cache que les services
+  // (role host) d'un poste hors ligne ; un equipement (role device) garde sa
+  // ligne, car il n'est pas rattache a une machine generaliste. Un poste ALLUME
+  // montre au contraire tous ses services, comme avant.
+  const off = offlineHosts(all);
+  const apps = (s.beacon || []).filter(
+    (a) => !(a.role !== 'device' && a.host && off.has(a.host)));
+  const hidden = (s.beacon || []).length - apps.length;
   const offlineAfter = s.beacon_offline_after_s;
 
   el('c-beacon').innerHTML =
-    header('Services découverts via morfBeacon', `${apps.length} annoncés`) +
+    header('Services découverts via morfBeacon',
+      `${apps.length} annoncé${apps.length > 1 ? 's' : ''}` +
+      (hidden ? ` · ${hidden} masqué${hidden > 1 ? 's' : ''} (poste éteint)` : '')) +
     (apps.length
       ? `<div class="tbl-wrap"><table><thead><tr>
            <th>Application</th><th class="mono">Machine</th><th class="mono">Adresse</th>
@@ -593,17 +672,37 @@ function problems(all) {
   // jamais ete promise a personne, et la signaler indefiniment noierait les
   // vraies pannes.
   //
-  // Et la promesse porte sur le SERVICE, pas sur chacune de ses instances : la
-  // liste contient desormais une ligne par machine, donc on regroupe par nom et
-  // on n'alerte que si AUCUNE instance ne repond. Une machine d'essai eteinte
-  // ne met pas en panne un service qui tourne tres bien ailleurs.
-  const expected = new Map();
+  // La promesse porte sur le SERVICE, pas sur chacune de ses instances, et une
+  // MACHINE eteinte n'est pas une panne de service. On distingue donc trois cas,
+  // par application declaree :
+  //   - au moins une instance en ligne            -> tout va bien ;
+  //   - hors ligne sur une machine ALLUMEE         -> panne reelle, attribuable
+  //     (le service devrait tourner la, et il n'y est pas) : anomalie rouge ;
+  //   - connue seulement sur des machines ETEINTES -> ce n'est pas le service qui
+  //     est en cause mais la machine : la carte « Machines du parc » le montre,
+  //     pas d'anomalie de service ici ;
+  //   - entendue NULLE PART                         -> service attendu introuvable
+  //     dans tout le parc : anomalie rouge.
+  // host_online (fourni par morfMonitor) porte exactement cette distinction.
+  const agg = new Map();   // app -> { online, downOnLiveHost, sawInstance }
   (s.beacon || []).forEach((a) => {
     if (a.enabled === false || !a.declared) return;
-    expected.set(a.app, (expected.get(a.app) || false) || !!a.online);
+    const g = agg.get(a.app) || { online: false, downOnLiveHost: false, sawInstance: false };
+    // Une entree « declaree mais entendue nulle part » n'a pas d'hote : on ne la
+    // compte pas comme une instance vue.
+    const isInstance = !!a.host;
+    if (isInstance) g.sawInstance = true;
+    if (a.online) g.online = true;
+    else if (isInstance && a.host_online) g.downOnLiveHost = true;
+    agg.set(a.app, g);
   });
-  expected.forEach((anyOnline, app) => {
-    if (!anyOnline) out.push({ what: serviceName(app), state: 'hors ligne', kind: 'err' });
+  agg.forEach((g, app) => {
+    if (g.online) return;                       // tourne quelque part : rien a dire
+    if (g.downOnLiveHost)
+      out.push({ what: serviceName(app), state: 'hors ligne', kind: 'err' });
+    else if (!g.sawInstance)
+      out.push({ what: serviceName(app), state: 'introuvable', kind: 'err' });
+    // Sinon : uniquement sur des machines eteintes -> pas d'anomalie de service.
   });
   // Chaque volume est surveillé pour lui-même : un /home qui se remplit est
   // une anomalie que la seule racine ne montrait jamais. Le point de montage
@@ -698,7 +797,7 @@ function showServiceProblem(title, detail) {
     const node = el(id);
     if (node) node.innerHTML = block;
   });
-  ['c-sante', 'c-apercu', 'c-probes', 'c-reboot', 'c-config'].forEach((id) => {
+  ['c-sante', 'c-apercu', 'c-probes', 'c-reboot', 'c-config', 'c-machines'].forEach((id) => {
     const node = el(id);
     if (node) node.innerHTML = '';
   });
@@ -750,6 +849,7 @@ async function refresh() {
     renderRessources(all);
     renderReseau(all);
     renderServices(all);
+    renderMachines(all);
     renderEcosysteme(all);
     renderDiagnostic(all, config);
 
@@ -776,6 +876,39 @@ el('nav').addEventListener('click', (ev) => {
     p.classList.toggle('active', p.id === `page-${btn.dataset.page}`);
   });
   location.hash = btn.dataset.page;
+});
+
+// « Oublier une machine » : geste explicite et irreversible, donc confirme. La
+// carte est reconstruite a chaque rafraichissement, d'ou une delegation d'evenement
+// sur le conteneur plutot qu'un handler par bouton.
+el('c-machines').addEventListener('click', async (ev) => {
+  const btn = ev.target.closest('button.btn-forget');
+  if (!btn) return;
+  const host = btn.getAttribute('data-host');
+  if (!host || !window.confirm(
+      `Oublier définitivement « ${host} » ?\n\n` +
+      `La machine sera retirée du registre. Si elle se remet à émettre, ` +
+      `elle sera réapprise automatiquement.`))
+    return;
+  btn.disabled = true;
+  try {
+    const r = await fetch('/api/machines/forget', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ host }),
+    });
+    if (!r.ok) {
+      let msg = `HTTP ${r.status}`;
+      try { msg = (await r.json()).error || msg; } catch (_) { /* corps non JSON */ }
+      window.alert(`Impossible d’oublier « ${host} » : ${msg}`);
+      btn.disabled = false;
+      return;
+    }
+    refresh();   // la machine disparait de la carte au prochain rendu
+  } catch (e) {
+    window.alert(`Impossible d’oublier « ${host} » : ${e.message}`);
+    btn.disabled = false;
+  }
 });
 
 const initial = location.hash.replace('#', '');

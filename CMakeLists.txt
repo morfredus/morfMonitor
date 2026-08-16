@@ -55,6 +55,7 @@ add_library(morfMonitor STATIC
     src/Service.cpp
     src/ModuleFactory.cpp
     src/MonitorModule.cpp
+    src/MachineRegistry.cpp
     src/SharedConfig.cpp
     src/HostCollectors.cpp
     src/Supervisor.cpp                 # <-- remplacer par votre metier
@@ -65,6 +66,7 @@ add_library(morfMonitor STATIC
     include/morfmonitor/HttpServer.h
     include/morfmonitor/Service.h
     include/morfmonitor/MonitorModule.h
+    include/morfmonitor/MachineRegistry.h
     include/morfmonitor/SharedConfig.h
     include/morfmonitor/Collectors.h  # <-- remplacer par votre metier
     include/morfmonitor/Version.h

@@ -51,6 +51,18 @@ struct BeaconAppDef {
     QString app;       // nom annonce dans le champ « app » du heartbeat
     QString label;
     bool    enabled = true;
+
+    // Machine attendue, FACULTATIVE. Deux natures d'attente :
+    //   - vide  : contrainte de PRESENCE (« attendu quelque part dans le parc »).
+    //             Une instance saine, sur n'importe quelle machine, satisfait le
+    //             contrat -- deplacer le service d'un poste a l'autre ne declenche
+    //             aucune alerte. Absent partout => anomalie « introuvable ».
+    //   - hote  : contrainte de PLACEMENT (« attendu sur CETTE machine »). Absent
+    //             de cet hote alors qu'il est en ligne => anomalie attribuable.
+    //             Si l'hote est eteint, ce n'est pas le service qui est en cause
+    //             mais la machine : pas d'anomalie de service (la carte
+    //             « Machines du parc » le montre).
+    QString host;
 };
 
 class SharedConfig {
@@ -87,6 +99,12 @@ public:
     quint16 beaconPort() const { return m_beaconPort; }
     int beaconOfflineAfterS() const { return m_beaconOfflineS; }
 
+    // Duree d'absence, en SECONDES, avant qu'une machine connue passe en
+    // « archivee » (rangee hors de la vue principale, jamais supprimee). Reglee en
+    // JOURS dans le fichier (beacon.archive_after_days), 30 par defaut. 0 desactive
+    // l'archivage automatique : une machine reste alors « hors ligne » indefiniment.
+    qint64 machineArchiveAfterS() const { return m_machineArchiveS; }
+
     // NOTE : le port d'ecoute et l'adresse de bind ne sont volontairement PAS
     // ici. Ils appartiennent a la configuration propre du service
     // (morfmonitor.json). Ils ont figure dans ce fichier partage sans jamais
@@ -117,6 +135,7 @@ private:
     int     m_probeGraceS   = 45;
     quint16 m_beaconPort    = 45454;
     int     m_beaconOfflineS = 60;
+    qint64  m_machineArchiveS = 30LL * 24 * 3600;   // 30 jours
 };
 
 } // namespace morfmonitor

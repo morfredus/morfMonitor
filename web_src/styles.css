@@ -165,6 +165,21 @@ footer a:hover { text-decoration: underline; }
 .page { display: none; }
 .page.active { display: block; }
 
+/* Bouton « Oublier une machine » : discret par defaut (une action rare et
+   irreversible ne doit pas attirer le clic), il vire au rouge au survol pour
+   confirmer sa nature avant meme la boite de dialogue. */
+.btn-forget {
+  font: inherit; font-size: 0.78rem;
+  color: var(--text-dim); background: transparent;
+  border: 1px solid var(--line); border-radius: 6px;
+  padding: 0.2rem 0.6rem; cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.btn-forget:hover {
+  color: var(--err); border-color: var(--err); background: var(--err-bg);
+}
+.btn-forget:disabled { opacity: 0.5; cursor: default; }
+
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }

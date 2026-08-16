@@ -57,7 +57,7 @@ private:
     void onSocketReadyRead(QTcpSocket* sock);
     void handleRequest(QTcpSocket* sock, const QByteArray& method,
                        const QByteArray& path, const QByteArray& body);
-    QByteArray handleExamplePost(const QByteArray& body, int& code, QByteArray& reason) const;
+    QByteArray handleForgetMachine(const QByteArray& body, int& code, QByteArray& reason);
     QByteArray buildStatusJson() const;
 
     // Sert un asset embarque (:/web/...). Renvoie false si le chemin ne

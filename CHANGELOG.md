@@ -3,6 +3,38 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.9.0] - 2026-08-16
+
+### Ajouté
+
+- **Machines du parc, apprises seules.** morfMonitor mémorise les machines
+  (rôle `host`) découvertes par morfBeacon, sans aucune déclaration manuelle. Un
+  registre persistant (`/var/lib/morfmonitor/known-machines.json`, via
+  `StateDirectory`) leur survit : une machine éteinte reste connue, puis passe en
+  `archivée` après une longue absence (`beacon.archive_after_days`, 30 par défaut)
+  sans être supprimée. États dérivés : `active` / `offline` / `archived`. Seul un
+  `POST /api/machines/forget` (bouton « Oublier ») retire une machine. Les machines
+  sont exposées dans `services.machines`.
+- **Vue par machine dans l'onglet Écosystème.** Une carte « Machines du parc »
+  liste chaque machine et son état ; un poste entièrement éteint y tient en une
+  seule ligne (« pi4dev — éteinte — vue il y a 3 h ») au lieu de faire clignoter en
+  rouge chacun de ses services, désormais masqués du tableau beacon.
+
+### Modifié
+
+- **Rôle et présence par hôte.** Le champ `role` (`host`/`device`) du contrat
+  morfBeacon 0.7.0 est lu sur chaque heartbeat ; chaque entrée beacon expose son
+  `role` et un `host_online`. Un poste est en ligne tant qu'un de ses services
+  `host` émet, si bien que sa disparition est UN fait (« machine hors ligne »),
+  pas N pannes de service.
+- **Anomalies plus justes.** Un service tombé sur une machine vivante est une
+  panne attribuable (rouge) ; un service connu seulement sur des machines éteintes
+  n'en est pas une (la carte des machines le montre) ; un service attendu et
+  entendu nulle part est « introuvable » (rouge).
+- **Attente de placement.** `beacon_apps` accepte un `host` facultatif : attente
+  de *présence* (attendu quelque part dans le parc, insensible à un déménagement de
+  machine) sans lui, de *placement* (attendu sur CETTE machine) avec lui.
+
 ## [0.8.4] - 2026-08-15
 
 ### Modifié

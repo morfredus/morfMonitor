@@ -99,6 +99,8 @@ bool SharedConfig::load(const QString& path) {
         d.app     = o.value(QStringLiteral("app")).toString();
         d.label   = o.value(QStringLiteral("label")).toString(d.app);
         d.enabled = o.value(QStringLiteral("enabled")).toBool(true);
+        // Machine attendue (facultative) : contrainte de placement si presente.
+        d.host    = o.value(QStringLiteral("host")).toString();
         if (!d.app.isEmpty())
             m_beaconApps.push_back(d);
     }
@@ -108,6 +110,12 @@ bool SharedConfig::load(const QString& path) {
     const QJsonObject beacon = root.value(QStringLiteral("beacon")).toObject();
     m_beaconPort     = static_cast<quint16>(beacon.value(QStringLiteral("port")).toInt(m_beaconPort));
     m_beaconOfflineS = beacon.value(QStringLiteral("offline_after_s")).toInt(m_beaconOfflineS);
+    // Archivage des machines connues : regle en JOURS dans le fichier, converti en
+    // secondes. Absent => defaut (30 j). 0 => archivage automatique desactive.
+    if (beacon.contains(QStringLiteral("archive_after_days"))) {
+        const qint64 days = static_cast<qint64>(beacon.value(QStringLiteral("archive_after_days")).toInt(30));
+        m_machineArchiveS = days > 0 ? days * 24 * 3600 : 0;
+    }
 
     m_loaded = true;
     m_loadedPath = chosen;
@@ -138,11 +146,17 @@ QJsonObject SharedConfig::toJson() const {
 
     QJsonArray apps;
     for (const BeaconAppDef& d : m_beaconApps) {
-        apps.append(QJsonObject{{"app", d.app}, {"label", d.label}, {"enabled", d.enabled}});
+        QJsonObject a{{"app", d.app}, {"label", d.label}, {"enabled", d.enabled}};
+        // N'expose « host » que s'il est renseigne : une attente de presence
+        // (host vide) ne doit pas se lire comme une attente de placement sur « ».
+        if (!d.host.isEmpty())
+            a["host"] = d.host;
+        apps.append(a);
     }
     o["beacon_apps"] = apps;
 
-    o["beacon"] = QJsonObject{{"port", m_beaconPort}, {"offline_after_s", m_beaconOfflineS}};
+    o["beacon"] = QJsonObject{{"port", m_beaconPort}, {"offline_after_s", m_beaconOfflineS},
+                              {"archive_after_days", static_cast<double>(m_machineArchiveS / (24 * 3600))}};
     o["network_probe_grace_s"] = m_probeGraceS;
     o["refresh"] = QJsonObject{{"resources_ms", m_resourcesMs}, {"network_ms", m_networkMs},
                                {"systemd_ms", m_systemdMs}, {"probes_ms", m_probesMs}};
