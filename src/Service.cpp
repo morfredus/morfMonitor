@@ -56,6 +56,14 @@ bool Service::start() {
         pc.statusPort          = m_http ? m_http->port() : 0;
         pc.statusBindAddress   = m_config.bindAddress;
 
+        // Capacite annoncee : « system_monitor ». C'est par elle qu'un consommateur
+        // reconnait un morfMonitor, jamais par son nom (que l'utilisateur peut
+        // changer). morfAnalytics s'en sert pour DECOUVRIR seul les morfMonitor du
+        // parc et historiser leur /api/all : une nouvelle machine qui s'annonce est
+        // integree sans aucune declaration manuelle, exactement comme morfMonitor
+        // apprend les machines depuis les heartbeats.
+        pc.capabilities        = {QStringLiteral("system_monitor")};
+
         // Detail annonce (interface web + API) : renseigne par le point unique
         // fillAnnouncedDetail, le meme qu'utilise /status, pour que le heartbeat
         // et /status ne puissent pas diverger. Un observatoire qui s'exempterait

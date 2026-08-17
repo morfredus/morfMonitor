@@ -3,6 +3,17 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.10.0] - 2026-08-17
+
+### Ajouté
+
+- **Capacité annoncée `system_monitor`.** morfMonitor déclare désormais cette
+  capacité dans son heartbeat morfBeacon. Un consommateur peut ainsi le reconnaître
+  **par capacité, jamais par nom** : morfAnalytics (≥ 0.27.0) s'en sert pour découvrir
+  seul les morfMonitor du parc et historiser leur `/api/all`, sans aucune déclaration
+  manuelle. Aucun changement de comportement pour l'existant ; c'est un champ additif
+  du heartbeat.
+
 ## [0.9.0] - 2026-08-16
 
 ### Ajouté
