@@ -33,6 +33,17 @@ struct SystemdServiceDef {
     QString unit;      // nom systemd, sans « .service »
     QString label;     // texte affiche
     bool    enabled = true;
+    // Nom d'APPLICATION annonce par le beacon, pour joindre la version executee
+    // (facultatif ; defaut = label). A ne renseigner que quand il DIFFERE du label
+    // affiche, ex. unit « morfdashboard », label « DashBoard », app « morfDashboard ».
+    QString app;
+    // Correspondance vers le depot GitHub, pour la verification de version
+    // (facultative). C'est une metadonnee de SUPERVISION, pas du service : la
+    // seule table de correspondance service -> depot vit ici, dans morfsystem.json,
+    // et est consommee par morfUpdate. `repo` vide => pas de verification distante
+    // (« Version inconnue » cote release). `owner` par defaut « morfredus ».
+    QString repoOwner; // proprietaire GitHub (defaut « morfredus »)
+    QString repo;      // nom du depot (ex. « morfCollector ») ; vide = pas de check
 };
 
 // Un equipement surveille par sonde reseau. Un ESP32 ne repond pas a systemctl :

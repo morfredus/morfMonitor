@@ -26,6 +26,11 @@ $beaconSrc = if (Test-Path "$srcBase\morfBeacon") { "$srcBase\morfBeacon" } else
 
 Sync-One "morfBeacon" $beaconSrc "$root\third_party\morf\beacon"
 
+# morfUpdate : detection de version via GitHub Releases (vue des versions de
+# services). Coeur seulement (le CMakeLists vendore ne compile pas les Widgets).
+$updateSrc = if (Test-Path "$srcBase\morfUpdate") { "$srcBase\morfUpdate" } else { "$srcBase\morfUpdate_travail" }
+Sync-One "morfUpdate" $updateSrc "$root\third_party\morf\morfupdate"
+
 # Coeur de deploiement (morfdeploy) : paquet Python, source de verite = depot dedie
 # morfDeploy. Repli transitoire sur morfTools\lib\morfdeploy tant que la migration
 # du parc n'est pas terminee.

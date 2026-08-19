@@ -3,6 +3,51 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [0.11.1] - 2026-08-19
+
+### Corrigé
+
+- **Version exécutée : priorité à l'hôte local** dans l'onglet « Services
+  systemd ». La jointure prenait le heartbeat le plus récent du parc : un même
+  service tournant sur un autre Pi pouvait afficher SA version (ex. morfCollector
+  0.4.5 vu depuis pi4fred) dans le tableau local de pi4dev, alors que la machine y
+  tourne 0.5.1. On privilégie désormais la version annoncée par CETTE machine ; à
+  défaut, la plus récente vue ailleurs est affichée **avec son hôte annonceur**
+  (badge + info-bulle), pour ne jamais montrer un numéro sans provenance.
+
+## [0.11.0] - 2026-08-19
+
+### Ajouté
+
+- **Versions des services dans l'onglet « Services morfSystem ».** Chaque service
+  affiche désormais sa **version exécutée**, la **dernière release publiée** et un
+  **état de comparaison** (`À jour`, `Mise à jour disponible`, `Version locale plus
+  récente`, `Version inconnue`, `Vérification impossible`), sans quitter la vue
+  opérationnelle.
+  - La version exécutée réutilise le chemin existant : le champ `version` du
+    heartbeat morfBeacon (joint par le nom d'application). Elle reste visible même
+    hors ligne ; une absence de réseau n'est **jamais** interprétée comme « à jour ».
+  - La dernière release vient de **morfUpdate** (embarqué, cœur sans UI) : aucune
+    logique GitHub propre à morfMonitor, aucun rôle pour Doctor. Comparaison
+    sémantique (`Version::compare`), release **stable** uniquement.
+  - **Correspondance service → dépôt** : unique table dans `morfsystem.json`
+    (champ `repo` par service, `owner` par défaut `morfredus`), consommée par
+    morfUpdate. `repo` absent → « Version inconnue » côté release, sans deviner.
+    Champ `app` facultatif quand le nom beacon diffère du label affiché.
+  - **Cache et déclenchement** : résultat persisté (affiché immédiatement à
+    l'ouverture) ; une entrée de moins de 6 h n'est pas revérifiée ; une entrée
+    expirée est revérifiée en arrière-plan (jamais bloquant) ; le bouton
+    **« Vérifier les versions »** force un contrôle frais. Un échec réseau
+    n'efface pas la dernière release connue (info-bulle : dernier succès, dépôt,
+    raison). La vérification distante ne part jamais sur la boucle de métriques.
+  - Route `POST /api/versions/check` (déclenchement) ; bloc `versions` dans
+    `/api/all` et `/api/services`.
+
+### Dépendance
+
+- **morfUpdate embarqué** (`third_party/morf/morfupdate`, cœur Qt Core+Network
+  sans Widgets), synchronisé par `scripts/sync-morf.(sh|ps1)`.
+
 ## [0.10.0] - 2026-08-17
 
 ### Ajouté

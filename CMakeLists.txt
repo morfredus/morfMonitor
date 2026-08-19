@@ -46,6 +46,14 @@ if(NOT TARGET morfBeacon::morfBeacon)
     add_subdirectory(third_party/morf/beacon)
 endif()
 
+# --- Dependance morfUpdate (detection de version via GitHub Releases) ------
+# Embarquee de la meme facon (copie vendoree, coeur sans Widgets). Reutilisee
+# par la vue des versions de services : morfMonitor n'implemente aucune logique
+# GitHub propre. Ne pas editer third_party/ ; resynchroniser avec sync-morf.
+if(NOT TARGET morfUpdate::morfUpdate)
+    add_subdirectory(third_party/morf/morfupdate)
+endif()
+
 # --- Bibliotheque ---------------------------------------------------------
 # >>> A ADAPTER : ajouter/retirer ici les sources de VOS modules metier. <<<
 add_library(morfMonitor STATIC
@@ -58,6 +66,7 @@ add_library(morfMonitor STATIC
     src/MachineRegistry.cpp
     src/SharedConfig.cpp
     src/HostCollectors.cpp
+    src/VersionMonitor.cpp             # versions de services (via morfUpdate)
     src/Supervisor.cpp                 # <-- remplacer par votre metier
     include/morfmonitor/IModule.h
     include/morfmonitor/ModuleRegistry.h
@@ -69,6 +78,7 @@ add_library(morfMonitor STATIC
     include/morfmonitor/MachineRegistry.h
     include/morfmonitor/SharedConfig.h
     include/morfmonitor/Collectors.h  # <-- remplacer par votre metier
+    include/morfmonitor/VersionMonitor.h
     include/morfmonitor/Version.h
 )
 add_library(morfMonitor::morfMonitor ALIAS morfMonitor)
@@ -80,7 +90,7 @@ target_include_directories(morfMonitor PUBLIC
 
 target_link_libraries(morfMonitor
     PUBLIC  Qt6::Core Qt6::Network
-    PRIVATE morfBeacon::morfBeacon)
+    PRIVATE morfBeacon::morfBeacon morfUpdate::morfUpdate)
 
 # Sous Windows, les equivalents des sondes Linux passent par l'API Win32 :
 #   iphlpapi -> compteurs de trafic reseau (GetIfTable2)

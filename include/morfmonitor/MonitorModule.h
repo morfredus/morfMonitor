@@ -9,6 +9,7 @@
 #include "morfmonitor/SharedConfig.h"
 #include "morfmonitor/Collectors.h"
 #include "morfmonitor/MachineRegistry.h"
+#include "morfmonitor/VersionMonitor.h"
 
 #include <QHash>
 #include <QElapsedTimer>
@@ -69,6 +70,11 @@ public:
     // si la machine etait inconnue.
     bool forgetMachine(const QString& host);
 
+    // Force une verification fraiche des versions (bouton « Verifier les
+    // versions »), meme cache encore valide. Non bloquant : les resultats
+    // arrivent en arriere-plan et seront visibles au prochain /api/all.
+    void triggerVersionCheck();
+
 private:
     void onBeaconDatagram();
 
@@ -106,6 +112,12 @@ private:
     QJsonObject beaconAppsJson() const;
     qint64 uptimeSeconds() const;
 
+    // Version EXÉCUTÉE connue par service, réutilisée du chemin beacon (jointure
+    // par le nom d'application = label systemd). Dans un onglet « Services systemd »
+    // LOCAL, on privilégie la version annoncée par CETTE machine ; à défaut, la plus
+    // récente vue ailleurs (avec l'hôte annonceur, pour lever l'ambiguïté).
+    QHash<QString, VersionMonitor::Running> runningVersionsByApp() const;
+
     QString      m_configPath;
     SharedConfig m_config;
     bool         m_running = false;
@@ -114,7 +126,8 @@ private:
     ResourceCollector   m_resources;
     NetworkCollector    m_network;
     RebootCauseDetector m_reboot;
-    std::unique_ptr<Supervisor> m_supervisor;
+    std::unique_ptr<Supervisor>     m_supervisor;
+    std::unique_ptr<VersionMonitor> m_versions;   // versions de services (via morfUpdate)
 
     // Cache : valeur + âge, par catégorie.
     struct Cached {

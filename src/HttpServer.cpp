@@ -143,6 +143,27 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
             out = handleForgetMachine(body, code, reason);
         }
     }
+    // ---- Route POST : forcer une verification des versions ----------------
+    // Bouton « Verifier les versions » : declenche une verification FRAICHE (meme
+    // cache valide). Non bloquant : les resultats arrivent en arriere-plan et
+    // seront visibles au prochain /api/all. Le corps est vide.
+    else if (path == "/api/versions/check") {
+        if (verb != "POST") {
+            code = 405; reason = "Method Not Allowed";
+            out = "{\"error\":\"use POST /api/versions/check\",\"allow\":\"POST\"}";
+        } else {
+            auto* mon = m_registry
+                ? qobject_cast<MonitorModule*>(m_registry->firstOfType(QStringLiteral("monitor")))
+                : nullptr;
+            if (!mon) {
+                code = 503; reason = "Service Unavailable";
+                out = "{\"error\":\"aucun module de supervision actif\"}";
+            } else {
+                mon->triggerVersionCheck();
+                out = "{\"status\":\"checking\"}";
+            }
+        }
+    }
     // ---- Routes GET (et HEAD) --------------------------------------------
     else if (verb != "GET") {
         code = 405; reason = "Method Not Allowed";

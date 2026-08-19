@@ -34,6 +34,16 @@ fi
 
 sync_one morfBeacon "$BEACON_SRC" "$ROOT/third_party/morf/beacon"
 
+# morfUpdate : détection de version via GitHub Releases (réutilisé par la vue
+# des versions de services). Cœur seulement (le CMakeLists vendoré ne compile
+# pas la couche Widgets). Dépôt source « morfUpdate » ou « morfUpdate_travail ».
+if [ -d "$SRC_BASE/morfUpdate" ]; then
+  UPDATE_SRC="$SRC_BASE/morfUpdate"
+else
+  UPDATE_SRC="$SRC_BASE/morfUpdate_travail"
+fi
+sync_one morfUpdate "$UPDATE_SRC" "$ROOT/third_party/morf/morfupdate"
+
 # Le coeur de deploiement (morfdeploy) vient de morfTools et n'a ni include/ ni
 # src/ : c'est un paquet Python, copie tel quel. Sans cette resynchronisation,
 # la copie vendoree derive du jour ou morfTools evolue -- « morf doctor » le

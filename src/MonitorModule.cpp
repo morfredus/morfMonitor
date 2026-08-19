@@ -18,6 +18,7 @@
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QDateTime>
+#include <QHostInfo>
 #include <QFile>
 #include <QSet>
 
@@ -41,6 +42,12 @@ bool MonitorModule::start() {
     // Memoire persistante des machines : chargee au demarrage pour que le parc
     // deja connu reapparaisse immediatement, meme si aucune machine n'emet encore.
     m_machines.load(resolveStateDir());
+
+    // Versions de services : reutilise morfUpdate (owner/repo -> derniere release).
+    // Le cache persiste dans le dossier d'etat, si bien qu'a l'ouverture on affiche
+    // immediatement le dernier resultat connu. TTL 6 h ; les cibles sont (re)lues
+    // de la config dans servicesJson (elle peut arriver apres le demarrage).
+    m_versions = std::make_unique<VersionMonitor>(resolveStateDir(), 6 * 3600 * 1000, this);
 
     m_beaconSocket = new QUdpSocket(this);
     // ShareAddress : d'autres programmes de la machine (le Dashboard en mode
@@ -560,8 +567,58 @@ QJsonObject MonitorModule::servicesJson() {
     o["machines"] = m_machines.machinesJson(now, m_config.beaconOfflineAfterS(),
                                             m_config.machineArchiveAfterS());
 
+    // Versions de services : partie DISTANTE (release) en cache, jointe ici a la
+    // version EXECUTEE du beacon. On tente un rafraichissement des entrees expirees
+    // en arriere-plan (checkNow(false)) : jamais bloquant, et sans rien envoyer si
+    // le cache est frais (< TTL). L'etat est calcule dans VersionMonitor.
+    if (m_versions) {
+        QVector<VersionMonitor::Target> targets;
+        for (const SystemdServiceDef& s : m_config.systemdServices())
+            targets.push_back({ s.label, s.app, s.repoOwner, s.repo });
+        m_versions->setTargets(targets);
+        m_versions->checkNow(/*force=*/false);
+        o["versions"] = m_versions->toJson(runningVersionsByApp());
+    }
+
     o["ts"] = static_cast<double>(now);
     return o;
+}
+
+// Version executee par nom d'application (= label systemd), depuis les heartbeats
+// beacon deja recus. L'onglet « Services systemd » decrit les unites de CETTE
+// machine : on privilegie donc la version annoncee par l'hote LOCAL. A defaut
+// (service local qui n'annonce pas, ou vu seulement ailleurs), on prend la plus
+// recente vue sur une autre machine, en conservant l'hote annonceur pour que le
+// frontend puisse le signaler -- sinon « morfCollector 0.4.5 (pi4fred) » afficherait
+// 0.4.5 dans l'onglet local de pi4dev sans qu'on sache d'ou vient ce numero.
+QHash<QString, VersionMonitor::Running> MonitorModule::runningVersionsByApp() const {
+    const QString local = QHostInfo::localHostName();
+    QHash<QString, VersionMonitor::Running> byApp;
+    QHash<QString, qint64> seenAt;
+    QHash<QString, bool>   pickedLocal;
+    for (const BeaconSeen& s : m_beaconSeen) {
+        if (s.app.isEmpty() || s.version.isEmpty())
+            continue;
+        const bool isLocal = !s.host.isEmpty()
+            && s.host.compare(local, Qt::CaseInsensitive) == 0;
+        const bool have = byApp.contains(s.app);
+        // Une entree LOCALE l'emporte toujours ; entre deux entrees de meme
+        // « localite », la plus recente gagne.
+        const bool better = !have
+            || (isLocal && !pickedLocal.value(s.app))
+            || (isLocal == pickedLocal.value(s.app) && s.lastSeen > seenAt.value(s.app));
+        if (better) {
+            byApp[s.app]      = { s.version, s.host };
+            seenAt[s.app]     = s.lastSeen;
+            pickedLocal[s.app] = isLocal;
+        }
+    }
+    return byApp;
+}
+
+void MonitorModule::triggerVersionCheck() {
+    if (m_versions)
+        m_versions->checkNow(/*force=*/true);
 }
 
 QJsonObject MonitorModule::rebootJson() {

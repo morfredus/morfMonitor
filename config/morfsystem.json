@@ -7,47 +7,56 @@
     "systemd_ms": 5000,
     "probes_ms": 15000
   },
-  "_comment_systemd": "Services systemd locaux. 'unit' est le nom systemd exact (sans .service), 'label' le texte affiche. Mettre 'enabled' a false desactive la surveillance sans supprimer la ligne.",
+  "_comment_systemd": "Services systemd locaux. 'unit' est le nom systemd exact (sans .service), 'label' le texte affiche. Mettre 'enabled' a false desactive la surveillance sans supprimer la ligne. 'repo' (facultatif) est le depot GitHub des releases, pour la verification de version : c'est l'UNIQUE table de correspondance service -> depot, consommee par morfUpdate. 'owner' est facultatif (defaut 'morfredus'). Repo absent => partie release en 'Version inconnue', sans deviner d'apres le nom.",
   "systemd_services": [
     {
       "unit": "morfanalytics",
       "label": "morfAnalytics",
-      "enabled": true
+      "enabled": true,
+      "repo": "morfAnalytics"
     },
     {
       "unit": "morfcollector",
       "label": "morfCollector",
-      "enabled": true
+      "enabled": true,
+      "repo": "morfCollector"
     },
     {
       "unit": "morfdashboard",
       "label": "DashBoard",
-      "enabled": true
+      "app": "morfDashboard",
+      "enabled": true,
+      "repo": "morfDashboard"
     },
     {
       "unit": "morfmonitor",
       "label": "morfMonitor",
-      "enabled": true
+      "enabled": true,
+      "repo": "morfMonitor"
     },
     {
       "unit": "morfnotify",
       "label": "morfNotify",
-      "enabled": true
+      "enabled": true,
+      "repo": "morfNotify"
     },
     {
       "unit": "morfphoto",
       "label": "morfPhoto",
-      "enabled": true
+      "enabled": true,
+      "repo": "morfPhoto"
     },
     {
       "unit": "morfsensor",
       "label": "morfSensor",
-      "enabled": true
+      "enabled": true,
+      "repo": "morfSensor"
     },
     {
       "unit": "morfsync",
       "label": "morfSync",
-      "enabled": true
+      "enabled": true,
+      "repo": "morfSync"
     }
   ],
   "_comment_network": "Equipements surveilles par sonde reseau : on teste l'ouverture d'un port TCP, 'host' acceptant un nom mDNS ou une IP fixe. C'est le mecanisme de DERNIER RECOURS, pour un equipement qui n'annonce pas sa presence. Il suppose de connaitre son adresse a l'avance -- l'inverse d'une decouverte. Preferer 'beacon_apps' des que l'equipement emet un heartbeat morfbeacon/1 : MeteoHub y est passe (voir plus bas), GatewayLab le peut aussi depuis sa version 1.7.0.",

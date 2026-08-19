@@ -446,24 +446,84 @@ function renderReseau(all) {
      </tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
+// Badge de comparaison de version, avec info-bulle (dépôt, dernier succès,
+// prerelease ignorée, raison d'un état indéterminé). L'état est CALCULÉ par le
+// backend (Version::compare, sémantique) : le frontend ne fait que l'habiller.
+function versionBadge(v) {
+  if (!v) return '<span class="mono">—</span>';
+  const st = v.state || '—';
+  if (st === '—') return '<span class="mono">—</span>';   // non vérifié
+  let kind = 'off';
+  if (st === 'À jour' || st === 'Version locale plus récente') kind = 'ok';
+  else if (st === 'Mise à jour disponible' || st === 'Vérification impossible') kind = 'warn';
+  const nowS = Math.floor(Date.now() / 1000);
+  const bits = [];
+  if (v.repo) bits.push(`dépôt interrogé : ${v.owner || 'morfredus'}/${v.repo}`);
+  if (v.last_success_s) bits.push(`dernière vérification réussie ${agoLong(nowS - v.last_success_s)}`);
+  if (v.stale) bits.push('contrôle actuel impossible — dernière info connue affichée');
+  else if (v.last_check_s) bits.push(`dernier contrôle ${agoLong(nowS - v.last_check_s)}`);
+  if (v.error) bits.push(`détail : ${v.error}`);
+  const tip = bits.join(' · ');
+  return `<span class="badge badge-${kind}" title="${esc(tip)}">${esc(st)}${v.stale ? ' ⚠' : ''}</span>`;
+}
+
 function renderServices(all) {
   const s = all.services || {};
 
+  // Versions par service : la partie release vient du backend (via morfUpdate),
+  // déjà jointe à la version exécutée annoncée par le beacon. Indexée par le nom
+  // affiché du service (= label systemd).
+  const verByLabel = {};
+  (s.versions || []).forEach((v) => { verByLabel[v.service] = v; });
+  const lastSuccess = (s.versions || [])
+    .map((v) => v.last_success_s || 0)
+    .reduce((a, b) => Math.max(a, b), 0);
+  const nowS = Math.floor(Date.now() / 1000);
+  const checkMeta = lastSuccess
+    ? `versions vérifiées ${agoLong(nowS - lastSuccess)}`
+    : 'versions jamais vérifiées';
+
+  // Nom de CETTE machine : la version exécutée d'un service local devrait venir
+  // d'elle. Si elle vient d'un autre hôte (même service ailleurs dans le parc), on
+  // le signale plutôt que d'afficher un numéro sans provenance.
+  const localHost = (all.system && all.system.hostname) || '';
+  const runCell = (v) => {
+    if (!v || !v.running) return '—';
+    const foreign = v.running_host && localHost &&
+      v.running_host.toLowerCase() !== localHost.toLowerCase();
+    return foreign
+      ? `${esc(v.running)} <span class="badge badge-off" title="Version annoncée par ${esc(v.running_host)}, pas par cette machine">${esc(v.running_host)}</span>`
+      : esc(v.running);
+  };
+
   const units = s.systemd || [];
+  const versionsBar =
+    `<div class="unavailable" style="display:flex;align-items:center;justify-content:space-between;margin:.2rem 0 .6rem">` +
+    `<span>Comparaison avec la dernière release publiée sur GitHub — ${esc(checkMeta)}.</span>` +
+    `<button class="btn-check-versions">Vérifier les versions</button></div>`;
+
   el('c-systemd').innerHTML = header('Services systemd', `${units.length} supervisés`) +
     (units.length
-      ? `<div class="tbl-wrap"><table><thead><tr>
+      ? versionsBar +
+        `<div class="tbl-wrap"><table><thead><tr>
            <th>Service</th><th class="mono">Unité</th><th>État</th>
+           <th class="mono">Version exécutée</th><th class="mono">Dernière release</th><th>Mise à jour</th>
            <th class="mono">CPU</th><th class="mono">Mémoire</th><th class="mono">Détail</th>
          </tr></thead><tbody>` +
-        units.map((u) => `<tr>
+        units.map((u) => {
+          const v = verByLabel[u.label || u.unit];
+          return `<tr>
           <td>${esc(u.label || u.unit)}</td>
           <td class="mono">${esc(u.unit || '—')}</td>
           <td>${systemdBadge(u)}</td>
+          <td class="mono">${runCell(v)}</td>
+          <td class="mono">${esc((v && v.latest) || '—')}</td>
+          <td>${versionBadge(v)}</td>
           <td class="mono">${svcCpu(u.resources)}</td>
           <td class="mono">${svcMem(u.resources)}</td>
           <td class="mono">${esc(u.sub_state || u.state || '—')}</td>
-        </tr>`).join('') + `</tbody></table></div>`
+        </tr>`;
+        }).join('') + `</tbody></table></div>`
       : unavailable('Aucun service systemd supervisé.',
           'La liste vient de morfsystem.json (clé systemd_services). Sous Windows, ' +
           'systemd n’existe pas : cette section reste vide par construction.'));
@@ -881,6 +941,22 @@ el('nav').addEventListener('click', (ev) => {
 // « Oublier une machine » : geste explicite et irreversible, donc confirme. La
 // carte est reconstruite a chaque rafraichissement, d'ou une delegation d'evenement
 // sur le conteneur plutot qu'un handler par bouton.
+// Bouton « Vérifier les versions » : force une vérification FRAÎCHE (même cache
+// valide) côté backend, puis rafraîchit l'affichage. Non bloquant : les résultats
+// arrivent en arrière-plan, on relit après un court délai.
+el('c-systemd').addEventListener('click', async (ev) => {
+  const btn = ev.target.closest('button.btn-check-versions');
+  if (!btn) return;
+  btn.disabled = true;
+  btn.textContent = 'Vérification…';
+  try {
+    await fetch('/api/versions/check', { method: 'POST' });
+  } catch (_) { /* le backend garde la dernière info connue */ }
+  // Laisse le temps aux requêtes GitHub d'aboutir, puis relit (plusieurs fois).
+  setTimeout(refresh, 2500);
+  setTimeout(refresh, 6000);
+});
+
 el('c-machines').addEventListener('click', async (ev) => {
   const btn = ev.target.closest('button.btn-forget');
   if (!btn) return;

@@ -71,9 +71,12 @@ bool SharedConfig::load(const QString& path) {
     for (const QJsonValue& v : root.value(QStringLiteral("systemd_services")).toArray()) {
         const QJsonObject o = v.toObject();
         SystemdServiceDef d;
-        d.unit    = o.value(QStringLiteral("unit")).toString();
-        d.label   = o.value(QStringLiteral("label")).toString(d.unit);
-        d.enabled = o.value(QStringLiteral("enabled")).toBool(true);
+        d.unit      = o.value(QStringLiteral("unit")).toString();
+        d.label     = o.value(QStringLiteral("label")).toString(d.unit);
+        d.enabled   = o.value(QStringLiteral("enabled")).toBool(true);
+        d.repo      = o.value(QStringLiteral("repo")).toString();
+        d.repoOwner = o.value(QStringLiteral("owner")).toString(QStringLiteral("morfredus"));
+        d.app       = o.value(QStringLiteral("app")).toString(d.label);   // defaut = label
         if (!d.unit.isEmpty())
             m_systemd.push_back(d);
     }
