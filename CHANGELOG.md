@@ -3,13 +3,21 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.13.1] - 2026-08-20
+
+### Corrigé
+
+- Le bouton de mise à jour fonctionne depuis l'interface Web consultée sur le
+  LAN. Il délègue toujours exclusivement vers l'agent local `127.0.0.1` et ne
+  peut cibler que les services de cette machine.
+
 ## [0.13.0] - 2026-08-20
 
 ### Ajouté
 
 - Bouton local « Mettre à jour » dans les services systemd lorsqu'une release
   plus récente est connue. La demande passe par le backend de morfMonitor vers
-  l'agent local morfUpdate et reste refusée depuis une adresse distante.
+  l'agent local morfUpdate, sans jamais sélectionner une machine distante.
 - Configuration `update_agent` pour désigner le jeton local partagé, sans jamais
   l'exposer au navigateur ou aux réponses d'API.
 

@@ -178,10 +178,12 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
         if (verb != "POST") {
             code = 405; reason = "Method Not Allowed";
             out = "{\"error\":\"use POST /api/updates\",\"allow\":\"POST\"}";
-        } else if (!sock->peerAddress().isLoopback()) {
-            code = 403; reason = "Forbidden";
-            out = "{\"error\":\"remote update requests are unavailable\"}";
         } else {
+            // Le navigateur peut consulter cette interface depuis le LAN. La
+            // cible reste pourtant locale : morfMonitor délègue seulement à
+            // l'agent lié à 127.0.0.1 et ne reçoit ni hôte ni URL à choisir.
+            // L'adresse du navigateur ne définit donc pas la portée de la
+            // mise à jour et ne doit pas bloquer cette délégation locale.
             out = handleLocalUpdate(body, code, reason);
         }
     }
