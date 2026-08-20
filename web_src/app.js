@@ -467,6 +467,13 @@ function versionBadge(v) {
   return `<span class="badge badge-${kind}" title="${esc(tip)}">${esc(st)}${v.stale ? ' ⚠' : ''}</span>`;
 }
 
+function updateAction(v, unit) {
+  if (!v || v.state !== 'Mise à jour disponible' || !v.latest) return '';
+  const project = v.service || unit || '';
+  return `<button class="btn-update-service" data-project="${esc(project)}" ` +
+    `data-version="${esc(v.latest)}">Mettre à jour</button>`;
+}
+
 function renderServices(all) {
   const s = all.services || {};
 
@@ -518,7 +525,7 @@ function renderServices(all) {
           <td>${systemdBadge(u)}</td>
           <td class="mono">${runCell(v)}</td>
           <td class="mono">${esc((v && v.latest) || '—')}</td>
-          <td>${versionBadge(v)}</td>
+          <td>${versionBadge(v)} ${updateAction(v, u.label || u.unit)}</td>
           <td class="mono">${svcCpu(u.resources)}</td>
           <td class="mono">${svcMem(u.resources)}</td>
           <td class="mono">${esc(u.sub_state || u.state || '—')}</td>
@@ -527,6 +534,29 @@ function renderServices(all) {
       : unavailable('Aucun service systemd supervisé.',
           'La liste vient de morfsystem.json (clé systemd_services). Sous Windows, ' +
           'systemd n’existe pas : cette section reste vide par construction.'));
+
+  document.querySelectorAll('.btn-update-service').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const project = button.dataset.project;
+      const version = button.dataset.version;
+      if (!confirm(`Mettre à jour ${project} vers ${version} sur cette machine ?`)) return;
+      button.disabled = true;
+      button.textContent = 'Demande en cours…';
+      try {
+        const response = await fetch('/api/updates', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({project, version})
+        });
+        const result = await response.json();
+        if (!response.ok && response.status !== 202) throw new Error(result.error || 'demande refusée');
+        button.textContent = result.id ? 'Mise à jour en cours' : 'Demande envoyée';
+      } catch (error) {
+        button.disabled = false;
+        button.textContent = 'Mettre à jour';
+        alert(`Mise à jour non lancée : ${error.message}`);
+      }
+    });
+  });
 
   const probes = s.network || [];
   const grace = s.network_grace;

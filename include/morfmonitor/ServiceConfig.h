@@ -49,6 +49,11 @@ struct ServiceConfig {
     // pure, sans qu'aucune autre configuration ne change.
     bool    webEnabled  = true;
 
+    // The update agent remains loopback-only. morfMonitor reads the shared
+    // protected token on the same machine and never exposes it to the web UI.
+    bool    updateAgentEnabled = false;
+    QString updateAgentTokenFile;
+
     // Annonce de presence sur le LAN via morfBeacon.
     bool    beaconEnabled    = true;
     quint16 beaconUdpPort    = 45454;                // port du parc morfSystem
@@ -64,6 +69,11 @@ struct ServiceConfig {
         if (root.contains("http_port"))    c.httpPort    = static_cast<quint16>(root.value("http_port").toInt(c.httpPort));
         if (root.contains("bind_address")) c.bindAddress = root.value("bind_address").toString(c.bindAddress);
         if (root.contains("web_enabled"))  c.webEnabled  = root.value("web_enabled").toBool(c.webEnabled);
+        const QJsonObject updateAgent = root.value("update_agent").toObject();
+        if (updateAgent.contains("enabled"))
+            c.updateAgentEnabled = updateAgent.value("enabled").toBool(c.updateAgentEnabled);
+        if (updateAgent.contains("token_file"))
+            c.updateAgentTokenFile = updateAgent.value("token_file").toString();
 
         const QJsonObject beacon = root.value("beacon").toObject();
         if (beacon.contains("enabled"))     c.beaconEnabled    = beacon.value("enabled").toBool(c.beaconEnabled);

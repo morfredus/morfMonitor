@@ -181,15 +181,15 @@ footer a:hover { text-decoration: underline; }
 .btn-forget:disabled { opacity: 0.5; cursor: default; }
 
 /* Bouton « Vérifier les versions » (barre des Services). */
-.btn-check-versions {
+.btn-check-versions, .btn-update-service {
   font: inherit; font-size: 0.78rem;
   color: var(--text-dim); background: transparent;
   border: 1px solid var(--line); border-radius: 6px;
   padding: 0.2rem 0.6rem; cursor: pointer; white-space: nowrap;
   transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
-.btn-check-versions:hover { color: var(--accent); border-color: var(--accent); }
-.btn-check-versions:disabled { opacity: 0.5; cursor: default; }
+.btn-check-versions:hover, .btn-update-service:hover { color: var(--accent); border-color: var(--accent); }
+.btn-check-versions:disabled, .btn-update-service:disabled { opacity: 0.5; cursor: default; }
 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }

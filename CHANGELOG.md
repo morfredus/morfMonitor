@@ -1,7 +1,17 @@
 # Journal des versions - morfMonitor
 
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
-et du [versionnage sémantique](https://semver.org/lang/fr/).
+et du [versionnage sémantique](https://semver.org/lang/fr/). 
+
+## [0.13.0] - 2026-08-20
+
+### Ajouté
+
+- Bouton local « Mettre à jour » dans les services systemd lorsqu'une release
+  plus récente est connue. La demande passe par le backend de morfMonitor vers
+  l'agent local morfUpdate et reste refusée depuis une adresse distante.
+- Configuration `update_agent` pour désigner le jeton local partagé, sans jamais
+  l'exposer au navigateur ou aux réponses d'API.
 
 ## [0.12.0] - 2026-08-20
 

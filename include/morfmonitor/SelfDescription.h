@@ -33,7 +33,8 @@ inline void fillAnnouncedDetail(morfbeacon::PresenceConfig& pc, bool webEnabled)
             "Etat de la machine et des services morfSystem.");
     }
 
-    // API d'observation. Toutes en lecture : morfMonitor observe, n'agit jamais.
+    // morfMonitor exposes observations. The sole write route only forwards an
+    // explicit local request to the dedicated update agent; it never installs.
     pc.apiBasePath = QStringLiteral("/api");
     pc.api = {
         {QStringLiteral("GET"), QStringLiteral("/api/system"),
@@ -50,6 +51,8 @@ inline void fillAnnouncedDetail(morfbeacon::PresenceConfig& pc, bool webEnabled)
          QStringLiteral("configuration effective supervisee")},
         {QStringLiteral("GET"), QStringLiteral("/api/all"),
          QStringLiteral("tout l'etat en une seule requete")},
+        {QStringLiteral("POST"), QStringLiteral("/api/updates"),
+         QStringLiteral("demande locale deleguee a morfUpdate, jamais une installation directe")},
     };
 }
 
