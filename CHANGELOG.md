@@ -3,6 +3,14 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.14.0] - 2026-08-20
+
+### Modifié
+
+- Le flux de mise à jour LAN ne dépend plus d'un jeton partagé. L'interface suit
+  désormais l'opération asynchrone jusqu'à son succès ou son diagnostic d'échec,
+  au lieu de confondre l'acceptation de la demande avec son résultat.
+
 ## [0.13.1] - 2026-08-20
 
 ### Corrigé

@@ -49,10 +49,9 @@ struct ServiceConfig {
     // pure, sans qu'aucune autre configuration ne change.
     bool    webEnabled  = true;
 
-    // The update agent remains loopback-only. morfMonitor reads the shared
-    // protected token on the same machine and never exposes it to the web UI.
+    // The update agent remains loopback-only. The local LAN trust model requires
+    // no shared secret between the two services.
     bool    updateAgentEnabled = false;
-    QString updateAgentTokenFile;
 
     // Annonce de presence sur le LAN via morfBeacon.
     bool    beaconEnabled    = true;
@@ -72,8 +71,6 @@ struct ServiceConfig {
         const QJsonObject updateAgent = root.value("update_agent").toObject();
         if (updateAgent.contains("enabled"))
             c.updateAgentEnabled = updateAgent.value("enabled").toBool(c.updateAgentEnabled);
-        if (updateAgent.contains("token_file"))
-            c.updateAgentTokenFile = updateAgent.value("token_file").toString();
 
         const QJsonObject beacon = root.value("beacon").toObject();
         if (beacon.contains("enabled"))     c.beaconEnabled    = beacon.value("enabled").toBool(c.beaconEnabled);

@@ -187,6 +187,14 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
             out = handleLocalUpdate(body, code, reason);
         }
     }
+    else if (path.startsWith("/api/updates/")) {
+        if (verb != "GET") {
+            code = 405; reason = "Method Not Allowed";
+            out = "{\"error\":\"use GET /api/updates/<id>\",\"allow\":\"GET\"}";
+        } else {
+            out = handleLocalUpdateStatus(path.mid(QByteArray("/api/updates/").size()), code, reason);
+        }
+    }
     // ---- Routes GET (et HEAD) --------------------------------------------
     else if (verb != "GET") {
         code = 405; reason = "Method Not Allowed";
@@ -280,7 +288,7 @@ QByteArray HttpServer::handleForgetMachine(const QByteArray& body, int& code, QB
 }
 
 QByteArray HttpServer::handleLocalUpdate(const QByteArray& body, int& code, QByteArray& reason) {
-    if (!m_config.updateAgentEnabled || m_config.updateAgentTokenFile.isEmpty()) {
+    if (!m_config.updateAgentEnabled) {
         code = 503; reason = "Service Unavailable";
         return "{\"error\":\"agent de mise à jour indisponible\"}";
     }
@@ -295,29 +303,9 @@ QByteArray HttpServer::handleLocalUpdate(const QByteArray& body, int& code, QByt
         code = 400; reason = "Bad Request";
         return "{\"error\":\"projet et version déclarés requis\"}";
     }
-    QString tokenPath = m_config.updateAgentTokenFile;
-#ifdef Q_OS_WIN
-    tokenPath.replace(QStringLiteral("@morfupdate-state@"),
-                      QDir(qEnvironmentVariable("ProgramData")).filePath(
-                          QStringLiteral("morfsystem/morfupdate/state")));
-#else
-    tokenPath.replace(QStringLiteral("@morfupdate-state@"),
-                      QStringLiteral("/var/lib/morfsystem/morfupdate"));
-#endif
-    QFile tokenFile(tokenPath);
-    if (!tokenFile.open(QIODevice::ReadOnly)) {
-        code = 503; reason = "Service Unavailable";
-        return "{\"error\":\"jeton local de mise à jour inaccessible\"}";
-    }
-    const QByteArray token = tokenFile.readAll().trimmed();
-    if (token.size() < 32) {
-        code = 503; reason = "Service Unavailable";
-        return "{\"error\":\"jeton local de mise à jour invalide\"}";
-    }
     QNetworkAccessManager manager;
     QNetworkRequest agent(QUrl(QStringLiteral("http://127.0.0.1:8794/api/v1/updates")));
     agent.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
-    agent.setRawHeader("Authorization", "Bearer " + token);
     QNetworkReply* reply = manager.post(agent, QJsonDocument(object).toJson(QJsonDocument::Compact));
     QEventLoop loop;
     QTimer timeout;
@@ -336,6 +324,35 @@ QByteArray HttpServer::handleLocalUpdate(const QByteArray& body, int& code, QByt
     }
     code = status;
     reason = status == 202 ? "Accepted" : (status == 409 ? "Conflict" : "Bad Request");
+    return response.isEmpty() ? "{\"error\":\"réponse d’agent invalide\"}" : response;
+}
+
+QByteArray HttpServer::handleLocalUpdateStatus(const QByteArray& id, int& code, QByteArray& reason) {
+    static const QRegularExpression identifier(QStringLiteral("^[A-Za-z0-9-]{1,128}$"));
+    if (!m_config.updateAgentEnabled || !identifier.match(QString::fromUtf8(id)).hasMatch()) {
+        code = 400; reason = "Bad Request";
+        return "{\"error\":\"identifiant d’opération invalide\"}";
+    }
+    QNetworkAccessManager manager;
+    QNetworkReply* reply = manager.get(QNetworkRequest(
+        QUrl(QStringLiteral("http://127.0.0.1:8794/api/v1/updates/") + QString::fromUtf8(id))));
+    QEventLoop loop;
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    QObject::connect(&timeout, &QTimer::timeout, reply, &QNetworkReply::abort);
+    timeout.start(5000);
+    loop.exec();
+    const QByteArray response = reply->readAll();
+    const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    const bool failed = reply->error() != QNetworkReply::NoError;
+    reply->deleteLater();
+    if (failed || status == 0) {
+        code = 503; reason = "Service Unavailable";
+        return "{\"error\":\"agent de mise à jour indisponible\"}";
+    }
+    code = status;
+    reason = status == 200 ? "OK" : "Bad Request";
     return response.isEmpty() ? "{\"error\":\"réponse d’agent invalide\"}" : response;
 }
 

@@ -17,6 +17,7 @@
 'use strict';
 
 const REFRESH_MS = 5000;
+const updateOperations = new Map();
 
 // --- utilitaires d'affichage ------------------------------------------------
 
@@ -474,6 +475,33 @@ function updateAction(v, unit) {
     `data-version="${esc(v.latest)}">Mettre à jour</button>`;
 }
 
+async function followUpdate(project, version, id) {
+  updateOperations.set(project, id);
+  try {
+    const response = await fetch(`/api/updates/${encodeURIComponent(id)}`);
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'suivi indisponible');
+    const state = result.state || 'inconnu';
+    if (state === 'succeeded') {
+      updateOperations.delete(project);
+      await refresh();
+      window.alert(`${project} ${version} est maintenant actif sur cette machine.`);
+      return;
+    }
+    if (state === 'failed' || state === 'rejected') {
+      updateOperations.delete(project);
+      await refresh();
+      window.alert(`Mise à jour de ${project} non terminée : ${result.detail || state}`);
+      return;
+    }
+    setTimeout(() => followUpdate(project, version, id), 1500);
+  } catch (error) {
+    updateOperations.delete(project);
+    await refresh();
+    window.alert(`Suivi de la mise à jour impossible : ${error.message}`);
+  }
+}
+
 function renderServices(all) {
   const s = all.services || {};
 
@@ -549,7 +577,8 @@ function renderServices(all) {
         });
         const result = await response.json();
         if (!response.ok && response.status !== 202) throw new Error(result.error || 'demande refusée');
-        button.textContent = result.id ? 'Mise à jour en cours' : 'Demande envoyée';
+        button.textContent = result.id ? 'Mise à jour en cours…' : 'Demande envoyée';
+        if (result.id) followUpdate(project, version, result.id);
       } catch (error) {
         button.disabled = false;
         button.textContent = 'Mettre à jour';

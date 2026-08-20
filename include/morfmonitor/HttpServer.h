@@ -59,6 +59,7 @@ private:
                        const QByteArray& path, const QByteArray& body);
     QByteArray handleForgetMachine(const QByteArray& body, int& code, QByteArray& reason);
     QByteArray handleLocalUpdate(const QByteArray& body, int& code, QByteArray& reason);
+    QByteArray handleLocalUpdateStatus(const QByteArray& id, int& code, QByteArray& reason);
     QByteArray buildStatusJson() const;
 
     // Sert un asset embarque (:/web/...). Renvoie false si le chemin ne

@@ -10,8 +10,7 @@
   "web_enabled": true,
 
   "update_agent": {
-    "enabled": false,
-    "token_file": "@morfupdate-state@/api.token"
+    "enabled": true
   },
 
   "beacon": {
