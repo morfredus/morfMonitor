@@ -22,7 +22,6 @@
 #include <QFile>
 #include <QSet>
 #include <QCoreApplication>
-#include <QDir>
 
 #ifndef MORFBEACON_VENDORED_VERSION
 #  define MORFBEACON_VENDORED_VERSION ""
@@ -47,7 +46,7 @@ QString cloneVersion(const QString& repo) {
     if (repo.isEmpty())
         return {};
     QStringList roots;
-    const QString env = qEnvironmentVariable(QStringLiteral("MORFSYSTEM_ROOT"));
+    const QString env = qEnvironmentVariable("MORFSYSTEM_ROOT");
     if (!env.isEmpty())
         roots << env;
     roots << QDir::home().filePath(QStringLiteral("morfSystem"));

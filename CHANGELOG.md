@@ -3,6 +3,13 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.14.5] - 2026-08-23
+
+### Corrigé
+
+- Compilation MinGW : `qEnvironmentVariable` attend un `const char *`, pas un
+  `QString`.
+
 ## [0.14.4] - 2026-08-23
 
 ### Ajouté
