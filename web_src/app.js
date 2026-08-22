@@ -470,7 +470,10 @@ function versionBadge(v) {
 
 function updateAction(v, unit) {
   if (!v || v.state !== 'Mise à jour disponible' || !v.latest) return '';
-  const project = v.service || unit || '';
+  // project = dépôt GitHub (morfDashboard), jamais le libellé affiché (DashBoard)
+  // ni l'unité systemd (morfdashboard) : c'est la clé de morfUpdate.targets.
+  const project = v.project || v.repo || '';
+  if (!project) return '';
   return `<button class="btn-update-service" data-project="${esc(project)}" ` +
     `data-version="${esc(v.latest)}">Mettre à jour</button>`;
 }
@@ -576,7 +579,20 @@ function renderServices(all) {
           body: JSON.stringify({project, version})
         });
         const result = await response.json();
-        if (!response.ok && response.status !== 202) throw new Error(result.error || 'demande refusée');
+        if (!response.ok && response.status !== 202) {
+          let msg = result.error || 'demande refusée';
+          if (response.status === 400) {
+            msg += '\n\nLe projet « ' + project + ' » doit être une cible déclarée '
+              + 'dans /etc/morfsystem/morfupdate/morfupdate.json (champ project = '
+              + 'nom du dépôt GitHub). service.py update n’ajoute pas d’entrée à '
+              + 'cette liste : aligner avec config push --force depuis le clone '
+              + 'morfUpdate, puis redémarrer morfupdate.';
+          }
+          if (response.status === 503) {
+            msg += '\n\nVérifier que morfupdate tourne : curl http://127.0.0.1:8794/healthz';
+          }
+          throw new Error(msg);
+        }
         button.textContent = result.id ? 'Mise à jour en cours…' : 'Demande envoyée';
         if (result.id) followUpdate(project, version, result.id);
       } catch (error) {

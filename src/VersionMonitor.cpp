@@ -133,6 +133,7 @@ QJsonArray VersionMonitor::toJson(const QHash<QString, Running>& runningByApp) c
 
         QJsonObject o;
         o["service"]        = t.label;
+        o["project"]        = t.repo;
         o["repo"]           = t.repo;
         o["owner"]          = t.owner.isEmpty() ? QStringLiteral("morfredus") : t.owner;
         o["running"]        = running.isEmpty() ? QJsonValue(QJsonValue::Null) : QJsonValue(running);

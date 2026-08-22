@@ -3,6 +3,24 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.14.3] - 2026-08-22
+
+### Corrigé
+
+- Le bouton « Mettre à jour » envoie le dépôt GitHub (`project` / `repo`), plus le libellé affiché. `DashBoard` n'est pas une cible morfUpdate ; `morfDashboard` l'est. Message d'erreur si le projet n'est pas dans `targets` ou si l'agent ne répond pas.
+
+## [0.14.2] - 2026-08-21
+
+### Ajouté
+
+- Enregistrement des compilations au niveau CMake (record_compile) : la durée de compile est signalée à morfAnalytics quel que soit le déclencheur (cmake --build direct, morf upgrade, déploiement morfDeploy).
+
+## [0.14.1] - 2026-08-21
+
+### Modifié
+
+- Resynchroniser les copies vendorées de morfdeploy (0.17.3) et morfUpdate (0.4.1).
+
 ## [0.14.0] - 2026-08-20
 
 ### Modifié

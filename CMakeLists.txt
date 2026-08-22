@@ -37,6 +37,15 @@ set(CMAKE_AUTORCC ON)
 # ici les modules Qt dont le METIER a besoin (SerialPort, Sql, ...).
 find_package(Qt6 REQUIRED COMPONENTS Core Network)
 
+# --- Enregistrement des compilations (best-effort) ------------------------
+# Chronometre le vrai travail des compilateurs et signale la duree a
+# morfAnalytics (POST /api/monitor/activity), QUEL QUE SOIT le declencheur :
+# `cmake --build` direct, `morf upgrade` ou un deploiement morfDeploy (un
+# marqueur evite le double comptage cote morfDeploy). Sans URL configuree
+# (machine hors parc), c'est un no-op silencieux. A appeler AVANT les cibles.
+include("${CMAKE_CURRENT_SOURCE_DIR}/third_party/morf/morfdeploy/record_compile.cmake")
+morf_enable_compile_recording()
+
 # --- Dependance morfBeacon (annonce de presence sur le LAN) ---------------
 # morfBeacon est EMBARQUE (copie vendoree) dans third_party/morf/beacon, lie
 # statiquement : le projet se compile sans dependre d'aucun depot externe, a
@@ -108,6 +117,9 @@ endif()
 
 # --- Cible service (le demon autonome) ------------------------------------
 add_subdirectory(service)
+
+# Signale la duree de compile a morfAnalytics apres le lien du binaire de service.
+morf_record_target_build(morfmonitor "morfMonitor")
 
 # --- Exemple (compile seulement en build autonome, pas via add_subdirectory) -
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)

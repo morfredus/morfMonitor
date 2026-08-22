@@ -297,16 +297,20 @@ QByteArray HttpServer::handleLocalUpdate(const QByteArray& body, int& code, QByt
     static const QRegularExpression identifier(
         QStringLiteral("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"));
     const QString project = object.value("project").toString();
-    const QString version = object.value("version").toString();
+    const QString versionRaw = object.value("version").toString();
+    QString version = versionRaw;
+    if (version.startsWith(QLatin1Char('v')) || version.startsWith(QLatin1Char('V')))
+        version.remove(0, 1);
     if (!request.isObject() || !identifier.match(project).hasMatch()
         || !identifier.match(version).hasMatch()) {
         code = 400; reason = "Bad Request";
         return "{\"error\":\"projet et version déclarés requis\"}";
     }
+    QJsonObject payload{{"project", project}, {"version", version}};
     QNetworkAccessManager manager;
     QNetworkRequest agent(QUrl(QStringLiteral("http://127.0.0.1:8794/api/v1/updates")));
     agent.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
-    QNetworkReply* reply = manager.post(agent, QJsonDocument(object).toJson(QJsonDocument::Compact));
+    QNetworkReply* reply = manager.post(agent, QJsonDocument(payload).toJson(QJsonDocument::Compact));
     QEventLoop loop;
     QTimer timeout;
     timeout.setSingleShot(true);

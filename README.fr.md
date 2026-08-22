@@ -2,7 +2,7 @@
 
 *Lire dans une autre langue : [English](README.md) · **Français** (ce document).*
 
-[![Version](https://img.shields.io/badge/version-0.14.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.14.3-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -118,7 +118,7 @@ morfDashboard et le navigateur lisent les mêmes routes.
 | État général | Identité de la machine, uptime, santé du service, résumé des anomalies |
 | Ressources | CPU, mémoire, charge, swap, stockage, températures, **bridage** |
 | Réseau | Interfaces, IPv4/IPv6, MAC, état du lien |
-| Services morfSystem | Unités systemd et sondes réseau supervisées, avec pour chaque service sa version exécutée, la dernière release publiée et un état de comparaison (via morfUpdate ; bouton « Vérifier les versions ») |
+| Services morfSystem | Unités systemd et sondes, versions, bouton **Mettre à jour** (délègue à morfUpdate sur 127.0.0.1 ; le projet envoyé est le dépôt GitHub, pas le libellé). Voir la notice TESTER-MISE-A-JOUR-LOCALE du dépôt morfSystem. |
 | Écosystème | Services découverts par morfBeacon, version, dernier heartbeat et lien vers l'interface Web qu'ils déclarent |
 | Diagnostic | Anomalies détectées, cause du dernier redémarrage, configuration partagée |
 
