@@ -9,6 +9,10 @@
   "_comment_web": "Interface Web servie sur le MEME port que l'API, a la racine. Ce n'est pas un service supplementaire : c'est une seconde vue des memes donnees, qui consomme les routes /api/ comme n'importe quel autre client. A false, seules les routes JSON repondent et le service redevient une API pure. ATTENTION a 'bind_address' : 0.0.0.0 expose l'interface a toutes les interfaces reseau de la machine. Sur un poste multi-domicilie ou expose, preferer l'adresse du LAN.",
   "web_enabled": true,
 
+  "update_agent": {
+    "enabled": true
+  },
+
   "beacon": {
     "_comment": "Annonce de presence sur le LAN (protocole morfBeacon, port du parc).",
     "enabled": true,

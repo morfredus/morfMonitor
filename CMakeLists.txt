@@ -109,7 +109,15 @@ if(WIN32)
 endif()
 
 # Numero de version accessible depuis le code.
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/morf/beacon/VERSION" _mb_vendored LIMIT_COUNT 1)
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/morf/morfdeploy/VERSION" _md_vendored LIMIT_COUNT 1)
+string(STRIP "${_mb_vendored}" _mb_vendored)
+string(STRIP "${_md_vendored}" _md_vendored)
 target_compile_definitions(morfMonitor PUBLIC MORFMONITOR_VERSION="${PROJECT_VERSION}")
+target_compile_definitions(morfMonitor PRIVATE
+    MORFBEACON_VENDORED_VERSION="${_mb_vendored}"
+    MORFDEPLOY_VENDORED_VERSION="${_md_vendored}"
+)
 
 if(MSVC)
     target_compile_options(morfMonitor PRIVATE /utf-8)

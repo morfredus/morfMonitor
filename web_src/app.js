@@ -470,10 +470,13 @@ function versionBadge(v) {
 
 function updateAction(v, unit) {
   if (!v || v.state !== 'Mise à jour disponible' || !v.latest) return '';
+  // L'agent refuse de se mettre à jour lui-même ; les outils n'ont pas de .deb
+  // installé par ce bouton.
+  if (v.updatable === false) return '';
   // project = dépôt GitHub (morfDashboard), jamais le libellé affiché (DashBoard)
   // ni l'unité systemd (morfdashboard) : c'est la clé de morfUpdate.targets.
   const project = v.project || v.repo || '';
-  if (!project) return '';
+  if (!project || project === 'morfUpdate') return '';
   return `<button class="btn-update-service" data-project="${esc(project)}" ` +
     `data-version="${esc(v.latest)}">Mettre à jour</button>`;
 }
@@ -565,6 +568,28 @@ function renderServices(all) {
       : unavailable('Aucun service systemd supervisé.',
           'La liste vient de morfsystem.json (clé systemd_services). Sous Windows, ' +
           'systemd n’existe pas : cette section reste vide par construction.'));
+
+  const eco = (s.versions || []).filter((v) => v.group === 'ecosystem');
+  el('c-ecosystem-libs').innerHTML = header('Bibliothèques et outils', `${eco.length}`) +
+    (eco.length
+      ? `<div class="unavailable" style="margin:.2rem 0 .6rem">` +
+        `Releases GitHub, hors morfSystem. Beacon et Deploy : copie vendorée compilée dans ` +
+        `ce morfMonitor. Packages et Tools : fichier VERSION d’un clone voisin s’il existe. ` +
+        `Pas de bouton : ces projets ne s’installent pas via l’agent local.</div>` +
+        `<div class="tbl-wrap"><table><thead><tr>
+           <th>Projet</th><th>Rôle</th>
+           <th class="mono">Version locale</th><th class="mono">Dernière release</th>
+           <th>Mise à jour</th>
+         </tr></thead><tbody>` +
+        eco.map((v) => `<tr>
+          <td>${esc(v.service)}</td>
+          <td class="mono">${esc(v.kind || '—')}</td>
+          <td class="mono">${runCell(v)}</td>
+          <td class="mono">${esc(v.latest || '—')}</td>
+          <td>${versionBadge(v)}</td>
+        </tr>`).join('') + `</tbody></table></div>`
+      : unavailable('Aucun projet d’écosystème déclaré.',
+          'Ajouter ecosystem_projects dans morfsystem.json (morfBeacon, morfDeploy, morfPackages, morfTools), puis déployer la config partagée.'));
 
   document.querySelectorAll('.btn-update-service').forEach((button) => {
     button.addEventListener('click', async () => {
@@ -898,6 +923,7 @@ function renderDiagnostic(all, config) {
   // et non « service systemds ».
   const counts = [
     [(cfg.systemd_services || []).length, 'service', 'services', 'systemd'],
+    [(cfg.ecosystem_projects || []).length, 'projet', 'projets', 'd’écosystème'],
     [(cfg.network_services || []).length, 'sonde', 'sondes', 'réseau'],
     [(cfg.beacon_apps || []).length, 'application', 'applications', 'beacon'],
   ].map(([n, one, many, qual]) => `${n} ${n > 1 ? many : one} ${qual}`).join(' · ');
@@ -928,7 +954,7 @@ function setConn(kind, text) {
 // la ou il s'agit d'une configuration — c'est le contraire du diagnostic.
 function showServiceProblem(title, detail) {
   const block = header('Diagnostic') + unavailable(title, detail);
-  ['c-machine', 'c-interfaces', 'c-systemd', 'c-beacon', 'c-anomalies'].forEach((id) => {
+  ['c-machine', 'c-interfaces', 'c-systemd', 'c-ecosystem-libs', 'c-beacon', 'c-anomalies'].forEach((id) => {
     const node = el(id);
     if (node) node.innerHTML = block;
   });
@@ -1019,7 +1045,7 @@ el('nav').addEventListener('click', (ev) => {
 // Bouton « Vérifier les versions » : force une vérification FRAÎCHE (même cache
 // valide) côté backend, puis rafraîchit l'affichage. Non bloquant : les résultats
 // arrivent en arrière-plan, on relit après un court délai.
-el('c-systemd').addEventListener('click', async (ev) => {
+el('page-services').addEventListener('click', async (ev) => {
   const btn = ev.target.closest('button.btn-check-versions');
   if (!btn) return;
   btn.disabled = true;

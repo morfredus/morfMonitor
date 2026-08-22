@@ -3,6 +3,15 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.14.4] - 2026-08-23
+
+### Ajouté
+
+- Unité `morfupdate` dans les services systemd (pas de bouton : l'agent ne se
+  met pas à jour lui-même).
+- Section « Bibliothèques et outils » : morfBeacon, morfDeploy, morfPackages,
+  morfTools (pas morfSystem). Comparaison avec la dernière release GitHub.
+
 ## [0.14.3] - 2026-08-22
 
 ### Corrigé

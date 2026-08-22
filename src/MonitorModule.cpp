@@ -21,8 +21,70 @@
 #include <QHostInfo>
 #include <QFile>
 #include <QSet>
+#include <QCoreApplication>
+#include <QDir>
+
+#ifndef MORFBEACON_VENDORED_VERSION
+#  define MORFBEACON_VENDORED_VERSION ""
+#endif
+#ifndef MORFDEPLOY_VENDORED_VERSION
+#  define MORFDEPLOY_VENDORED_VERSION ""
+#endif
 
 namespace morfmonitor {
+
+namespace {
+
+QString firstVersionLine(const QString& path) {
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly | QIODevice::Text))
+        return {};
+    return QString::fromUtf8(f.readLine()).trimmed();
+}
+
+// Clone voisin : dossier du dépôt, ou même nom suivi d'un suffixe (copie de travail).
+QString cloneVersion(const QString& repo) {
+    if (repo.isEmpty())
+        return {};
+    QStringList roots;
+    const QString env = qEnvironmentVariable(QStringLiteral("MORFSYSTEM_ROOT"));
+    if (!env.isEmpty())
+        roots << env;
+    roots << QDir::home().filePath(QStringLiteral("morfSystem"));
+    QDir walk(QCoreApplication::applicationDirPath());
+    for (int i = 0; i < 8; ++i) {
+        roots << walk.absolutePath();
+        if (!walk.cdUp())
+            break;
+    }
+    const QString prefix = repo + QLatin1Char('_');
+    for (const QString& root : roots) {
+        QDir d(root);
+        if (!d.exists())
+            continue;
+        QString v = firstVersionLine(d.filePath(repo + QStringLiteral("/VERSION")));
+        if (!v.isEmpty())
+            return v;
+        for (const QString& name : d.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+            if (name != repo && !name.startsWith(prefix))
+                continue;
+            v = firstVersionLine(d.filePath(name + QStringLiteral("/VERSION")));
+            if (!v.isEmpty())
+                return v;
+        }
+    }
+    return {};
+}
+
+QString localEcosystemVersion(const EcosystemProjectDef& p) {
+    if (p.local == QLatin1String("vendor_beacon"))
+        return QString::fromUtf8(MORFBEACON_VENDORED_VERSION);
+    if (p.local == QLatin1String("vendor_deploy"))
+        return QString::fromUtf8(MORFDEPLOY_VENDORED_VERSION);
+    return cloneVersion(p.repo);
+}
+
+} // namespace
 
 MonitorModule::MonitorModule(const QString& id, QString configPath, QObject* parent)
     : IModule(id, QStringLiteral("monitor"), parent),
@@ -573,11 +635,33 @@ QJsonObject MonitorModule::servicesJson() {
     // le cache est frais (< TTL). L'etat est calcule dans VersionMonitor.
     if (m_versions) {
         QVector<VersionMonitor::Target> targets;
-        for (const SystemdServiceDef& s : m_config.systemdServices())
-            targets.push_back({ s.label, s.app, s.repoOwner, s.repo });
+        for (const SystemdServiceDef& s : m_config.systemdServices()) {
+            VersionMonitor::Target t{ s.label, s.app, s.repoOwner, s.repo };
+            t.updatable = (s.repo != QLatin1String("morfUpdate"));
+            targets.push_back(t);
+        }
+        for (const EcosystemProjectDef& p : m_config.ecosystemProjects()) {
+            VersionMonitor::Target t;
+            t.label = p.label;
+            t.app = p.label;
+            t.owner = p.repoOwner;
+            t.repo = p.repo;
+            t.group = QStringLiteral("ecosystem");
+            t.updatable = false;
+            t.kind = p.kind;
+            targets.push_back(t);
+        }
         m_versions->setTargets(targets);
         m_versions->checkNow(/*force=*/false);
-        o["versions"] = m_versions->toJson(runningVersionsByApp());
+        QHash<QString, VersionMonitor::Running> running = runningVersionsByApp();
+        const QString localHost = QHostInfo::localHostName();
+        for (const EcosystemProjectDef& p : m_config.ecosystemProjects()) {
+            const QString ver = localEcosystemVersion(p);
+            if (ver.isEmpty())
+                continue;
+            running.insert(p.label, { ver, localHost });
+        }
+        o["versions"] = m_versions->toJson(running);
     }
 
     o["ts"] = static_cast<double>(now);
@@ -646,7 +730,8 @@ QJsonObject MonitorModule::statusJson() const {
     o["supervised"] = QJsonObject{
         {"systemd", m_config.systemdServices().size()},
         {"network", m_config.networkServices().size()},
-        {"beacon",  m_config.beaconApps().size()}};
+        {"beacon",  m_config.beaconApps().size()},
+        {"ecosystem", m_config.ecosystemProjects().size()}};
     o["beacon_heard"] = m_beaconSeen.size();
     o["ts"] = static_cast<double>(QDateTime::currentSecsSinceEpoch());
     return o;

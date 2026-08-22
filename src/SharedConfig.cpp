@@ -108,6 +108,19 @@ bool SharedConfig::load(const QString& path) {
             m_beaconApps.push_back(d);
     }
 
+    m_ecosystem.clear();
+    for (const QJsonValue& v : root.value(QStringLiteral("ecosystem_projects")).toArray()) {
+        const QJsonObject o = v.toObject();
+        EcosystemProjectDef d;
+        d.label     = o.value(QStringLiteral("label")).toString();
+        d.repo      = o.value(QStringLiteral("repo")).toString(d.label);
+        d.repoOwner = o.value(QStringLiteral("owner")).toString(QStringLiteral("morfredus"));
+        d.kind      = o.value(QStringLiteral("kind")).toString(QStringLiteral("tool"));
+        d.local     = o.value(QStringLiteral("local")).toString(QStringLiteral("clone"));
+        if (!d.label.isEmpty() && !d.repo.isEmpty())
+            m_ecosystem.push_back(d);
+    }
+
     m_probeGraceS = root.value(QStringLiteral("network_probe_grace_s")).toInt(m_probeGraceS);
 
     const QJsonObject beacon = root.value(QStringLiteral("beacon")).toObject();
@@ -157,6 +170,14 @@ QJsonObject SharedConfig::toJson() const {
         apps.append(a);
     }
     o["beacon_apps"] = apps;
+
+    QJsonArray eco;
+    for (const EcosystemProjectDef& d : m_ecosystem) {
+        eco.append(QJsonObject{{"label", d.label}, {"repo", d.repo},
+                               {"owner", d.repoOwner}, {"kind", d.kind},
+                               {"local", d.local}});
+    }
+    o["ecosystem_projects"] = eco;
 
     o["beacon"] = QJsonObject{{"port", m_beaconPort}, {"offline_after_s", m_beaconOfflineS},
                               {"archive_after_days", static_cast<double>(m_machineArchiveS / (24 * 3600))}};

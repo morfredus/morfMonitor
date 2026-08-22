@@ -43,6 +43,9 @@ public:
         QString app;     // nom beacon pour joindre la version exécutée (défaut = label)
         QString owner;   // propriétaire GitHub (défaut morfredus)
         QString repo;    // dépôt ; vide => pas de vérification
+        QString group = QStringLiteral("service");  // service | ecosystem
+        bool    updatable = true;                   // false : pas de bouton (agent, outils)
+        QString kind;                               // library | tool (groupe ecosystem)
     };
 
     explicit VersionMonitor(QString stateDir, int ttlMs = 6 * 3600 * 1000,

@@ -44,7 +44,21 @@
 {
   "unit": "morfsync",
   "label": "morfSync",
-  "enabled": true
+  "enabled": true,
+  "repo": "morfSync"
+},
+{
+  "unit": "morfphoto",
+  "label": "morfPhoto",
+  "enabled": true,
+  "repo": "morfPhoto"
+},
+{
+  "unit": "morfupdate",
+  "label": "morfUpdate",
+  "app": "morfUpdate",
+  "enabled": true,
+  "repo": "morfUpdate"
 }
   ],
 
@@ -76,7 +90,15 @@
     { "app": "morfNotify",    "label": "morfNotify",    "enabled": true },
     { "app": "morfSensor",    "label": "morfSensor",    "enabled": true },
     { "app": "morfSync",      "label": "morfSync",      "enabled": true },
-    { "app": "morfDashboard", "label": "morfDashboard", "enabled": true }
+    { "app": "morfDashboard", "label": "morfDashboard", "enabled": true },
+    { "app": "morfUpdate",    "label": "morfUpdate",    "enabled": true }
+  ],
+  "_comment_ecosystem_projects": "Projets morf* sans unité systemd ici : bibliothèques vendorées et outils. Pas morfSystem (documentation).",
+  "ecosystem_projects": [
+    { "label": "morfBeacon",   "repo": "morfBeacon",   "kind": "library", "local": "vendor_beacon" },
+    { "label": "morfDeploy",   "repo": "morfDeploy",   "kind": "tool",    "local": "vendor_deploy" },
+    { "label": "morfPackages", "repo": "morfPackages", "kind": "tool",    "local": "clone" },
+    { "label": "morfTools",    "repo": "morfTools",    "kind": "tool",    "local": "clone" }
   ],
 
   "_comment_ports": "Le port d'ecoute de morfMonitor n'est PAS ici : il appartient a sa configuration propre (morfmonitor.json). Ce fichier decrit ce qui est SUPERVISE, pas comment chaque service ecoute."

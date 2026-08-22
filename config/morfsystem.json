@@ -57,6 +57,13 @@
       "label": "morfSync",
       "enabled": true,
       "repo": "morfSync"
+    },
+    {
+      "unit": "morfupdate",
+      "label": "morfUpdate",
+      "app": "morfUpdate",
+      "enabled": true,
+      "repo": "morfUpdate"
     }
   ],
   "_comment_network": "Equipements surveilles par sonde reseau : on teste l'ouverture d'un port TCP, 'host' acceptant un nom mDNS ou une IP fixe. C'est le mecanisme de DERNIER RECOURS, pour un equipement qui n'annonce pas sa presence. Il suppose de connaitre son adresse a l'avance -- l'inverse d'une decouverte. Preferer 'beacon_apps' des que l'equipement emet un heartbeat morfbeacon/1 : MeteoHub y est passe (voir plus bas), GatewayLab le peut aussi depuis sa version 1.7.0.",
@@ -97,7 +104,15 @@
     { "app": "morfNotify",    "label": "morfNotify",    "enabled": true },
     { "app": "morfSensor",    "label": "morfSensor",    "enabled": true },
     { "app": "morfSync",      "label": "morfSync",      "enabled": true },
-    { "app": "morfDashboard", "label": "morfDashboard", "enabled": true }
+    { "app": "morfDashboard", "label": "morfDashboard", "enabled": true },
+    { "app": "morfUpdate",    "label": "morfUpdate",    "enabled": true }
+  ],
+  "_comment_ecosystem_projects": "Projets morf* sans unité systemd ici : bibliothèques vendorées et outils. Pas morfSystem (documentation). 'local' dit d'où vient le numéro affiché : copie compilée dans ce binaire, ou fichier VERSION d'un clone voisin.",
+  "ecosystem_projects": [
+    { "label": "morfBeacon",   "repo": "morfBeacon",   "kind": "library", "local": "vendor_beacon" },
+    { "label": "morfDeploy",   "repo": "morfDeploy",   "kind": "tool",    "local": "vendor_deploy" },
+    { "label": "morfPackages", "repo": "morfPackages", "kind": "tool",    "local": "clone" },
+    { "label": "morfTools",    "repo": "morfTools",    "kind": "tool",    "local": "clone" }
   ],
   "_comment_ports": "Le port d'ecoute de morfMonitor n'est PAS ici : il appartient a sa configuration propre (morfmonitor.json). Ce fichier decrit ce qui est SUPERVISE, pas comment chaque service ecoute."
 }

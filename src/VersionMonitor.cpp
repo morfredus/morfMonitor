@@ -147,6 +147,10 @@ QJsonArray VersionMonitor::toJson(const QHash<QString, Running>& runningByApp) c
         o["last_success_s"] = static_cast<double>(e.lastSuccessMs / 1000);
         o["error"]          = e.error.isEmpty() ? QJsonValue(QJsonValue::Null) : QJsonValue(e.error);
         o["stale"]          = stale;
+        o["group"]          = t.group.isEmpty() ? QStringLiteral("service") : t.group;
+        o["updatable"]      = t.updatable;
+        if (!t.kind.isEmpty())
+            o["kind"] = t.kind;
         arr.append(o);
     }
     return arr;

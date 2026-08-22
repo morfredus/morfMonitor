@@ -46,6 +46,17 @@ struct SystemdServiceDef {
     QString repo;      // nom du depot (ex. « morfCollector ») ; vide = pas de check
 };
 
+// Projet morfSystem sans unité systemd sur cette machine (bibliothèque vendorée
+// ou outil). On affiche la release GitHub et, si possible, une version locale.
+// morfSystem lui-même n'y figure pas : c'est de la documentation, pas un livrable.
+struct EcosystemProjectDef {
+    QString label;
+    QString repo;
+    QString repoOwner;          // défaut morfredus
+    QString kind;               // library | tool
+    QString local;              // vendor_beacon | vendor_deploy | clone
+};
+
 // Un equipement surveille par sonde reseau. Un ESP32 ne repond pas a systemctl :
 // on teste l'ouverture de son port TCP.
 struct NetworkServiceDef {
@@ -105,6 +116,7 @@ public:
     const QVector<SystemdServiceDef>& systemdServices() const { return m_systemd; }
     const QVector<NetworkServiceDef>& networkServices() const { return m_network; }
     const QVector<BeaconAppDef>& beaconApps() const { return m_beaconApps; }
+    const QVector<EcosystemProjectDef>& ecosystemProjects() const { return m_ecosystem; }
 
     int networkProbeGraceS() const { return m_probeGraceS; }
     quint16 beaconPort() const { return m_beaconPort; }
@@ -142,6 +154,7 @@ private:
     QVector<SystemdServiceDef> m_systemd;
     QVector<NetworkServiceDef> m_network;
     QVector<BeaconAppDef>      m_beaconApps;
+    QVector<EcosystemProjectDef> m_ecosystem;
 
     int     m_probeGraceS   = 45;
     quint16 m_beaconPort    = 45454;

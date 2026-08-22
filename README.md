@@ -2,7 +2,7 @@
 
 *Read in another language: **English** (this document) · [Français](README.fr.md).*
 
-[![Version](https://img.shields.io/badge/version-0.14.3-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.14.4-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![License](https://img.shields.io/badge/License-GPL--3.0--only-blue)
@@ -82,7 +82,7 @@ like any other client. morfDashboard and the browser read the same routes.
 | État général | Machine identity, uptime, service health, anomaly summary |
 | Ressources | CPU, memory, load, swap, storage, processes |
 | Réseau | Interfaces, IPv4/IPv6, MAC, link state |
-| Services morfSystem | systemd units and probes, versions, **Update** button (delegates to morfUpdate on 127.0.0.1; the project id is the GitHub repo name, not the display label). See the morfSystem TESTER-MISE-A-JOUR-LOCALE notice. |
+| Services morfSystem | systemd units (including morfUpdate, no self-update button), libraries/tools (Beacon, Deploy, Packages, Tools), probes, versions, **Update** button (delegates to morfUpdate on 127.0.0.1; GitHub repo name, not the display label). See the morfSystem TESTER-MISE-A-JOUR-LOCALE notice. |
 | Écosystème | Services discovered over morfBeacon, with version, last heartbeat and a link to any web interface they declare |
 | Diagnostic | Detected anomalies, last reboot cause, shared configuration state |
 
