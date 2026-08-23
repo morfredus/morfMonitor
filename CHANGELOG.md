@@ -3,6 +3,13 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.14.10] - 2026-08-23
+
+### Corrigé
+
+- Version locale de morfUpdate : si `/status` ne répond pas, lecture de
+  `/opt/morfupdate/VERSION`.
+
 ## [0.14.9] - 2026-08-23
 
 ### Corrigé

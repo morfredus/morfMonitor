@@ -75,6 +75,8 @@ QString cachedMorfUpdateVersion() {
     if (armed && age.elapsed() < 15000)
         return ver;
     ver = versionFromLocalStatus(QUrl(QStringLiteral("http://127.0.0.1:8794/status")));
+    if (ver.isEmpty())
+        ver = firstVersionLine(QStringLiteral("/opt/morfupdate/VERSION"));
     if (!armed) {
         age.start();
         armed = true;
