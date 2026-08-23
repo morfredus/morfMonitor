@@ -3,6 +3,18 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.14.11] - 2026-08-23
+
+### Corrigé
+
+- `morfsystem.json` déclarait morfUpdate dans `beacon_apps`, alors que morfUpdate
+  n'émet pas de heartbeat morfbeacon (il est supervisé en local via
+  `systemd_services` + lecture `/status`). La vue Écosystème le marquait donc
+  éternellement « introuvable » alors que l'onglet Services le montrait actif.
+  morfUpdate retiré de `beacon_apps` (conservé dans `systemd_services`), dans le
+  fichier déployé et l'exemple, avec une note expliquant pourquoi ne pas l'y
+  remettre.
+
 ## [0.14.10] - 2026-08-23
 
 ### Corrigé
