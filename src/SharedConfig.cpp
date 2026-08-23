@@ -117,6 +117,7 @@ bool SharedConfig::load(const QString& path) {
         d.repoOwner = o.value(QStringLiteral("owner")).toString(QStringLiteral("morfredus"));
         d.kind      = o.value(QStringLiteral("kind")).toString(QStringLiteral("tool"));
         d.local     = o.value(QStringLiteral("local")).toString(QStringLiteral("clone"));
+        d.release   = o.value(QStringLiteral("release")).toString(QStringLiteral("github_latest"));
         if (!d.label.isEmpty() && !d.repo.isEmpty())
             m_ecosystem.push_back(d);
     }
@@ -175,7 +176,7 @@ QJsonObject SharedConfig::toJson() const {
     for (const EcosystemProjectDef& d : m_ecosystem) {
         eco.append(QJsonObject{{"label", d.label}, {"repo", d.repo},
                                {"owner", d.repoOwner}, {"kind", d.kind},
-                               {"local", d.local}});
+                               {"local", d.local}, {"release", d.release}});
     }
     o["ecosystem_projects"] = eco;
 

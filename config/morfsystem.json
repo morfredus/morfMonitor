@@ -111,7 +111,7 @@
   "ecosystem_projects": [
     { "label": "morfBeacon",   "repo": "morfBeacon",   "kind": "library", "local": "vendor_beacon" },
     { "label": "morfDeploy",   "repo": "morfDeploy",   "kind": "tool",    "local": "vendor_deploy" },
-    { "label": "morfPackages", "repo": "morfPackages", "kind": "tool",    "local": "clone" },
+    { "label": "morfPackages", "repo": "morfPackages", "kind": "tool",    "local": "clone", "release": "semver_tags" },
     { "label": "morfTools",    "repo": "morfTools",    "kind": "tool",    "local": "clone" }
   ],
   "_comment_ports": "Le port d'ecoute de morfMonitor n'est PAS ici : il appartient a sa configuration propre (morfmonitor.json). Ce fichier decrit ce qui est SUPERVISE, pas comment chaque service ecoute."

@@ -14,7 +14,13 @@
 #include <QFile>
 #include <QJsonObject>
 #include <QJsonDocument>
+#include <QJsonArray>
 #include <QDateTime>
+#include <QNetworkAccessManager>
+#include <QNetworkRequest>
+#include <QNetworkReply>
+#include <QRegularExpression>
+#include <QUrl>
 
 namespace morfmonitor {
 
@@ -41,24 +47,29 @@ void VersionMonitor::checkNow(bool force) {
         const bool never   = cached.lastCheckMs == 0;
         const bool expired = (now - cached.lastCheckMs) > m_ttlMs;
         if (!force && !never && !expired)
-            continue;                    // cache encore frais : on ne refrappe pas GitHub
-        Entry target;
-        target.owner = t.owner.isEmpty() ? QStringLiteral("morfredus") : t.owner;
-        target.repo  = t.repo;
-        startCheck(t.label, target);
+            continue;
+        startCheck(t);
     }
 }
 
-void VersionMonitor::startCheck(const QString& label, const Entry& target) {
-    if (m_inFlight.contains(label))
-        return;                          // une vérification de ce service est en cours
+void VersionMonitor::startCheck(const Target& target) {
+    if (m_inFlight.contains(target.label))
+        return;
+    if (target.releaseMode == QLatin1String("semver_tags"))
+        startSemverTags(target);
+    else
+        startGithubLatest(target);
+}
+
+void VersionMonitor::startGithubLatest(const Target& target) {
+    const QString label = target.label;
     m_inFlight.insert(label);
 
     morfupdate::morfUpdateConfig cfg;
-    cfg.owner              = target.owner;
+    cfg.owner              = target.owner.isEmpty() ? QStringLiteral("morfredus") : target.owner;
     cfg.repo               = target.repo;
-    cfg.currentVersion     = QStringLiteral("0.0.0"); // on ne veut que la dernière release
-    cfg.includePrereleases = false;                   // release STABLE uniquement
+    cfg.currentVersion     = QStringLiteral("0.0.0");
+    cfg.includePrereleases = false;
 
     auto* checker = new morfupdate::UpdateChecker(cfg, this);
 
@@ -97,9 +108,74 @@ void VersionMonitor::startCheck(const QString& label, const Entry& target) {
 
     // On range owner/repo sur l'objet pour les récupérer au succès (l'entrée peut
     // ne pas encore exister dans m_entries).
-    checker->setProperty("mu_owner", target.owner);
-    checker->setProperty("mu_repo",  target.repo);
+    checker->setProperty("mu_owner", cfg.owner);
+    checker->setProperty("mu_repo",  cfg.repo);
     checker->checkForUpdates();
+}
+
+void VersionMonitor::startSemverTags(const Target& target) {
+    // morfPackages indexe les livrables des autres projets : la « latest »
+    // GitHub est un tag du type morfCollector-v0.8.3, pas la version de l'outil.
+    const QString label = target.label;
+    m_inFlight.insert(label);
+    const QString owner = target.owner.isEmpty() ? QStringLiteral("morfredus") : target.owner;
+    const QUrl url(QStringLiteral("https://api.github.com/repos/%1/%2/tags?per_page=100")
+                       .arg(owner, target.repo));
+    auto* nam = new QNetworkAccessManager(this);
+    QNetworkRequest req(url);
+    req.setRawHeader("Accept", "application/vnd.github+json");
+    req.setRawHeader("User-Agent", "morfMonitor-version");
+    QNetworkReply* reply = nam->get(req);
+    connect(reply, &QNetworkReply::finished, this, [this, label, owner, repo = target.repo, nam, reply]() {
+        reply->deleteLater();
+        nam->deleteLater();
+        Entry& e = m_entries[label];
+        e.owner = owner;
+        e.repo = repo;
+        e.lastCheckMs = nowMs();
+        const auto fail = [&](const QString& err) {
+            e.error = err;
+            m_inFlight.remove(label);
+            save();
+        };
+        if (reply->error() != QNetworkReply::NoError) {
+            fail(QStringLiteral("Erreur reseau : %1").arg(reply->errorString()));
+            return;
+        }
+        const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+        if (!doc.isArray()) {
+            fail(QStringLiteral("liste de tags GitHub illisible"));
+            return;
+        }
+        const QRegularExpression semver(QStringLiteral(R"(^v?\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$)"));
+        using morfupdate::Version;
+        Version best;
+        QString bestTag;
+        for (const QJsonValue& v : doc.array()) {
+            const QString name = v.toObject().value(QStringLiteral("name")).toString();
+            if (!semver.match(name).hasMatch())
+                continue;
+            const Version parsed = Version::parse(name);
+            if (!parsed.valid)
+                continue;
+            if (!best.valid || parsed.compare(best) > 0) {
+                best = parsed;
+                bestTag = name;
+            }
+        }
+        if (!best.valid) {
+            fail(QStringLiteral("aucun tag vX.Y.Z pour cet outil"));
+            return;
+        }
+        e.latest = best.toString();
+        e.latestTag = bestTag;
+        e.url = QStringLiteral("https://github.com/%1/%2/releases/tag/%3")
+                    .arg(owner, repo, bestTag);
+        e.lastSuccessMs = e.lastCheckMs;
+        e.error.clear();
+        m_inFlight.remove(label);
+        save();
+    });
 }
 
 QJsonArray VersionMonitor::toJson(const QHash<QString, Running>& runningByApp) const {

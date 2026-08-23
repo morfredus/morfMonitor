@@ -46,6 +46,10 @@ public:
         QString group = QStringLiteral("service");  // service | ecosystem
         bool    updatable = true;                   // false : pas de bouton (agent, outils)
         QString kind;                               // library | tool (groupe ecosystem)
+        // github_latest : /releases/latest (services, morfTools).
+        // semver_tags   : tags vX.Y.Z (morfPackages publie d'autres projets
+        //                 sur le même dépôt : /latest n'est pas la version de l'outil).
+        QString releaseMode = QStringLiteral("github_latest");
     };
 
     explicit VersionMonitor(QString stateDir, int ttlMs = 6 * 3600 * 1000,
@@ -83,7 +87,9 @@ private:
         QString error;          // message du dernier échec (vidé au succès)
     };
 
-    void startCheck(const QString& label, const Entry& target);
+    void startCheck(const Target& target);
+    void startGithubLatest(const Target& target);
+    void startSemverTags(const Target& target);
     void save() const;
     void load();
 

@@ -55,6 +55,7 @@ struct EcosystemProjectDef {
     QString repoOwner;          // défaut morfredus
     QString kind;               // library | tool
     QString local;              // vendor_beacon | vendor_deploy | clone
+    QString release;            // github_latest | semver_tags
 };
 
 // Un equipement surveille par sonde reseau. Un ESP32 ne repond pas a systemctl :

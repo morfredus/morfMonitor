@@ -3,6 +3,15 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.14.6] - 2026-08-23
+
+### Corrigé
+
+- morfPackages : la dernière version de l'outil se lit sur les tags `vX.Y.Z`,
+  pas sur `/releases/latest` (ce dépôt publie les paquets des autres projets).
+- morfTools / morfPackages : version locale lue dans `~/Codage/morfSystem` (et
+  le workspace de développement), plus seulement `~/morfSystem`.
+
 ## [0.14.5] - 2026-08-23
 
 ### Corrigé

@@ -97,7 +97,7 @@
   "ecosystem_projects": [
     { "label": "morfBeacon",   "repo": "morfBeacon",   "kind": "library", "local": "vendor_beacon" },
     { "label": "morfDeploy",   "repo": "morfDeploy",   "kind": "tool",    "local": "vendor_deploy" },
-    { "label": "morfPackages", "repo": "morfPackages", "kind": "tool",    "local": "clone" },
+    { "label": "morfPackages", "repo": "morfPackages", "kind": "tool",    "local": "clone", "release": "semver_tags" },
     { "label": "morfTools",    "repo": "morfTools",    "kind": "tool",    "local": "clone" }
   ],
 

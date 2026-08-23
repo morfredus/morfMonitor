@@ -50,6 +50,8 @@ QString cloneVersion(const QString& repo) {
     if (!env.isEmpty())
         roots << env;
     roots << QDir::home().filePath(QStringLiteral("morfSystem"));
+    roots << QDir::home().filePath(QStringLiteral("Codage/morfSystem"));
+    roots << QDir::home().filePath(QStringLiteral("Codage/01-Travail"));
     QDir walk(QCoreApplication::applicationDirPath());
     for (int i = 0; i < 8; ++i) {
         roots << walk.absolutePath();
@@ -648,6 +650,7 @@ QJsonObject MonitorModule::servicesJson() {
             t.group = QStringLiteral("ecosystem");
             t.updatable = false;
             t.kind = p.kind;
+            t.releaseMode = p.release.isEmpty() ? QStringLiteral("github_latest") : p.release;
             targets.push_back(t);
         }
         m_versions->setTargets(targets);
