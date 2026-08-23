@@ -55,7 +55,12 @@ void VersionMonitor::checkNow(bool force) {
 void VersionMonitor::startCheck(const Target& target) {
     if (m_inFlight.contains(target.label))
         return;
-    if (target.releaseMode == QLatin1String("semver_tags"))
+    // morfPackages sert d'index : sa « latest » GitHub est un livrable d'un autre
+    // projet (ex. morfphoto-v0.9.9), jamais la version de l'outil. Même une
+    // ancienne morfsystem.json sans release=semver_tags doit passer par les tags.
+    const bool packagesIndex =
+        target.repo.compare(QLatin1String("morfPackages"), Qt::CaseInsensitive) == 0;
+    if (packagesIndex || target.releaseMode == QLatin1String("semver_tags"))
         startSemverTags(target);
     else
         startGithubLatest(target);
@@ -114,16 +119,17 @@ void VersionMonitor::startGithubLatest(const Target& target) {
 }
 
 void VersionMonitor::startSemverTags(const Target& target) {
-    // morfPackages indexe les livrables des autres projets : la « latest »
-    // GitHub est un tag du type morfCollector-v0.8.3, pas la version de l'outil.
+    // Prefixe tags/v : ignore morfphoto-v… que /tags?per_page=100 renverrait en
+    // premier (les plus recents), au point de masquer v0.6.5 de l'outil.
     const QString label = target.label;
     m_inFlight.insert(label);
     const QString owner = target.owner.isEmpty() ? QStringLiteral("morfredus") : target.owner;
-    const QUrl url(QStringLiteral("https://api.github.com/repos/%1/%2/tags?per_page=100")
+    const QUrl url(QStringLiteral("https://api.github.com/repos/%1/%2/git/matching-refs/tags/v")
                        .arg(owner, target.repo));
     auto* nam = new QNetworkAccessManager(this);
     QNetworkRequest req(url);
     req.setRawHeader("Accept", "application/vnd.github+json");
+    req.setRawHeader("X-GitHub-Api-Version", "2022-11-28");
     req.setRawHeader("User-Agent", "morfMonitor-version");
     QNetworkReply* reply = nam->get(req);
     connect(reply, &QNetworkReply::finished, this, [this, label, owner, repo = target.repo, nam, reply]() {
@@ -147,16 +153,18 @@ void VersionMonitor::startSemverTags(const Target& target) {
             fail(QStringLiteral("liste de tags GitHub illisible"));
             return;
         }
-        const QRegularExpression semver(QStringLiteral(R"(^v?\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$)"));
+        const QRegularExpression semver(QStringLiteral(R"(^v\d+\.\d+\.\d+$)"));
         using morfupdate::Version;
         Version best;
         QString bestTag;
         for (const QJsonValue& v : doc.array()) {
-            const QString name = v.toObject().value(QStringLiteral("name")).toString();
+            QString name = v.toObject().value(QStringLiteral("ref")).toString();
+            if (name.startsWith(QLatin1String("refs/tags/")))
+                name = name.mid(10);
             if (!semver.match(name).hasMatch())
                 continue;
             const Version parsed = Version::parse(name);
-            if (!parsed.valid)
+            if (!parsed.valid || !parsed.pre.isEmpty())
                 continue;
             if (!best.valid || parsed.compare(best) > 0) {
                 best = parsed;

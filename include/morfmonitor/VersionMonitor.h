@@ -47,8 +47,8 @@ public:
         bool    updatable = true;                   // false : pas de bouton (agent, outils)
         QString kind;                               // library | tool (groupe ecosystem)
         // github_latest : /releases/latest (services, morfTools).
-        // semver_tags   : tags vX.Y.Z (morfPackages publie d'autres projets
-        //                 sur le même dépôt : /latest n'est pas la version de l'outil).
+        // semver_tags   : refs/tags/vX.Y.Z (morfPackages : /latest et la
+        //                 première page de /tags sont des index projet-v…).
         QString releaseMode = QStringLiteral("github_latest");
     };
 

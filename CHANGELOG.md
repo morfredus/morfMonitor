@@ -3,6 +3,16 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.14.7] - 2026-08-23
+
+### Corrigé
+
+- morfPackages : les tags `vX.Y.Z` de l'outil se lisent via
+  `git/matching-refs/tags/v`. La première page de `/tags` ne contient plus que
+  les index `projet-v…` ; `/releases/latest` n'est pas non plus la version de
+  l'outil. Le dépôt `morfPackages` utilise ce mode même sans champ `release`
+  dans la config déployée.
+
 ## [0.14.6] - 2026-08-23
 
 ### Corrigé

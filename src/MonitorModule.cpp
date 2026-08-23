@@ -650,7 +650,12 @@ QJsonObject MonitorModule::servicesJson() {
             t.group = QStringLiteral("ecosystem");
             t.updatable = false;
             t.kind = p.kind;
-            t.releaseMode = p.release.isEmpty() ? QStringLiteral("github_latest") : p.release;
+            if (!p.release.isEmpty())
+                t.releaseMode = p.release;
+            else if (p.repo.compare(QLatin1String("morfPackages"), Qt::CaseInsensitive) == 0)
+                t.releaseMode = QStringLiteral("semver_tags");
+            else
+                t.releaseMode = QStringLiteral("github_latest");
             targets.push_back(t);
         }
         m_versions->setTargets(targets);
