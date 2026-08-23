@@ -3,6 +3,13 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.14.8] - 2026-08-23
+
+### Corrigé
+
+- Suivi d'une mise à jour : si `fetch` tombe (dpkg arrête morfMonitor), l'UI
+  retente ~3 min au lieu d'un pop-up « Failed to fetch » et d'abandonner.
+
 ## [0.14.7] - 2026-08-23
 
 ### Corrigé

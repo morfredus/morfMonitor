@@ -481,10 +481,20 @@ function updateAction(v, unit) {
     `data-version="${esc(v.latest)}">Mettre à jour</button>`;
 }
 
-async function followUpdate(project, version, id) {
+async function followUpdate(project, version, id, attempt = 0) {
   updateOperations.set(project, id);
+  const retry = () => {
+    // dpkg coupe morfMonitor : Failed to fetch n'est pas un échec d'install.
+    if (typeof setConn === 'function')
+      setConn('warn', 'redémarrage…');
+    setTimeout(() => followUpdate(project, version, id, attempt + 1), 2000);
+  };
   try {
     const response = await fetch(`/api/updates/${encodeURIComponent(id)}`);
+    if (!response.ok && response.status >= 500 && attempt < 90) {
+      retry();
+      return;
+    }
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'suivi indisponible');
     const state = result.state || 'inconnu';
@@ -500,8 +510,12 @@ async function followUpdate(project, version, id) {
       window.alert(`Mise à jour de ${project} non terminée : ${result.detail || state}`);
       return;
     }
-    setTimeout(() => followUpdate(project, version, id), 1500);
+    setTimeout(() => followUpdate(project, version, id, 0), 1500);
   } catch (error) {
+    if (attempt < 90) {
+      retry();
+      return;
+    }
     updateOperations.delete(project);
     await refresh();
     window.alert(`Suivi de la mise à jour impossible : ${error.message}`);
