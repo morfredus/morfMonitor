@@ -18,6 +18,11 @@
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QDateTime>
+#include <QEventLoop>
+#include <QTimer>
+#include <QElapsedTimer>
+#include <QNetworkReply>
+#include <QNetworkRequest>
 #include <QHostInfo>
 #include <QFile>
 #include <QSet>
@@ -39,6 +44,44 @@ QString firstVersionLine(const QString& path) {
     if (!f.open(QIODevice::ReadOnly | QIODevice::Text))
         return {};
     return QString::fromUtf8(f.readLine()).trimmed();
+}
+
+// morfUpdate n'emet pas de beacon : la version executee se lit sur /status.
+QString versionFromLocalStatus(const QUrl& url) {
+    if (!url.isValid())
+        return {};
+    QNetworkAccessManager nam;
+    QNetworkReply* reply = nam.get(QNetworkRequest(url));
+    QEventLoop loop;
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    QObject::connect(&timeout, &QTimer::timeout, reply, &QNetworkReply::abort);
+    timeout.start(800);
+    loop.exec();
+    const QByteArray body = reply->readAll();
+    const bool ok = reply->error() == QNetworkReply::NoError
+        && reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 200;
+    reply->deleteLater();
+    if (!ok)
+        return {};
+    return QJsonDocument::fromJson(body).object().value(QStringLiteral("version")).toString();
+}
+
+QString cachedMorfUpdateVersion() {
+    static QString ver;
+    static QElapsedTimer age;
+    static bool armed = false;
+    if (armed && age.elapsed() < 15000)
+        return ver;
+    ver = versionFromLocalStatus(QUrl(QStringLiteral("http://127.0.0.1:8794/status")));
+    if (!armed) {
+        age.start();
+        armed = true;
+    } else {
+        age.restart();
+    }
+    return ver;
 }
 
 // Clone voisin : dossier du dépôt, ou même nom suivi d'un suffixe (copie de travail).
@@ -639,6 +682,10 @@ QJsonObject MonitorModule::servicesJson() {
         for (const SystemdServiceDef& s : m_config.systemdServices()) {
             VersionMonitor::Target t{ s.label, s.app, s.repoOwner, s.repo };
             t.updatable = (s.repo != QLatin1String("morfUpdate"));
+            // /releases/latest du depot morfUpdate n'est pas toujours une
+            // release de l'outil (tags vX.Y.Z).
+            if (s.repo.compare(QLatin1String("morfUpdate"), Qt::CaseInsensitive) == 0)
+                t.releaseMode = QStringLiteral("semver_tags");
             targets.push_back(t);
         }
         for (const EcosystemProjectDef& p : m_config.ecosystemProjects()) {
@@ -662,6 +709,16 @@ QJsonObject MonitorModule::servicesJson() {
         m_versions->checkNow(/*force=*/false);
         QHash<QString, VersionMonitor::Running> running = runningVersionsByApp();
         const QString localHost = QHostInfo::localHostName();
+        for (const SystemdServiceDef& s : m_config.systemdServices()) {
+            const QString app = s.app.isEmpty() ? s.label : s.app;
+            if (running.contains(app) && !running.value(app).version.isEmpty())
+                continue;
+            if (s.repo.compare(QLatin1String("morfUpdate"), Qt::CaseInsensitive) != 0)
+                continue;
+            const QString ver = cachedMorfUpdateVersion();
+            if (!ver.isEmpty())
+                running.insert(app, { ver, localHost });
+        }
         for (const EcosystemProjectDef& p : m_config.ecosystemProjects()) {
             const QString ver = localEcosystemVersion(p);
             if (ver.isEmpty())

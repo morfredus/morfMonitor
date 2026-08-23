@@ -3,6 +3,13 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.14.9] - 2026-08-23
+
+### Corrigé
+
+- Version de morfUpdate : lecture de `GET http://127.0.0.1:8794/status` (pas de
+  beacon) ; dernière release via les tags `vX.Y.Z`, pas `/releases/latest`.
+
 ## [0.14.8] - 2026-08-23
 
 ### Corrigé
