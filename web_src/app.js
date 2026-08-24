@@ -17,7 +17,30 @@
 'use strict';
 
 const REFRESH_MS = 5000;
-const updateOperations = new Map();
+
+// Suivi visuel des mises à jour de service, par projet (= dépôt GitHub). Le
+// tableau des services est reconstruit toutes les 5 s (et à chaque changement
+// d'état) : l'avancement ne peut donc pas vivre dans le DOM, il est conservé
+// ici et la cellule « Mise à jour » se redessine à partir de cet état.
+// Forme : project -> { version, phase, detail, id }.
+//   phase = 'confirm' | 'requesting' | 'queued' | états de l'agent morfUpdate
+//           (downloading, verifying, installing, restarting, health_check) |
+//           'succeeded' | 'failed' | 'rejected'.
+const updateStatus = new Map();
+
+// Dernier /api/all reçu : sert à redessiner la carte des services (et donc les
+// cellules de mise à jour) sans attendre le rafraîchissement de 5 s.
+let lastAll = null;
+
+// Étapes de l'agent morfUpdate, dans l'ordre, avec un libellé lisible. Permet
+// d'afficher « Vérification (2/5) » et de situer l'avancement réel.
+const UPDATE_STEPS = [
+  { key: 'downloading',  label: 'Téléchargement' },
+  { key: 'verifying',    label: 'Vérification' },
+  { key: 'installing',   label: 'Installation' },
+  { key: 'restarting',   label: 'Redémarrage' },
+  { key: 'health_check', label: 'Contrôle de santé' },
+];
 
 // --- utilitaires d'affichage ------------------------------------------------
 
@@ -528,57 +551,164 @@ function versionBadge(v) {
   return `<span class="badge badge-${kind}" title="${esc(tip)}">${esc(st)}${v.stale ? ' ⚠' : ''}</span>`;
 }
 
-function updateAction(v, unit) {
+// Redessine la carte des services à partir du dernier /api/all connu. Appelée à
+// chaque changement d'état d'une mise à jour pour que la cellule reflète
+// l'avancement sans popup et sans attendre le cycle de 5 s.
+function redrawServices() {
+  if (lastAll) renderServices(lastAll);
+}
+
+// Bouton « Mettre à jour » (état de repos). project = dépôt GitHub (morfDashboard),
+// jamais le libellé affiché (DashBoard) ni l'unité systemd (morfdashboard) :
+// c'est la clé de morfUpdate.targets.
+function updateButton(v) {
   if (!v || v.state !== 'Mise à jour disponible' || !v.latest) return '';
   // L'agent refuse de se mettre à jour lui-même ; les outils n'ont pas de .deb
   // installé par ce bouton.
   if (v.updatable === false) return '';
-  // project = dépôt GitHub (morfDashboard), jamais le libellé affiché (DashBoard)
-  // ni l'unité systemd (morfdashboard) : c'est la clé de morfUpdate.targets.
   const project = v.project || v.repo || '';
   if (!project || project === 'morfUpdate') return '';
   return `<button class="btn-update-service" data-project="${esc(project)}" ` +
     `data-version="${esc(v.latest)}">Mettre à jour</button>`;
 }
 
-async function followUpdate(project, version, id, attempt = 0) {
-  updateOperations.set(project, id);
+// Un échec « demandé trop tôt » : la release existe (le .deb est visible, d'où
+// le bouton), mais GitHub n'a pas encore fini d'y attacher tous ses fichiers.
+// morfUpdate exige manifest.json ; s'il manque, c'est presque toujours une
+// demande lancée pendant la publication de la release, pas une vraie panne.
+function updateTooEarly(detail) {
+  const d = String(detail || '').toLowerCase();
+  return d.includes('manifest.json')
+      || d.includes('manifest asset is absent')
+      || d.includes('releases/tags');
+}
+
+// Message d'échec explicite : dit s'il s'agit d'une demande trop précoce et
+// quoi faire, plutôt que de recracher la raison technique brute.
+function updateFailureText(detail) {
+  if (updateTooEarly(detail)) {
+    return 'Demande trop tôt : la version vient d’être publiée et GitHub n’a ' +
+      'pas encore attaché tous ses fichiers (manifest.json manquant). ' +
+      'Attendre une minute, cliquer « Vérifier les versions », puis relancer.';
+  }
+  return `Mise à jour non terminée : ${detail || 'raison inconnue'}.`;
+}
+
+// Rendu de la cellule « Mise à jour » : badge de comparaison de version, puis
+// soit le bouton, soit la confirmation en ligne, la progression ou le résultat.
+function updateCell(v) {
+  const project = (v && (v.project || v.repo)) || '';
+  const st = project ? updateStatus.get(project) : null;
+  const badge = versionBadge(v);
+  if (!st) return `${badge} ${updateButton(v)}`;
+
+  const version = esc(st.version || '');
+  if (st.phase === 'confirm') {
+    // La question se pose dans la cellule, pas dans un popup.
+    return `${badge} <span class="upd">` +
+      `<span class="upd-ask">Passer à ${version} ?</span>` +
+      `<button class="btn-update-confirm" data-project="${esc(project)}">Confirmer</button>` +
+      `<button class="btn-update-cancel" data-project="${esc(project)}">Annuler</button>` +
+      `</span>`;
+  }
+  if (st.phase === 'succeeded') {
+    return `${badge} <span class="upd-done">✓ ${version} installé et vérifié</span>`;
+  }
+  if (st.phase === 'failed' || st.phase === 'rejected') {
+    return `${badge} <span class="upd upd-fail">` +
+      `<span class="upd-fail-msg">✗ ${esc(updateFailureText(st.detail))}</span>` +
+      `<button class="btn-update-retry" data-project="${esc(project)}" data-version="${version}">Réessayer</button>` +
+      `<button class="btn-update-dismiss" data-project="${esc(project)}">Masquer</button>` +
+      `</span>`;
+  }
+  // En cours : barre indéterminée qui défile sous le service + étape courante.
+  const idx = UPDATE_STEPS.findIndex((s) => s.key === st.phase);
+  const label = st.phase === 'requesting' ? 'Demande envoyée'
+    : st.phase === 'queued' ? 'En file d’attente'
+    : (idx >= 0 ? UPDATE_STEPS[idx].label : 'En cours');
+  const counter = idx >= 0 ? ` (${idx + 1}/${UPDATE_STEPS.length})` : '';
+  return `${badge} <span class="upd-run">` +
+    `<span class="upd-bar"><i></i></span>` +
+    `<span class="upd-step">${esc(label)}${counter}…</span></span>`;
+}
+
+// Lance (ou relance) une mise à jour : POST vers morfMonitor, qui proxy vers
+// l'agent morfUpdate local. Aucun popup — tout retour passe par updateStatus.
+async function launchUpdate(project, version) {
+  if (!project || !version) return;
+  updateStatus.set(project, { version, phase: 'requesting' });
+  redrawServices();
+  try {
+    const response = await fetch('/api/updates', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project, version }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok && response.status !== 202) {
+      let detail = result.error || 'demande refusée';
+      if (response.status === 400) {
+        detail = `« ${project} » n’est pas une cible déclarée dans ` +
+          'morfupdate.json. Aligner la config (config push --force depuis le ' +
+          'clone morfUpdate), puis redémarrer morfupdate.';
+      } else if (response.status === 503) {
+        detail = 'agent de mise à jour injoignable. Vérifier morfupdate : ' +
+          'curl http://127.0.0.1:8794/healthz';
+      }
+      updateStatus.set(project, { version, phase: 'failed', detail });
+      redrawServices();
+      return;
+    }
+    if (result.id) {
+      updateStatus.set(project, { id: result.id, version, phase: 'queued' });
+      redrawServices();
+      followUpdate(project, result.id, version);
+    }
+  } catch (error) {
+    updateStatus.set(project, { version, phase: 'failed',
+      detail: `demande impossible : ${error.message}` });
+    redrawServices();
+  }
+}
+
+// Suit une opération jusqu'à son terme en interrogeant /api/updates/<id>.
+// Ne redessine que lorsque l'état change réellement, pour ne pas relancer
+// l'animation de la barre à chaque sondage.
+async function followUpdate(project, id, version, attempt = 0) {
   const retry = () => {
-    // dpkg coupe morfMonitor : Failed to fetch n'est pas un échec d'install.
-    if (typeof setConn === 'function')
-      setConn('warn', 'redémarrage…');
-    setTimeout(() => followUpdate(project, version, id, attempt + 1), 2000);
+    // dpkg coupe momentanément morfMonitor pendant l'installation : une réponse
+    // 5xx passagère (ou un « Failed to fetch ») n'est pas un échec d'install.
+    setConn('warn', 'redémarrage…');
+    setTimeout(() => followUpdate(project, id, version, attempt + 1), 2000);
   };
   try {
     const response = await fetch(`/api/updates/${encodeURIComponent(id)}`);
-    if (!response.ok && response.status >= 500 && attempt < 90) {
-      retry();
-      return;
-    }
+    if (!response.ok && response.status >= 500 && attempt < 90) { retry(); return; }
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'suivi indisponible');
-    const state = result.state || 'inconnu';
+    const state = result.state || 'queued';
+
+    const current = updateStatus.get(project);
+    if (!current || current.phase !== state || current.detail !== result.detail) {
+      updateStatus.set(project, { id, version, phase: state, detail: result.detail });
+      redrawServices();
+    }
+
     if (state === 'succeeded') {
-      updateOperations.delete(project);
-      await refresh();
-      window.alert(`${project} ${version} est maintenant actif sur cette machine.`);
+      refresh();                                   // relit la version exécutée
+      // Le succès reste lisible un moment, puis s'efface de lui-même.
+      setTimeout(() => { updateStatus.delete(project); redrawServices(); }, 12000);
       return;
     }
     if (state === 'failed' || state === 'rejected') {
-      updateOperations.delete(project);
-      await refresh();
-      window.alert(`Mise à jour de ${project} non terminée : ${result.detail || state}`);
-      return;
+      refresh();
+      return;                                      // reste affiché jusqu'à « Masquer »
     }
-    setTimeout(() => followUpdate(project, version, id, 0), 1500);
+    setTimeout(() => followUpdate(project, id, version, 0), 1500);
   } catch (error) {
-    if (attempt < 90) {
-      retry();
-      return;
-    }
-    updateOperations.delete(project);
-    await refresh();
-    window.alert(`Suivi de la mise à jour impossible : ${error.message}`);
+    if (attempt < 90) { retry(); return; }
+    updateStatus.set(project, { id, version, phase: 'failed',
+      detail: `suivi impossible : ${error.message}` });
+    redrawServices();
   }
 }
 
@@ -633,7 +763,7 @@ function renderServices(all) {
           <td>${systemdBadge(u)}</td>
           <td class="mono">${runCell(v)}</td>
           <td class="mono">${esc((v && v.latest) || '—')}</td>
-          <td>${versionBadge(v)} ${updateAction(v, u.label || u.unit)}</td>
+          <td>${updateCell(v)}</td>
           <td class="mono">${svcCpu(u.resources)}</td>
           <td class="mono">${svcMem(u.resources)}</td>
           <td class="mono">${esc(u.sub_state || u.state || '—')}</td>
@@ -664,43 +794,6 @@ function renderServices(all) {
         </tr>`).join('') + `</tbody></table></div>`
       : unavailable('Aucun projet d’écosystème déclaré.',
           'Ajouter ecosystem_projects dans morfsystem.json (morfBeacon, morfDeploy, morfPackages, morfTools), puis déployer la config partagée.'));
-
-  document.querySelectorAll('.btn-update-service').forEach((button) => {
-    button.addEventListener('click', async () => {
-      const project = button.dataset.project;
-      const version = button.dataset.version;
-      if (!confirm(`Mettre à jour ${project} vers ${version} sur cette machine ?`)) return;
-      button.disabled = true;
-      button.textContent = 'Demande en cours…';
-      try {
-        const response = await fetch('/api/updates', {
-          method: 'POST', headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({project, version})
-        });
-        const result = await response.json();
-        if (!response.ok && response.status !== 202) {
-          let msg = result.error || 'demande refusée';
-          if (response.status === 400) {
-            msg += '\n\nLe projet « ' + project + ' » doit être une cible déclarée '
-              + 'dans /etc/morfsystem/morfupdate/morfupdate.json (champ project = '
-              + 'nom du dépôt GitHub). service.py update n’ajoute pas d’entrée à '
-              + 'cette liste : aligner avec config push --force depuis le clone '
-              + 'morfUpdate, puis redémarrer morfupdate.';
-          }
-          if (response.status === 503) {
-            msg += '\n\nVérifier que morfupdate tourne : curl http://127.0.0.1:8794/healthz';
-          }
-          throw new Error(msg);
-        }
-        button.textContent = result.id ? 'Mise à jour en cours…' : 'Demande envoyée';
-        if (result.id) followUpdate(project, version, result.id);
-      } catch (error) {
-        button.disabled = false;
-        button.textContent = 'Mettre à jour';
-        alert(`Mise à jour non lancée : ${error.message}`);
-      }
-    });
-  });
 
   const probes = s.network || [];
   const grace = s.network_grace;
@@ -1076,6 +1169,7 @@ async function refresh() {
     }
 
     const all = await allR.json();
+    lastAll = all;   // permet de redessiner les services hors du cycle de 5 s
 
     el('hdr-version').textContent = status.version ? `v${status.version}` : '';
     el('hdr-host').textContent = (all.system && all.system.hostname) || status.host || '';
@@ -1130,6 +1224,31 @@ el('page-services').addEventListener('click', async (ev) => {
   // Laisse le temps aux requêtes GitHub d'aboutir, puis relit (plusieurs fois).
   setTimeout(refresh, 2500);
   setTimeout(refresh, 6000);
+});
+
+// Mises à jour de service : un seul écouteur, attaché une fois. Le tableau étant
+// reconstruit en continu, des handlers par bouton seraient reposés à chaque
+// redraw ; la délégation survit aux reconstructions et couvre les quatre gestes
+// (lancer, confirmer, annuler/masquer, réessayer) sans le moindre popup.
+el('c-systemd').addEventListener('click', (ev) => {
+  const btn = ev.target.closest('button');
+  if (!btn) return;
+  const project = btn.dataset.project;
+  if (!project) return;
+
+  if (btn.classList.contains('btn-update-service')) {
+    // Pas de popup : la confirmation s'affiche dans la cellule elle-même.
+    updateStatus.set(project, { version: btn.dataset.version, phase: 'confirm' });
+    redrawServices();
+  } else if (btn.classList.contains('btn-update-cancel')
+          || btn.classList.contains('btn-update-dismiss')) {
+    updateStatus.delete(project);
+    redrawServices();
+  } else if (btn.classList.contains('btn-update-confirm')
+          || btn.classList.contains('btn-update-retry')) {
+    const known = updateStatus.get(project) || {};
+    launchUpdate(project, btn.dataset.version || known.version);
+  }
 });
 
 el('c-machines').addEventListener('click', async (ev) => {

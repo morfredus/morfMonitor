@@ -3,6 +3,31 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.16.0] - 2026-08-24
+
+### Modifié
+
+- **Mise à jour d'un service : plus aucun popup.** La confirmation, l'avancement
+  et le résultat s'affichent désormais en ligne, dans la cellule « Mise à jour »
+  du service concerné. Cliquer « Mettre à jour » pose la question sur place
+  (« Passer à X.Y.Z ? » avec « Confirmer » / « Annuler ») au lieu d'ouvrir une
+  boîte de dialogue.
+- **Avancement matérialisé.** Pendant l'opération, une barre indéterminée défile
+  sous le service, accompagnée de l'étape courante et de son rang
+  (« Vérification (2/5)… ») en suivant les états de l'agent morfUpdate
+  (téléchargement, vérification, installation, redémarrage, contrôle de santé).
+  Le succès reste affiché quelques secondes puis s'efface ; un échec reste
+  visible jusqu'à « Masquer », avec un bouton « Réessayer ».
+
+### Corrigé
+
+- **Message d'échec explicite pour une demande lancée trop tôt.** Si la mise à
+  jour est demandée pendant la publication de la release (le `.deb` est déjà en
+  ligne, donc le bouton apparaît, mais `manifest.json` n'est pas encore attaché),
+  l'agent échouait sur « release has no manifest.json » sans que la cause soit
+  lisible. Ce cas est maintenant reconnu et affiché en clair : release
+  incomplète, attendre une minute, « Vérifier les versions », puis relancer.
+
 ## [0.15.0] - 2026-08-24
 
 ### Ajouté
