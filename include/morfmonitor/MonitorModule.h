@@ -14,6 +14,8 @@
 #include <QHash>
 #include <QElapsedTimer>
 #include <QHostAddress>
+#include <QJsonObject>
+#include <QJsonArray>
 #include <memory>
 
 class QUdpSocket;
@@ -87,6 +89,17 @@ private:
     // liste d'API (« api »). Sans reponse, le service reste simplement sans
     // detail : une description indisponible ne doit pas degrader la supervision.
     void fetchDetailIfNeeded(const QString& key);
+
+    // Re-sonde /status pour l'ACTIVITE en cours (champ volatile du contrat
+    // `activity/1`), au plus toutes les quelques secondes et seulement pour un
+    // service en ligne. Appelee depuis allJson : on n'observe l'activite que
+    // quand un client regarde. Best-effort ; un echec laisse la derniere valeur
+    // connue et espace la prochaine tentative.
+    void fetchActivityIfStale(const QString& key);
+
+    // Assemble la section « Activites en cours » : une ligne par service en ligne
+    // qui declare une activite. Generique : indexation, compilation, collecte...
+    QJsonArray activitiesJson(qint64 nowSecs) const;
 
     // Oublie les applications simplement ENTENDUES qui ne s'annoncent plus
     // depuis longtemps. Les applications declarees sont conservees : leur
@@ -211,6 +224,18 @@ private:
         //   detailRetryAfter : ms epoch avant laquelle on ne retente pas.
         int         detailTries      = 0;
         qint64      detailRetryAfter = 0;
+
+        // Activite EN COURS du service (contrat generique `activity/1`). Contrairement
+        // au detail (interface, API) qui est stable et tire une seule fois, l'activite
+        // est VOLATILE : elle est re-sondee periodiquement, mais seulement tant qu'un
+        // client regarde (depuis allJson), et espacee (activityAt). Objet vide = rien
+        // en cours. morfMonitor l'affiche, il n'agit jamais dessus.
+        //   activity          : dernier objet `activity` lu dans /status (vide si aucun) ;
+        //   activityAt        : ms epoch du dernier sondage d'activite (throttle) ;
+        //   activityRetryAfter: ms epoch avant de retenter apres un echec.
+        QJsonObject activity;
+        qint64      activityAt         = 0;
+        qint64      activityRetryAfter = 0;
     };
     // Clé = identité d'INSTANCE (champ « instance » du protocole, ou app@ip à
     // défaut), jamais le seul nom « app » : le même service tournant sur deux

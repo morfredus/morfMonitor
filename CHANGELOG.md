@@ -3,6 +3,29 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.15.0] - 2026-08-24
+
+### Ajouté
+
+- Section **« Activités en cours »** (page État) : affiche en temps réel ce que
+  chaque service du parc est en train de faire (indexation, compilation, collecte,
+  synchronisation...), de façon générique, selon le contrat `activity/1`
+  (`morfSystem/docs/CONTRAT-ACTIVITE.md`). Une ligne par service en ligne
+  déclarant une activité : service, type, progression, durée, détail. « Aucune
+  activité en cours » sinon. morfMonitor observe, il n'agit jamais dessus.
+- Re-sondage périodique du `/status` des services en ligne (toutes les ~5 s,
+  seulement quand un client regarde) pour capter le champ volatile `activity`.
+
+### Corrigé
+
+- **État matériel incohérent à distance.** L'état matériel d'un service (bloc
+  `hardware` de `/status`) n'était lu qu'une seule fois par version, comme un
+  détail statique. Or il est volatile (un capteur s'initialise après le boot, se
+  branche/débranche, se dégrade). Un morfMonitor distant ayant sondé morfSensor
+  pendant son démarrage figeait « capteur absent » alors que le morfMonitor local,
+  sondé plus tard, voyait « présent ». L'état matériel est désormais rafraîchi au
+  fil du re-sondage périodique, il suit donc le service dans le temps.
+
 ## [0.14.11] - 2026-08-23
 
 ### Corrigé

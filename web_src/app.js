@@ -84,6 +84,57 @@ function unavailable(what, why) {
   return `<div class="unavailable"><strong>${esc(what)}</strong><br>${esc(why)}</div>`;
 }
 
+// --- Activites en cours (contrat generique `activity/1`) ---------------------
+// morfMonitor decrit le PRESENT : ce qu'un service est en train de faire, en temps
+// reel. La representation est la meme pour une indexation morfPhoto, une compilation
+// morfDeploy, une collecte morfCollector. Les champs viennent du service ; on n'en
+// deduit rien.
+function actNum(n) {
+  return (typeof n === 'number' && isFinite(n)) ? n.toLocaleString('fr-FR') : null;
+}
+
+function actProgress(a) {
+  const cur = actNum(a.current);
+  const tot = actNum(a.total);
+  const pct = (typeof a.progress_percent === 'number' && isFinite(a.progress_percent))
+    ? `${a.progress_percent} %` : null;
+  if (cur && tot) {
+    return esc(`${cur} / ${tot}`) +
+      (pct ? ` <span class="info-label">(${esc(pct)})</span>` : '');
+  }
+  if (pct) return esc(pct);
+  if (cur) return esc(cur);
+  return '<span class="info-label">en cours…</span>';
+}
+
+// Duree ecoulee depuis le debut, calculee cote client (started_at est un epoch s
+// serveur ; l'ecart d'horloge entre machines reste negligeable pour une duree).
+function actDuration(a) {
+  if (typeof a.started_at !== 'number') return '—';
+  const s = Math.max(0, Math.floor(Date.now() / 1000) - a.started_at);
+  if (s < 60) return `${s} s`;
+  if (s < 3600) return `${Math.floor(s / 60)} min`;
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return `${h} h ${m} min`;
+}
+
+function activitesTable(acts) {
+  return `<div class="tbl-wrap"><table><thead><tr>` +
+    `<th>Service</th><th>Activité</th><th class="mono">Progression</th>` +
+    `<th class="mono">Durée</th><th>Détail</th>` +
+    `</tr></thead><tbody>` +
+    acts.map((a) => `<tr>` +
+      `<td><strong>${esc(a.service || '—')}</strong>` +
+        (a.host ? ` <span class="info-label">${esc(a.host)}</span>` : '') + `</td>` +
+      `<td>${esc(a.type || '—')}</td>` +
+      `<td class="mono">${actProgress(a)}</td>` +
+      `<td class="mono">${esc(actDuration(a))}</td>` +
+      `<td>${a.detail ? esc(a.detail) : '—'}</td>` +
+    `</tr>`).join('') +
+    `</tbody></table></div>`;
+}
+
 function meter(percent) {
   if (typeof percent !== 'number') return '';
   const cls = percent >= 90 ? ' is-err' : percent >= 75 ? ' is-warn' : '';
@@ -288,6 +339,15 @@ function renderEtat(all, status) {
       ? pb.slice(0, 6).map((p) => row(p.what, badge(p.kind, p.state))).join('')
       : `<div class="unavailable"><strong>Aucune anomalie détectée.</strong><br>` +
         `Services supervisés en ligne, ressources sous les seuils.</div>`);
+
+  // Activites en cours declarees par les services du parc (temps reel).
+  const acts = Array.isArray(all.activities) ? all.activities : [];
+  el('c-activites').innerHTML =
+    header('Activités en cours', acts.length ? `${acts.length} en cours` : 'aucune') +
+    (acts.length ? activitesTable(acts)
+                 : `<div class="unavailable"><strong>Aucune activité en cours.</strong><br>` +
+                   `Les indexations, compilations, collectes ou synchronisations en cours ` +
+                   `apparaîtront ici, déclarées par chaque service.</div>`);
 }
 
 // Schema reel de /api/resources (voir HostCollectors.cpp) :

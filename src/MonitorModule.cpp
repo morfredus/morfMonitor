@@ -280,6 +280,86 @@ void MonitorModule::fetchDetailIfNeeded(const QString& key) {
     });
 }
 
+void MonitorModule::fetchActivityIfStale(const QString& key) {
+    const auto it = m_beaconSeen.find(key);
+    if (it == m_beaconSeen.end())
+        return;
+    if (it->sourceIp.isEmpty() || it->statusPort == 0)
+        return;                       // pas de /status a joindre
+
+    // On n'observe l'activite que d'un service EN LIGNE : une activite d'un pair
+    // disparu n'a pas de sens, et cela evite de solliciter une cible absente.
+    const qint64 nowS = QDateTime::currentSecsSinceEpoch();
+    if (nowS - it->lastSeen > m_config.beaconOfflineAfterS())
+        return;
+
+    const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+    if (nowMs < it->activityRetryAfter)
+        return;                       // back-off apres un echec recent
+    if (it->activityAt != 0 && nowMs - it->activityAt < 5000)
+        return;                       // deja frais : au plus une fois toutes les 5 s
+    it->activityAt = nowMs;           // marque avant l'envoi : pas de requetes en double
+
+    if (!m_http)
+        m_http = new QNetworkAccessManager(this);
+
+    const QUrl url(QStringLiteral("http://%1:%2/status").arg(it->sourceIp).arg(it->statusPort));
+    QNetworkRequest req(url);
+    req.setTransferTimeout(3000);
+    QNetworkReply* reply = m_http->get(req);
+
+    connect(reply, &QNetworkReply::finished, this, [this, key, reply]() {
+        reply->deleteLater();
+        const auto entry = m_beaconSeen.find(key);
+        if (entry == m_beaconSeen.end())
+            return;
+        if (reply->error() != QNetworkReply::NoError) {
+            // Echec : on garde la derniere activite connue et on espace la reprise.
+            entry->activityRetryAfter = QDateTime::currentMSecsSinceEpoch() + 30000;
+            return;
+        }
+        // `activity` absent ou state:"idle" => rien en cours : on stocke l'objet
+        // tel quel (vide ou idle) et activitiesJson n'affichera pas de ligne.
+        const QJsonObject o = QJsonDocument::fromJson(reply->readAll()).object();
+        entry->activity           = o.value(QStringLiteral("activity")).toObject();
+        entry->activityRetryAfter = 0;
+        entry->activityAt         = QDateTime::currentMSecsSinceEpoch();
+
+        // Rafraichir aussi l'ETAT MATERIEL : il est VOLATILE (un capteur s'initialise
+        // apres le boot, se branche/debranche, se degrade), contrairement a
+        // l'interface web et a la liste d'API qui sont stables. Le pull unique par
+        // version (fetchDetailIfNeeded) pouvait figer un « absent » capte pendant le
+        // demarrage du service : un morfMonitor distant montrait alors « capteur
+        // absent » quand le local, sonde plus tard, voyait « present ». En le
+        // relisant a chaque re-sondage, l'etat materiel suit le service dans le temps.
+        // morfMonitor n'infere jamais cet etat : il recopie ce que le service declare.
+        if (o.contains(QStringLiteral("hardware")))
+            entry->hardware = o.value(QStringLiteral("hardware")).toObject();
+    });
+}
+
+QJsonArray MonitorModule::activitiesJson(qint64 nowSecs) const {
+    // Contrat generique `activity/1` : une ligne par service EN LIGNE qui declare
+    // une activite en cours. Indexation morfPhoto, compilation morfDeploy, collecte
+    // morfCollector... la representation est la meme. morfMonitor n'ajoute que de
+    // quoi identifier la source (service, host) ; le reste vient du service.
+    QJsonArray arr;
+    for (auto it = m_beaconSeen.constBegin(); it != m_beaconSeen.constEnd(); ++it) {
+        const BeaconSeen& s = it.value();
+        if (s.activity.isEmpty())
+            continue;
+        if (s.activity.value(QStringLiteral("state")).toString() == QLatin1String("idle"))
+            continue;
+        if (nowSecs - s.lastSeen > m_config.beaconOfflineAfterS())
+            continue;                 // service hors ligne : pas d'activite fantome
+        QJsonObject a = s.activity;   // type, state, started_at, current, total, progress_percent, detail
+        a["service"] = s.app;
+        a["host"]    = s.host;
+        arr.append(a);
+    }
+    return arr;
+}
+
 // --- Choix de l'adresse d'un emetteur multi-domicilie ------------------------
 //
 // Un service diffuse sur TOUTES les interfaces de sa machine. Un poste Windows
@@ -674,6 +754,14 @@ QJsonObject MonitorModule::servicesJson() {
     const qint64 now = QDateTime::currentSecsSinceEpoch();
     o["machines"] = m_machines.machinesJson(now, m_config.beaconOfflineAfterS(),
                                             m_config.machineArchiveAfterS());
+
+    // Activites EN COURS declarees par les services (contrat generique `activity/1`).
+    // On re-sonde le /status des services en ligne pour capter ce champ VOLATILE,
+    // mais seulement ici, quand un client regarde : pas de sonde de fond permanente.
+    // Puis on assemble la section. morfMonitor OBSERVE : il affiche, il n'agit pas.
+    for (auto key = m_beaconSeen.keyBegin(); key != m_beaconSeen.keyEnd(); ++key)
+        fetchActivityIfStale(*key);
+    o["activities"] = activitiesJson(now);
 
     // Versions de services : partie DISTANTE (release) en cache, jointe ici a la
     // version EXECUTEE du beacon. On tente un rafraichissement des entrees expirees
