@@ -24,6 +24,8 @@
 #include <QHostInfo>
 #include <QFile>
 #include <QSet>
+#include <QTimer>
+#include <QRegularExpression>
 #include <QCoreApplication>
 
 #ifndef MORFBEACON_VENDORED_VERSION
@@ -187,12 +189,24 @@ bool MonitorModule::start() {
     // les clients afficheraient comme 0 %, une valeur FAUSSE et non « inconnue ».
     m_resources.collect();
 
+    // Alerte de panne fonctionnelle : evaluation periodique (en memoire, non
+    // bloquante). 30 s suffisent — l'anti-rebond (voir evaluateFunctionalAlerts)
+    // exige de toute facon une panne SOUTENUE avant d'alerter.
+    m_alertTimer = new QTimer(this);
+    m_alertTimer->setInterval(30 * 1000);
+    connect(m_alertTimer, &QTimer::timeout, this, &MonitorModule::evaluateFunctionalAlerts);
+    m_alertTimer->start();
+
     m_running = true;
     return true;
 }
 
 void MonitorModule::stop() {
     m_running = false;
+    if (m_alertTimer) {
+        m_alertTimer->stop();
+        m_alertTimer = nullptr;   // detruit par l'arbre QObject
+    }
     // Persiste la derniere annonce de chaque machine avant de partir : au
     // prochain demarrage, « vu il y a ... » repart d'une base fraiche.
     m_machines.flush();
@@ -698,6 +712,131 @@ QJsonObject MonitorModule::beaconAppsJson() const {
     o["apps"] = arr;
     o["offline_after_s"] = offlineAfter;
     return o;
+}
+
+// --- Alerte de panne fonctionnelle -------------------------------------------
+
+namespace {
+// Panne SOUTENUE avant d'alerter : un service qui redemarre vite (mise a jour,
+// reboot) ne doit pas declencher d'alerte. Deux minutes = large au-dela d'un
+// redemarrage normal, sous la barre d'une vraie indisponibilite.
+constexpr qint64 kMinFailureDurationS = 120;
+// Ne pas repeter la meme alerte avant ce delai (une panne longue = un cri, pas cent).
+constexpr qint64 kAlertCooldownS = 6 * 3600;
+} // namespace
+
+QStringList MonitorModule::alertTargets() const {
+    const QString env = qEnvironmentVariable("MORF_ALERT_TARGETS").trimmed();
+    if (!env.isEmpty()) {
+        QStringList t;
+        for (const QString& s : env.split(QLatin1Char(','), Qt::SkipEmptyParts))
+            t << s.trimmed();
+        if (!t.isEmpty())
+            return t;
+    }
+    QFile f(QStringLiteral("/etc/morfsystem/alert-targets"));
+    if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QStringList t;
+        const QString body = QString::fromUtf8(f.readAll());
+        for (const QString& s : body.split(QRegularExpression(QStringLiteral("[,\\n]")),
+                                           Qt::SkipEmptyParts))
+            if (!s.trimmed().isEmpty())
+                t << s.trimmed();
+        if (!t.isEmpty())
+            return t;
+    }
+    return {QStringLiteral("telegram")};   // repli raisonnable (canal de Fred)
+}
+
+void MonitorModule::pushNotification(const QString& title, const QString& message,
+                                     const QString& level) {
+    if (!m_http)
+        m_http = new QNetworkAccessManager(this);
+
+    QJsonObject payload;
+    payload["title"]   = title;
+    payload["message"] = message;
+    payload["level"]   = level;
+    payload["targets"] = QJsonArray::fromStringList(alertTargets());
+
+    // morfNotify ecoute en local (port 8789 du parc) ; surchargeable pour un cas
+    // particulier. POST asynchrone, best-effort : on ne bloque JAMAIS la boucle
+    // d'evenements (une notification ratee ne doit pas nuire a la supervision).
+    QString url = qEnvironmentVariable("MORFNOTIFY_URL").trimmed();
+    if (url.isEmpty())
+        url = QStringLiteral("http://127.0.0.1:8789/notify");
+
+    QNetworkRequest req{QUrl(url)};
+    req.setHeader(QNetworkRequest::ContentTypeHeader, QByteArrayLiteral("application/json"));
+    req.setTransferTimeout(5000);
+    QNetworkReply* reply = m_http->post(req, QJsonDocument(payload).toJson(QJsonDocument::Compact));
+    QObject::connect(reply, &QNetworkReply::finished, reply, &QObject::deleteLater);
+}
+
+void MonitorModule::evaluateFunctionalAlerts() {
+    const qint64 nowS = QDateTime::currentSecsSinceEpoch();
+
+    // Etat courant du parc, tel que morfMonitor le calcule deja pour l'affichage :
+    // on ne reinvente aucune logique de sante, on la CONSOMME (coherence garantie).
+    const QJsonArray apps = beaconAppsJson().value(QStringLiteral("apps")).toArray();
+
+    QSet<QString> failingNow;
+    for (const QJsonValue& v : apps) {
+        const QJsonObject a = v.toObject();
+        // Panne FONCTIONNELLE = service DECLARE (donc attendu), absent des annonces,
+        // alors que sa MACHINE est en ligne. Un poste entier hors ligne (host_online
+        // faux) n'est PAS traite ici service par service : ce serait une panne
+        // machine, pas un dysfonctionnement de service. Un equipement (role device)
+        // absent a host_online faux : ecarte aussi, conforme a la doctrine materiel.
+        const bool declared    = a.value(QStringLiteral("declared")).toBool();
+        const bool online      = a.value(QStringLiteral("online")).toBool();
+        const bool hostOnline  = a.value(QStringLiteral("host_online")).toBool();
+        if (!(declared && !online && hostOnline))
+            continue;
+
+        const QString label = a.value(QStringLiteral("label")).toString(
+            a.value(QStringLiteral("app")).toString());
+        const QString host  = a.value(QStringLiteral("host")).toString();
+        const QString inst  = a.value(QStringLiteral("instance")).toString(
+            label + QLatin1Char('@') + host);
+        failingNow.insert(inst);
+
+        FailureState& st = m_failureState[inst];
+        if (st.sinceS == 0) {
+            st.sinceS = nowS;   // premiere fois vu en panne : demarre l'anti-rebond
+            st.label  = label;
+            st.host   = host;
+        }
+        const bool sustained   = (nowS - st.sinceS) >= kMinFailureDurationS;
+        const bool cooldownOk  = !st.notified || (nowS - st.notifiedAtS) >= kAlertCooldownS;
+        if (sustained && cooldownOk) {
+            pushNotification(
+                QStringLiteral("morfSystem"),
+                QStringLiteral("%1 ne repond plus sur %2 : le service n'annonce plus "
+                               "sa presence alors que la machine est en ligne "
+                               "(bloque ou arrete). Panne fonctionnelle detectee par "
+                               "morfMonitor.").arg(label, host.isEmpty() ? QStringLiteral("?") : host),
+                QStringLiteral("error"));
+            st.notified    = true;
+            st.notifiedAtS = nowS;
+        }
+    }
+
+    // Retour a la normale : un service qui reapparait apres avoir ete signale.
+    for (auto it = m_failureState.begin(); it != m_failureState.end(); ) {
+        if (failingNow.contains(it.key())) {
+            ++it;
+            continue;
+        }
+        if (it->notified) {
+            pushNotification(
+                QStringLiteral("morfSystem"),
+                QStringLiteral("%1 est de nouveau en ligne sur %2.")
+                    .arg(it->label, it->host.isEmpty() ? QStringLiteral("?") : it->host),
+                QStringLiteral("success"));
+        }
+        it = m_failureState.erase(it);
+    }
 }
 
 // --- Sections de l'API -------------------------------------------------------

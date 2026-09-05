@@ -16,7 +16,10 @@
 #include <QHostAddress>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QStringList>
 #include <memory>
+
+class QTimer;
 
 class QUdpSocket;
 class QNetworkAccessManager;
@@ -105,6 +108,20 @@ private:
     // depuis longtemps. Les applications declarees sont conservees : leur
     // absence est justement ce qu'on veut voir.
     void pruneStaleBeacons();
+
+    // --- Alerte de panne FONCTIONNELLE (chemin morfMonitor -> morfNotify) ------
+    // Chemin complementaire de l'alerte systemd (morf-alert@, panne FRANCHE, process
+    // mort) : ici on detecte un service DECLARE qui n'annonce plus alors que sa
+    // machine, elle, est en ligne — donc bloque/muet plutot que mort (le cas que
+    // systemd ne voit pas : le process peut etre encore vivant). Evaluation
+    // periodique, en memoire (jamais bloquante), avec anti-rebond et anti-spam, et
+    // une notification de retour a la normale. morfMonitor n'agit pas : il previent.
+    void evaluateFunctionalAlerts();
+    // POST non bloquant vers morfNotify (best-effort ; un echec est ignore).
+    void pushNotification(const QString& title, const QString& message, const QString& level);
+    // Destinations : env MORF_ALERT_TARGETS, sinon /etc/morfsystem/alert-targets
+    // (partage avec le pont systemd), sinon repli ["telegram"].
+    QStringList alertTargets() const;
 
     // Adresse de CETTE machine sur l'interface portant la route par defaut,
     // avec sa longueur de prefixe. Sert d'etalon pour juger si l'adresse d'un
@@ -243,6 +260,20 @@ private:
     // l'une l'autre à chaque heartbeat — l'affichage alternait entre les hôtes
     // toutes les quinze secondes. PROTOCOL.md avait prévu le champ pour ça.
     QHash<QString, BeaconSeen> m_beaconSeen;
+
+    // Suivi des pannes fonctionnelles par instance, pour anti-rebond / anti-spam /
+    // retour a la normale (voir evaluateFunctionalAlerts). `sinceS` : depuis quand le
+    // service est vu en panne ; `notified` : une alerte a-t-elle deja ete emise ;
+    // `notifiedAtS` : quand (pour le cooldown). `label`/`host` : pour le message.
+    struct FailureState {
+        qint64  sinceS = 0;
+        bool    notified = false;
+        qint64  notifiedAtS = 0;
+        QString label;
+        QString host;
+    };
+    QHash<QString, FailureState> m_failureState;
+    QTimer* m_alertTimer = nullptr;   // evaluation periodique des pannes fonctionnelles
 
     // Memoire persistante des machines (role « host ») decouvertes par beacon :
     // une machine eteinte reste connue, et un poste entier hors ligne se presente

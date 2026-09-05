@@ -3,6 +3,42 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.17.0] - 2026-09-06
+
+### Added
+
+- **Functional-failure alerts pushed to morfNotify.** morfMonitor now periodically
+  (every 30 s, in-memory, never blocking) evaluates the parc health it already
+  computes and, when a **declared** service stops announcing itself while its host is
+  still online - i.e. hung or stopped, the case a live process hides from systemd -
+  pushes an `error` notification to morfNotify (`POST /notify`), plus a recovery
+  notice when it returns. This is the "functional failure" path (process up, silent),
+  complementary to the systemd `OnFailure` bridge's "hard failure" path (process dead,
+  see morfNotify 0.5.0). Sustained-failure debounce (120 s, so a restart or update
+  does not alert) and a 6 h repeat cooldown keep it quiet. A whole machine going
+  offline is not alerted service-by-service (that is a machine event, not a service
+  fault). Targets come from `MORF_ALERT_TARGETS` or `/etc/morfsystem/alert-targets`
+  (shared with the systemd bridge), defaulting to `telegram`; the morfNotify URL from
+  `MORFNOTIFY_URL`. With both paths, morfDashboard is no longer a required link in the
+  alert chain - it stays the visualisation.
+
+## [0.16.3] - 2026-09-05
+
+### Fixed
+
+- **False "morfMonitor defaillant" alerts caused by a hung network mount.** The host
+  resource collector enumerated every mounted volume and read its size via
+  `QStorageInfo` (`isReady()` / `bytesTotal()`, i.e. `statvfs`). When a CIFS/SMB share
+  went dead - a source PC asleep at night - `statvfs` on that mount blocks until the
+  CIFS timeout (~180 s). Because collection is synchronous, this froze the whole
+  supervision: `/api/all` stopped answering for ~2 minutes, so morfDashboard flagged
+  morfMonitor red and pushed "morfMonitor defaillant" to Telegram (seen at 18:53,
+  22:59, 23:43 on pi4fred), even though the process was healthy (NRestarts=0, no
+  crash). Network filesystems (cifs, smb*, nfs*, 9p, sshfs, ...) are now skipped by
+  filesystem type - read from the mount table without any `statvfs` - before any size
+  accessor is touched. A host supervisor reports the host's own storage; a remote
+  share's health belongs to the service that owns it (morfPhoto).
+
 ## [0.16.2] - 2026-09-05
 
 ### Fixed

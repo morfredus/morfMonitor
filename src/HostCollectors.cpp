@@ -307,14 +307,31 @@ QJsonObject ResourceCollector::collect() {
             "proc", "sysfs", "cgroup", "cgroup2", "devpts", "mqueue",
             "debugfs", "tracefs", "securityfs", "pstore", "autofs", "fuse.snapfuse",
         };
+        // Systèmes de fichiers RÉSEAU : à NE JAMAIS interroger. Un partage mort (le PC
+        // source en veille la nuit) laisse le montage figé, et le moindre statvfs dessus
+        // bloque jusqu'au timeout CIFS (~180 s). Comme la collecte est synchrone, ça gèle
+        // toute la supervision : /api/all n'aboutit plus, morfMonitor paraît « défaillant »
+        // (fausses alertes Telegram via morfDashboard) alors que le process va bien. Un
+        // superviseur d'HÔTE n'a de toute façon pas à compter le stockage d'un partage
+        // distant : la santé d'une source appartient au service qui la porte (morfPhoto).
+        static const QSet<QByteArray> kNetworkFs = {
+            "cifs", "smb3", "smbfs", "smb2", "nfs", "nfs4", "9p", "afpfs",
+            "ncpfs", "fuse.sshfs", "fuse.smbnetfs", "fuse.rclone", "glusterfs", "ceph",
+        };
         struct Vol { QString mount; QJsonObject d; };
         std::vector<Vol> vols;
         QSet<QString> devices;
         for (const QStorageInfo& v : QStorageInfo::mountedVolumes()) {
+            // fileSystemType() se lit dans la table des montages, SANS statvfs : sûr même
+            // sur un montage réseau figé. On filtre donc AVANT tout accès aux tailles
+            // (isReady/bytesTotal), qui eux déclenchent le statvfs bloquant.
+            const QByteArray fstype = v.fileSystemType().toLower();
+            if (kPseudoFs.contains(fstype))
+                continue;   // tmpfs, squashfs des snaps… « pleins » à 100 %, fausse alerte
+            if (kNetworkFs.contains(fstype))
+                continue;   // montage réseau : jamais de statvfs (voir kNetworkFs ci-dessus)
             if (!v.isValid() || !v.isReady() || v.isReadOnly() || v.bytesTotal() <= 0)
                 continue;
-            if (kPseudoFs.contains(v.fileSystemType().toLower()))
-                continue;   // tmpfs, squashfs des snaps… « pleins » à 100 %, fausse alerte
             const QString device = QString::fromUtf8(v.device());
             if (devices.contains(device))
                 continue;   // montage bind : le même volume sous un autre chemin
