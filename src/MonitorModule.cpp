@@ -18,8 +18,6 @@
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QDateTime>
-#include <QEventLoop>
-#include <QTimer>
 #include <QElapsedTimer>
 #include <QNetworkReply>
 #include <QNetworkRequest>
@@ -46,44 +44,61 @@ QString firstVersionLine(const QString& path) {
     return QString::fromUtf8(f.readLine()).trimmed();
 }
 
-// morfUpdate n'emet pas de beacon : la version executee se lit sur /status.
-QString versionFromLocalStatus(const QUrl& url) {
-    if (!url.isValid())
-        return {};
-    QNetworkAccessManager nam;
-    QNetworkReply* reply = nam.get(QNetworkRequest(url));
-    QEventLoop loop;
-    QTimer timeout;
-    timeout.setSingleShot(true);
-    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-    QObject::connect(&timeout, &QTimer::timeout, reply, &QNetworkReply::abort);
-    timeout.start(800);
-    loop.exec();
-    const QByteArray body = reply->readAll();
-    const bool ok = reply->error() == QNetworkReply::NoError
-        && reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 200;
-    reply->deleteLater();
-    if (!ok)
-        return {};
-    return QJsonDocument::fromJson(body).object().value(QStringLiteral("version")).toString();
-}
-
+// morfUpdate n'emet pas de beacon : sa version executee se lit sur son /status.
+//
+// IMPORTANT : cette lecture est ASYNCHRONE, jamais bloquante. Une version
+// precedente faisait ici un GET synchrone avec une QEventLoop imbriquee
+// (loop.exec()). Or cette fonction est appelee depuis servicesJson(), en plein
+// parcours de m_beaconSeen : la boucle imbriquee re-entrait dans l'event loop,
+// laissait passer un datagramme beacon (onBeaconDatagram -> m_beaconSeen.insert),
+// et l'insertion d'une NOUVELLE cle rehashait la table en invalidant l'iterateur
+// du parcours en cours -> plantage (SIGSEGV). C'est pourquoi le service crashait
+// en rafale au demarrage (nouvelles cles a chaque service qui s'annonce) puis se
+// stabilisait (cles connues : insert = simple remplacement, sans rehash).
+//
+// On interroge donc /status en arriere-plan et on renvoie la derniere valeur
+// connue ; a defaut, la version installee lue dans /opt/morfupdate/VERSION
+// (immediate, sans reseau).
 QString cachedMorfUpdateVersion() {
     static QString ver;
     static QElapsedTimer age;
-    static bool armed = false;
-    if (armed && age.elapsed() < 15000)
-        return ver;
-    ver = versionFromLocalStatus(QUrl(QStringLiteral("http://127.0.0.1:8794/status")));
-    if (ver.isEmpty())
-        ver = firstVersionLine(QStringLiteral("/opt/morfupdate/VERSION"));
-    if (!armed) {
-        age.start();
-        armed = true;
-    } else {
-        age.restart();
+    static bool armed    = false;
+    static bool inFlight = false;
+
+    // Rafraichissement en tache de fond quand le cache est vide ou perime (15 s),
+    // sans jamais attendre la reponse : le parcours appelant n'est pas suspendu.
+    const bool stale = !armed || age.elapsed() > 15000;
+    if (stale && !inFlight) {
+        inFlight = true;
+        // Un seul QNetworkAccessManager pour toute la vie du process (thread
+        // principal) : sa reutilisation evite de recreer une pile reseau a chaque
+        // sonde. Les statics de la fonction sont accessibles depuis le lambda sans
+        // capture (duree de vie statique) ; seul `reply`, local, est capture.
+        static QNetworkAccessManager nam;
+        QNetworkRequest req{QUrl(QStringLiteral("http://127.0.0.1:8794/status"))};
+        req.setTransferTimeout(800);   // borne la requete SANS boucle imbriquee
+        QNetworkReply* reply = nam.get(req);
+        QObject::connect(reply, &QNetworkReply::finished, reply, [reply]() {
+            reply->deleteLater();
+            inFlight = false;
+            armed    = true;
+            age.restart();
+            // On ne lit le corps QU'EN cas de succes : lire une reply en erreur
+            // (ou abandonnee) declenche « QIODevice::read: device not open ».
+            if (reply->error() == QNetworkReply::NoError
+                && reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 200) {
+                const QString v = QJsonDocument::fromJson(reply->readAll())
+                                      .object().value(QStringLiteral("version")).toString();
+                if (!v.isEmpty())
+                    ver = v;
+            }
+        });
     }
-    return ver;
+
+    if (!ver.isEmpty())
+        return ver;
+    // Repli immediat tant que la sonde n'a pas encore repondu : version installee.
+    return firstVersionLine(QStringLiteral("/opt/morfupdate/VERSION"));
 }
 
 // Clone voisin : dossier du dépôt, ou même nom suivi d'un suffixe (copie de travail).
@@ -759,8 +774,14 @@ QJsonObject MonitorModule::servicesJson() {
     // On re-sonde le /status des services en ligne pour capter ce champ VOLATILE,
     // mais seulement ici, quand un client regarde : pas de sonde de fond permanente.
     // Puis on assemble la section. morfMonitor OBSERVE : il affiche, il n'agit pas.
-    for (auto key = m_beaconSeen.keyBegin(); key != m_beaconSeen.keyEnd(); ++key)
-        fetchActivityIfStale(*key);
+    // Parcours sur une COPIE des cles : iterer m_beaconSeen en direct pendant qu'un
+    // effet de bord (ou une reentrance) l'insere/purge invaliderait l'iterateur, ce
+    // qui plantait le service. La copie rend ce parcours insensible a toute mutation
+    // de la table -- ceinture et bretelles, en plus de la sonde morfUpdate rendue
+    // asynchrone qui supprimait la cause premiere de cette reentrance.
+    const QList<QString> beaconKeys = m_beaconSeen.keys();
+    for (const QString& key : beaconKeys)
+        fetchActivityIfStale(key);
     o["activities"] = activitiesJson(now);
 
     // Versions de services : partie DISTANTE (release) en cache, jointe ici a la

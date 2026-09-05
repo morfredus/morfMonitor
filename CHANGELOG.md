@@ -3,6 +3,33 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.16.2] - 2026-09-05
+
+### Fixed
+
+- **Intermittent crash (SIGSEGV) that made the web UI show "Injoignable" and
+  wipe every service.** The morfUpdate version was read with a synchronous HTTP
+  GET spinning a nested `QEventLoop` (`loop.exec()`), and that read was invoked
+  from inside `servicesJson()` while it iterated `m_beaconSeen`. The nested loop
+  re-entered the event loop, let an incoming beacon datagram run
+  `m_beaconSeen.insert()`, and inserting a *new* key rehashed the hash table,
+  invalidating the iterator of the in-progress walk -> segfault. This is why the
+  service crashed in bursts right after start (every announcing service adds a
+  new key) and then went quiet (known keys: insert only replaces a value, no
+  rehash). systemd restarted it each time, and the ~6 s restart window is the
+  "Injoignable" the UI displayed. Reproduced on both the 1 GB pi4dev and the
+  4 GB pi4fred, confirming it was not memory pressure.
+- The morfUpdate version probe is now fully asynchronous (background request,
+  15 s cache, immediate `/opt/morfupdate/VERSION` fallback): no nested event
+  loop, so no re-entrancy. This also removes the `QIODevice::read: device not
+  open` warnings, which came from reading the reply aborted by the old 800 ms
+  timeout.
+- Defense in depth: `servicesJson()` now iterates a snapshot of the beacon keys
+  (`m_beaconSeen.keys()`) instead of live hash iterators, so any future
+  re-entrancy or side effect that mutates the table can no longer corrupt the
+  walk. The two remaining synchronous `QEventLoop` GETs in `HttpServer` are on
+  user-triggered update actions only; they no longer endanger this iteration.
+
 ## [0.16.1] - 2026-09-03
 
 ### Changed
