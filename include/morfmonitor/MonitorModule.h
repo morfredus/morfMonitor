@@ -148,6 +148,14 @@ private:
     // récente vue ailleurs (avec l'hôte annonceur, pour lever l'ambiguïté).
     QHash<QString, VersionMonitor::Running> runningVersionsByApp() const;
 
+    // Age (en secondes) du heartbeat beacon le plus pertinent par application,
+    // hote LOCAL privilegie -- meme jointure que runningVersionsByApp, mais pour
+    // la FRAICHEUR. Sert a croiser l'etat systemd (preuve de vie) avec la sante
+    // reelle : un service « active » dont le beacon s'est tu est vivant mais
+    // bloque. Ne contient que les apps REELLEMENT entendues : une app absente de
+    // la table n'emet pas de beacon, son silence ne prouve donc rien.
+    QHash<QString, qint64> beaconAgeByLocalApp(qint64 nowSecs) const;
+
     QString      m_configPath;
     SharedConfig m_config;
     bool         m_running = false;

@@ -3,6 +3,28 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.18.0] - 2026-09-06
+
+### Added
+
+- **"Stuck" detection: a live process that stopped answering.** The per-service
+  state in the "Services morfSystem" tab now crosses two signals morfMonitor
+  already holds - systemd `ActiveState` (proof of *life*) and the freshness of the
+  service's own morfBeacon heartbeat (proof of *health*). A service systemd still
+  reports `active` while its heartbeat has gone silent for more than
+  `beacon.offline_after_s` is alive but blocked ("muet"): the `SIGSTOP` / deadlock
+  / busy-loop case that `ActiveState` cannot see, and that the TCP probe also
+  misses (the kernel completes the connection without the application). Such a
+  service is now flagged `stuck` in `/status` (with `heartbeat_age_s` /
+  `heartbeat_online`) and shown as **bloqué** (red) instead of *actif*. Pure
+  composition of observations already in hand - no new probe, no dependency, no
+  privilege - and OS-agnostic, since it rides on the beacon rather than on
+  systemd. Only services actually heard beaconing are judged: an app absent from
+  the heartbeat table emits no beacon, so its silence proves nothing. The local
+  host's instance is preferred (even when stale) so a healthy same-named service
+  on another machine cannot mask a local freeze. Observation only - morfMonitor
+  reports it, it does not act.
+
 ## [0.17.0] - 2026-09-06
 
 ### Added

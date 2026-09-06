@@ -886,7 +886,41 @@ QJsonObject MonitorModule::servicesJson() {
         m_cSystemd.age.restart();
         m_cSystemd.valid = true;
     }
-    o["systemd"] = m_cSystemd.value.value(QStringLiteral("services"));
+    // Croise l'etat systemd (preuve de VIE) avec la fraicheur du heartbeat beacon
+    // (preuve de SANTE). Un service que systemd voit « active » mais dont le beacon
+    // s'est TU depuis plus de offline_after_s est vivant mais bloque (« muet ») :
+    // le cas SIGSTOP/deadlock qu'ActiveState ne voit pas, et que la sonde TCP rate
+    // aussi (le noyau accepte la connexion sans l'application). On ne juge que les
+    // services DEJA entendus : une app absente de la table n'emet pas de beacon,
+    // son silence ne prouve rien. Pur croisement d'observations deja en main --
+    // aucune sonde nouvelle, aucune dependance, aucun privilege. Fonctionne aussi
+    // sous Windows : le beacon ne depend pas de l'OS. Calcule a chaque requete
+    // (non mis en cache) pour refleter l'age courant entre deux releves systemd.
+    {
+        const qint64 nowSec = QDateTime::currentSecsSinceEpoch();
+        const qint64 offlineAfter = m_config.beaconOfflineAfterS();
+        const QHash<QString, qint64> beaconAge = beaconAgeByLocalApp(nowSec);
+        QHash<QString, QString> appByUnit;
+        for (const SystemdServiceDef& s : m_config.systemdServices())
+            appByUnit.insert(s.unit, s.app.isEmpty() ? s.label : s.app);
+
+        QJsonArray services = m_cSystemd.value.value(QStringLiteral("services")).toArray();
+        for (int i = 0; i < services.size(); ++i) {
+            QJsonObject svc = services.at(i).toObject();
+            if (!svc.value(QStringLiteral("active")).toBool())
+                continue;               // seul un service actif peut etre « muet »
+            const QString app = appByUnit.value(svc.value(QStringLiteral("unit")).toString());
+            if (app.isEmpty() || !beaconAge.contains(app))
+                continue;               // service qui n'emet pas de beacon : on ne conclut rien
+            const qint64 age = beaconAge.value(app);
+            svc[QStringLiteral("heartbeat_age_s")] = static_cast<double>(age);
+            const bool online = age < offlineAfter;
+            svc[QStringLiteral("heartbeat_online")] = online;
+            svc[QStringLiteral("stuck")] = !online;   // actif mais muet => bloque
+            services.replace(i, svc);
+        }
+        o["systemd"] = services;
+    }
 
     if (!isFresh(m_cProbes, m_config.probesRefreshMs())) {
         m_cProbes.value = m_supervisor ? m_supervisor->collectProbes(uptimeSeconds())
@@ -1012,6 +1046,34 @@ QHash<QString, VersionMonitor::Running> MonitorModule::runningVersionsByApp() co
         }
     }
     return byApp;
+}
+
+// Meme jointure que runningVersionsByApp, mais pour la FRAICHEUR. On privilegie
+// l'instance de l'hote LOCAL, meme PERIMEE : c'est celle de l'onglet « Services
+// systemd » de CETTE machine. Un service local gele laisse son entree vieillir
+// (les entrees periment au bout d'1 h, pas a offline_after_s) ; on veut cet age
+// stale, pas celui d'une instance fraiche du meme service sur une autre machine,
+// qui masquerait le blocage local. A localite egale, la plus fraiche gagne.
+QHash<QString, qint64> MonitorModule::beaconAgeByLocalApp(qint64 nowSecs) const {
+    const QString local = QHostInfo::localHostName();
+    QHash<QString, qint64> ageByApp;
+    QHash<QString, bool>   pickedLocal;
+    for (const BeaconSeen& s : m_beaconSeen) {
+        if (s.app.isEmpty())
+            continue;
+        const qint64 age = nowSecs - s.lastSeen;
+        const bool isLocal = !s.host.isEmpty()
+            && s.host.compare(local, Qt::CaseInsensitive) == 0;
+        const bool have = ageByApp.contains(s.app);
+        const bool better = !have
+            || (isLocal && !pickedLocal.value(s.app))
+            || (isLocal == pickedLocal.value(s.app) && age < ageByApp.value(s.app));
+        if (better) {
+            ageByApp[s.app]    = age;
+            pickedLocal[s.app] = isLocal;
+        }
+    }
+    return ageByApp;
 }
 
 void MonitorModule::triggerVersionCheck() {

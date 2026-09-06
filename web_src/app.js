@@ -172,6 +172,16 @@ function meter(percent) {
 // « active » produisait une contradiction dans la meme ligne.
 function systemdBadge(u) {
   const s = String(u.state || '').toLowerCase();
+  // Vivant pour systemd, mais MUET cote beacon : le process tourne (ActiveState =
+  // active) alors qu'il n'annonce plus sa presence depuis plus de offline_after_s.
+  // C'est le cas « bloque » (SIGSTOP, deadlock, boucle) qu'ActiveState ne voit
+  // pas -- preuve de VIE n'est pas preuve de SANTE. Rouge, distinct de « actif ».
+  if (u.stuck) {
+    const age = typeof u.heartbeat_age_s === 'number'
+      ? ' (silence beacon : ' + (duration(u.heartbeat_age_s) || u.heartbeat_age_s + ' s') + ')'
+      : '';
+    return `<span class="badge badge-err" title="${esc('Le service tourne mais n\'annonce plus sa présence' + age)}">bloqué</span>`;
+  }
   if (s === 'active')   return badge('ok',   'actif');
   if (s === 'failed')   return badge('err',  'échec');
   if (s === 'inactive') return badge('err',  'arrêté');
