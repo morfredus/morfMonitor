@@ -3,6 +3,34 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.20.0] - 2026-09-07
+
+### Added
+
+- **Temporal memory: morfMonitor now remembers what it observes (v1).** New
+  `EventMemory` subsystem turns the state changes morfMonitor *already* detects
+  (systemd lifecycle, morfBeacon freshness, the "stuck" cross-check) into
+  structured events - it opens **no new probe**. Three depths of retention, per
+  the design note (`.morfredus_travail/Evolution/morfMonitor - memoire temporelle`):
+  - **Raw events** (`morfevent/1`): an NDJSON journal kept 24-48 h (FIFO), for the
+    recent timeline. Crash-safe append (a torn last line is dropped on reload).
+  - **Episodes**: a continuous period of unavailability owns the downtime, so a
+    crash followed by a heartbeat loss is **one** incident, not two. Cause ranked
+    `crash > stuck > silent`. Open episodes persist outside the volatile raw log,
+    so an incident in progress survives the 24 h purge and a restart.
+  - **Statistics**: daily aggregates (permanent, the durable source of truth) from
+    which the **life** table (totals since first-seen) is derived. Downtime is
+    credited *as it accrues* each tick, split at local midnight; an abnormally long
+    tick gap (morfMonitor asleep) becomes *unobserved* time, never downtime, so
+    availability stays honest.
+  - **API `morfhistory/1`** (read-only, pull): `GET /api/events`,
+    `GET /api/stats/daily`, `GET /api/stats/life`. morfAnalytics consumes these; it
+    is never required for the memory to be kept. morfMonitor stays an observer and
+    owns the whole pyramid; the data lives under the service state directory
+    (`/var/lib/morfmonitor/memory/`), atomic writes throughout.
+  - Startup recovery: catch-up load, `monitor_started` / `monitor_gap` events so
+    observation gaps are visible rather than silently counted as uptime.
+
 ## [0.19.1] - 2026-09-06
 
 ### Fixed

@@ -10,6 +10,7 @@
 #include "morfmonitor/Collectors.h"
 #include "morfmonitor/MachineRegistry.h"
 #include "morfmonitor/VersionMonitor.h"
+#include "morfmonitor/EventMemory.h"
 
 #include <QHash>
 #include <QElapsedTimer>
@@ -62,6 +63,15 @@ public:
     QJsonObject servicesJson();   // systemd + sondes réseau + applications beacon
     QJsonObject rebootJson();
     QJsonObject configJson() const { return m_config.toJson(); }
+
+    // --- Memoire temporelle (contrats morfevent/1 + morfhistory/1) ----------
+    // Lecture seule. La memoire est alimentee periodiquement par feedMemory() a
+    // partir de ce que morfMonitor observe DEJA ; ces methodes ne font que servir
+    // ce qu'elle a conserve. morfAnalytics les consomme en pull.
+    QJsonObject eventsJson(qint64 sinceSec, qint64 untilSec, const QString& service) const;
+    QJsonObject dailyStatsJson(const QString& fromDay, const QString& toDay,
+                               const QString& service) const;
+    QJsonObject lifeJson() const;
 
     // Vue complète, en une seule requête. Un client qui affiche un tableau de
     // bord veut tout à la fois : lui imposer cinq requêtes multiplierait les
@@ -117,6 +127,13 @@ private:
     // periodique, en memoire (jamais bloquante), avec anti-rebond et anti-spam, et
     // une notification de retour a la normale. morfMonitor n'agit pas : il previent.
     void evaluateFunctionalAlerts();
+
+    // Alimente la memoire temporelle a chaque tick : assemble un instantane du
+    // parc a partir des observations DEJA en main (beacon + systemd, aucune sonde
+    // nouvelle) et le transmet a EventMemory, qui en deduit les transitions, tient
+    // les episodes et consolide. Meme timer que l'alerte fonctionnelle.
+    void feedMemory();
+
     // POST non bloquant vers morfNotify (best-effort ; un echec est ignore).
     void pushNotification(const QString& title, const QString& message, const QString& level);
     // Destinations : env MORF_ALERT_TARGETS, sinon /etc/morfsystem/alert-targets
@@ -287,6 +304,11 @@ private:
     // une machine eteinte reste connue, et un poste entier hors ligne se presente
     // comme UNE machine plutot que par la disparition de chacun de ses services.
     MachineRegistry m_machines;
+
+    // Memoire temporelle des evenements observes (journal 24 h, episodes,
+    // consolidation jour -> vie). morfMonitor en est le seul proprietaire ;
+    // morfAnalytics la lit via morfhistory/1.
+    EventMemory m_memory;
 };
 
 } // namespace morfmonitor

@@ -73,6 +73,7 @@ add_library(morfMonitor STATIC
     src/ModuleFactory.cpp
     src/MonitorModule.cpp
     src/MachineRegistry.cpp
+    src/EventMemory.cpp                # memoire temporelle (morfevent/1, morfhistory/1)
     src/SharedConfig.cpp
     src/HostCollectors.cpp
     src/VersionMonitor.cpp             # versions de services (via morfUpdate)
@@ -85,6 +86,7 @@ add_library(morfMonitor STATIC
     include/morfmonitor/Service.h
     include/morfmonitor/MonitorModule.h
     include/morfmonitor/MachineRegistry.h
+    include/morfmonitor/EventMemory.h
     include/morfmonitor/SharedConfig.h
     include/morfmonitor/Collectors.h  # <-- remplacer par votre metier
     include/morfmonitor/VersionMonitor.h

@@ -57,6 +57,19 @@ int contentLength(const QByteArray& headerBlock) {
     }
     return 0;
 }
+
+// Valeur d'un parametre de query string (« a=1&b=2 »), decodee. Chaine vide si
+// absent. Sert aux routes de la memoire temporelle (fenetre, bornes de jours,
+// filtre par service), les seules a exploiter la query -- le reste de l'API n'en
+// a pas besoin.
+QString queryParam(const QByteArray& query, const char* key) {
+    const QByteArray k = QByteArray(key) + "=";
+    for (const QByteArray& part : query.split('&')) {
+        if (part.startsWith(k))
+            return QUrl::fromPercentEncoding(part.mid(k.size()));
+    }
+    return QString();
+}
 } // namespace
 
 HttpServer::HttpServer(ServiceConfig config, ModuleRegistry* registry, QObject* parent)
@@ -124,8 +137,9 @@ void HttpServer::onSocketReadyRead(QTcpSocket* sock) {
 
 void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
                                const QByteArray& rawPath, const QByteArray& body) {
-    const QByteArray path = rawPath.left(rawPath.indexOf('?') < 0 ? rawPath.size()
-                                                                  : rawPath.indexOf('?'));
+    const int qMark = rawPath.indexOf('?');
+    const QByteArray path  = rawPath.left(qMark < 0 ? rawPath.size() : qMark);
+    const QByteArray query = qMark < 0 ? QByteArray() : rawPath.mid(qMark + 1);
     int        code   = 200;
     QByteArray reason = "OK";
     QByteArray out;
@@ -236,11 +250,33 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
             out = toJson(mon->configJson());
         } else if (path == "/api/all") {
             out = toJson(mon->allJson());
+        }
+        // ---- Memoire temporelle (contrat morfhistory/1, lecture seule) -------
+        // Ruban brut de la fenetre 24 h : since/until en secondes epoch (0 = borne
+        // ouverte), service = filtre par nom d'application (optionnel).
+        else if (path == "/api/events") {
+            const qint64 since = queryParam(query, "since").toLongLong();
+            const qint64 until = queryParam(query, "until").toLongLong();
+            const QString svc  = queryParam(query, "service");
+            out = toJson(mon->eventsJson(since, until, svc));
+        }
+        // Statistiques journalieres : from/to au format « yyyy-MM-dd » (bornes
+        // incluses, vides = tout), service = filtre par instance (optionnel).
+        else if (path == "/api/stats/daily") {
+            const QString from = queryParam(query, "from");
+            const QString to   = queryParam(query, "to");
+            const QString svc  = queryParam(query, "service");
+            out = toJson(mon->dailyStatsJson(from, to, svc));
+        }
+        // Table de vie : totaux depuis le debut, derives des jours.
+        else if (path == "/api/stats/life") {
+            out = toJson(mon->lifeJson());
         } else {
             code = 404; reason = "Not Found";
             out = "{\"error\":\"route inconnue\",\"routes\":[\"/api/system\","
                   "\"/api/resources\",\"/api/network\",\"/api/services\","
-                  "\"/api/reboot\",\"/api/config\",\"/api/all\"]}";
+                  "\"/api/reboot\",\"/api/config\",\"/api/all\","
+                  "\"/api/events\",\"/api/stats/daily\",\"/api/stats/life\"]}";
         }
     } else if (path == "/healthz") {
         out = "{\"status\":\"ok\"}";

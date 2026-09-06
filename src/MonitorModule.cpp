@@ -174,6 +174,11 @@ bool MonitorModule::start() {
     // de la config dans servicesJson (elle peut arriver apres le demarrage).
     m_versions = std::make_unique<VersionMonitor>(resolveStateDir(), 6 * 3600 * 1000, this);
 
+    // Memoire temporelle : chargee au demarrage (rattrapage, purge du brut > 48 h,
+    // monitor_started/monitor_gap). Elle vit sous le meme dossier d'etat editable
+    // que le registre des machines (/var/lib/morfmonitor via StateDirectory).
+    m_memory.load(resolveStateDir(), m_config.beaconOfflineAfterS());
+
     m_beaconSocket = new QUdpSocket(this);
     // ShareAddress : d'autres programmes de la machine (le Dashboard en mode
     // dégradé, par exemple) écoutent le même port de diffusion.
@@ -195,6 +200,9 @@ bool MonitorModule::start() {
     m_alertTimer = new QTimer(this);
     m_alertTimer->setInterval(30 * 1000);
     connect(m_alertTimer, &QTimer::timeout, this, &MonitorModule::evaluateFunctionalAlerts);
+    // Meme cadence pour alimenter la memoire temporelle : les transitions d'etat
+    // du parc y deviennent des evenements structures, sans aucune sonde nouvelle.
+    connect(m_alertTimer, &QTimer::timeout, this, &MonitorModule::feedMemory);
     m_alertTimer->start();
 
     m_running = true;
@@ -210,6 +218,9 @@ void MonitorModule::stop() {
     // Persiste la derniere annonce de chaque machine avant de partir : au
     // prochain demarrage, « vu il y a ... » repart d'une base fraiche.
     m_machines.flush();
+    // Persiste la memoire temporelle (agregats, curseur, episodes ouverts) : un
+    // incident en cours et l'histoire consolidee survivent a l'arret.
+    m_memory.flush();
     if (m_beaconSocket) {
         m_beaconSocket->close();
         m_beaconSocket = nullptr; // détruit par l'arbre QObject
@@ -837,6 +848,101 @@ void MonitorModule::evaluateFunctionalAlerts() {
         }
         it = m_failureState.erase(it);
     }
+}
+
+// --- Alimentation de la memoire temporelle -----------------------------------
+
+void MonitorModule::feedMemory() {
+    const qint64 now = QDateTime::currentSecsSinceEpoch();
+    const int offlineAfter = m_config.beaconOfflineAfterS();
+
+    // Etat systemd LOCAL (preuve de vie/cycle de vie OS). Reutilise le cache ; ne
+    // relance systemctl qu'a l'expiration, exactement comme servicesJson.
+    if (!isFresh(m_cSystemd, m_config.systemdRefreshMs())) {
+        m_cSystemd.value = m_supervisor ? m_supervisor->collectSystemd() : QJsonObject{};
+        m_cSystemd.age.restart();
+        m_cSystemd.valid = true;
+    }
+    const QJsonArray sysArr = m_cSystemd.value.value(QStringLiteral("services")).toArray();
+    const QHash<QString, qint64> beaconAge = beaconAgeByLocalApp(now);
+
+    // Index systemd par application (unite -> app), enrichi de l'etat « muet »
+    // (actif mais heartbeat tu) exactement comme le calcule servicesJson : pur
+    // croisement d'observations deja en main.
+    struct Sys { bool active = false; QString state; bool stuck = false; qint64 restarts = -1; };
+    QHash<QString, QString> appByUnit;
+    for (const SystemdServiceDef& s : m_config.systemdServices())
+        appByUnit.insert(s.unit, s.app.isEmpty() ? s.label : s.app);
+    QHash<QString, Sys> sysByApp;
+    for (const QJsonValue& v : sysArr) {
+        const QJsonObject o = v.toObject();
+        const QString app = appByUnit.value(o.value(QStringLiteral("unit")).toString());
+        if (app.isEmpty())
+            continue;
+        Sys si;
+        si.active = o.value(QStringLiteral("active")).toBool();
+        si.state  = o.value(QStringLiteral("state")).toString();
+        if (o.contains(QStringLiteral("restarts")))
+            si.restarts = static_cast<qint64>(o.value(QStringLiteral("restarts")).toDouble());
+        if (si.active && beaconAge.contains(app))
+            si.stuck = beaconAge.value(app) >= offlineAfter;   // actif mais muet
+        sysByApp.insert(app, si);
+    }
+
+    // Instantane par service DECLARE, a partir de la vue beacon deja assemblee
+    // (une ligne par instance, plus les declarations insatisfaites en « hors ligne »).
+    const QString localHost = QHostInfo::localHostName();
+    QVector<EventMemory::Observation> obs;
+    const QJsonArray apps = beaconAppsJson().value(QStringLiteral("apps")).toArray();
+    for (const QJsonValue& v : apps) {
+        const QJsonObject a = v.toObject();
+        if (!a.value(QStringLiteral("declared")).toBool())
+            continue;                       // seul un service ATTENDU fait incident
+        EventMemory::Observation ob;
+        ob.service         = a.value(QStringLiteral("app")).toString();
+        ob.host            = a.value(QStringLiteral("host")).toString();
+        ob.instance        = a.value(QStringLiteral("instance")).toString();
+        if (ob.instance.isEmpty())
+            ob.instance = ob.host.isEmpty() ? ob.service
+                                            : ob.service + QLatin1Char('@') + ob.host;
+        ob.declared        = true;
+        ob.heartbeatOnline = a.value(QStringLiteral("online")).toBool();
+        // host_online absent (declaration « presence » sans hote) => on suppose la
+        // machine en ligne : sans hote, on ne peut pas affirmer qu'elle est eteinte.
+        ob.hostOnline      = a.value(QStringLiteral("host_online")).toBool(true);
+        if (a.contains(QStringLiteral("last_seen_s")))
+            ob.lastSeen = now - static_cast<qint64>(a.value(QStringLiteral("last_seen_s")).toDouble());
+
+        // Enrichissement cycle de vie OS : uniquement pour un service de CET hote,
+        // le seul dont morfMonitor lit systemd directement.
+        const bool isLocal = ob.host.isEmpty()
+            || ob.host.compare(localHost, Qt::CaseInsensitive) == 0;
+        if (isLocal && sysByApp.contains(ob.service)) {
+            const Sys& si = sysByApp.value(ob.service);
+            ob.hasLifecycle  = true;
+            ob.systemdActive = si.active;
+            ob.systemdState  = si.state;
+            ob.stuck         = si.stuck;
+            ob.nRestarts     = si.restarts;
+        }
+        obs.push_back(ob);
+    }
+
+    m_memory.observe(obs, now);
+}
+
+QJsonObject MonitorModule::eventsJson(qint64 sinceSec, qint64 untilSec,
+                                      const QString& service) const {
+    return m_memory.eventsJson(sinceSec, untilSec, service);
+}
+
+QJsonObject MonitorModule::dailyStatsJson(const QString& fromDay, const QString& toDay,
+                                          const QString& service) const {
+    return m_memory.dailyJson(fromDay, toDay, service);
+}
+
+QJsonObject MonitorModule::lifeJson() const {
+    return m_memory.lifeJson();
 }
 
 // --- Sections de l'API -------------------------------------------------------
