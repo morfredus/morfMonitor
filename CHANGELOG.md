@@ -3,6 +3,15 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.19.1] - 2026-09-06
+
+### Fixed
+
+- **Styled the "Relancer le service" button.** The initial restart button had no
+  CSS class rule and rendered as unstyled black-on-white text; it now shares the
+  `.btn-update-service` styling (and the confirm/retry variants match their update
+  twins), so the restart control looks like the rest of the Services table.
+
 ## [0.19.0] - 2026-09-06
 
 ### Added
