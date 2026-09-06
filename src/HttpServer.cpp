@@ -195,6 +195,18 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
             out = handleLocalUpdateStatus(path.mid(QByteArray("/api/updates/").size()), code, reason);
         }
     }
+    // Relance manuelle d'un service bloqué : même délégation locale que les mises
+    // à jour. Le navigateur ne parle jamais à l'agent privilégié ; morfMonitor
+    // relaie vers l'agent lié à 127.0.0.1. Le statut se suit ensuite par
+    // /api/updates/<id> (journal d'opérations commun côté morfUpdate).
+    else if (path == "/api/restart") {
+        if (verb != "POST") {
+            code = 405; reason = "Method Not Allowed";
+            out = "{\"error\":\"use POST /api/restart\",\"allow\":\"POST\"}";
+        } else {
+            out = handleLocalRestart(body, code, reason);
+        }
+    }
     // ---- Routes GET (et HEAD) --------------------------------------------
     else if (verb != "GET") {
         code = 405; reason = "Method Not Allowed";
@@ -325,6 +337,47 @@ QByteArray HttpServer::handleLocalUpdate(const QByteArray& body, int& code, QByt
     if (failed || status == 0) {
         code = 503; reason = "Service Unavailable";
         return "{\"error\":\"agent de mise à jour indisponible\"}";
+    }
+    code = status;
+    reason = status == 202 ? "Accepted" : (status == 409 ? "Conflict" : "Bad Request");
+    return response.isEmpty() ? "{\"error\":\"réponse d’agent invalide\"}" : response;
+}
+
+QByteArray HttpServer::handleLocalRestart(const QByteArray& body, int& code, QByteArray& reason) {
+    if (!m_config.updateAgentEnabled) {
+        code = 503; reason = "Service Unavailable";
+        return "{\"error\":\"agent local indisponible\"}";
+    }
+    const QJsonDocument request = QJsonDocument::fromJson(body);
+    const QJsonObject object = request.object();
+    static const QRegularExpression identifier(
+        QStringLiteral("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"));
+    const QString project = object.value("project").toString();
+    if (!request.isObject() || !identifier.match(project).hasMatch()) {
+        code = 400; reason = "Bad Request";
+        return "{\"error\":\"projet déclaré requis\"}";
+    }
+    // Le client ne fournit QUE le projet (clé morfUpdate.targets). Le service
+    // systemd réel est résolu par l'agent, jamais reçu ni exécuté tel quel.
+    QJsonObject payload{{"project", project}};
+    QNetworkAccessManager manager;
+    QNetworkRequest agent(QUrl(QStringLiteral("http://127.0.0.1:8794/api/v1/restart")));
+    agent.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+    QNetworkReply* reply = manager.post(agent, QJsonDocument(payload).toJson(QJsonDocument::Compact));
+    QEventLoop loop;
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    QObject::connect(&timeout, &QTimer::timeout, reply, &QNetworkReply::abort);
+    timeout.start(5000);
+    loop.exec();
+    const QByteArray response = reply->readAll();
+    const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    const bool failed = reply->error() != QNetworkReply::NoError;
+    reply->deleteLater();
+    if (failed || status == 0) {
+        code = 503; reason = "Service Unavailable";
+        return "{\"error\":\"agent local injoignable\"}";
     }
     code = status;
     reason = status == 202 ? "Accepted" : (status == 409 ? "Conflict" : "Bad Request");

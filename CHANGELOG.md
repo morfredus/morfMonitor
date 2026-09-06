@@ -3,6 +3,24 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.19.0] - 2026-09-06
+
+### Added
+
+- **Manual "Relancer le service" (restart) button for stuck services.** When a
+  service is flagged `stuck` (0.18.0), its Détail cell in the "Services morfSystem"
+  tab now offers a restart action. morfMonitor stays an observer: it does not run
+  `systemctl` - it relays a request over loopback to the local morfUpdate agent
+  (`POST /api/restart` → `127.0.0.1:8794/api/v1/restart`), exactly like the update
+  button. The client sends only the declared project key (`morfUpdate.targets`);
+  the real systemd unit is resolved and executed by the privileged agent, against
+  its whitelist. No auto-restart: detection only makes the button available, the
+  human decides. Progressive, popup-free feedback (Redémarrage demandé → en cours
+  → Vérification → service relancé, with explicit failure + Réessayer), followed
+  through the shared operation journal. A stuck service without a declared
+  morfUpdate target shows "non relançable" rather than a dead button. Requires
+  morfUpdate 0.5.0 on the same host.
+
 ## [0.18.0] - 2026-09-06
 
 ### Added

@@ -60,6 +60,10 @@ private:
     QByteArray handleForgetMachine(const QByteArray& body, int& code, QByteArray& reason);
     QByteArray handleLocalUpdate(const QByteArray& body, int& code, QByteArray& reason);
     QByteArray handleLocalUpdateStatus(const QByteArray& id, int& code, QByteArray& reason);
+    // Relais loopback pour la relance manuelle d'un service bloqué : proxy vers
+    // l'agent morfUpdate local (127.0.0.1:8794/api/v1/restart). Le statut se suit
+    // par la route commune /api/updates/<id> (journal d'opérations partagé).
+    QByteArray handleLocalRestart(const QByteArray& body, int& code, QByteArray& reason);
     QByteArray buildStatusJson() const;
 
     // Sert un asset embarque (:/web/...). Renvoie false si le chemin ne

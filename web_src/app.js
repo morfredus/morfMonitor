@@ -28,6 +28,12 @@ const REFRESH_MS = 5000;
 //           'succeeded' | 'failed' | 'rejected'.
 const updateStatus = new Map();
 
+// Suivi des relances manuelles (bouton « Relancer » d'un service bloqué), même
+// forme que updateStatus, indexé par le PROJET (clé morfUpdate.targets).
+//   phase = 'confirm' | 'requesting' | 'queued' | 'restarting' | 'health_check'
+//           | 'succeeded' | 'failed' | 'rejected'.
+const restartStatus = new Map();
+
 // Dernier /api/all reçu : sert à redessiner la carte des services (et donc les
 // cellules de mise à jour) sans attendre le rafraîchissement de 5 s.
 let lastAll = null;
@@ -722,6 +728,115 @@ async function followUpdate(project, id, version, attempt = 0) {
   }
 }
 
+// --- Relance manuelle d'un service bloqué -----------------------------------
+// Cellule « Détail » d'un service : texte systemd (sub_state) en temps normal ;
+// pour un service détecté BLOQUÉ, on propose « Relancer », puis on affiche le
+// retour progressif (demande -> redémarrage -> vérification -> actif / échec)
+// sans popup. Aucune décision automatique : le bouton n'apparaît que pour un
+// service bloqué, et c'est l'humain qui déclenche.
+function restartCell(u, v) {
+  const detail = esc(u.sub_state || u.state || '—');
+  if (!u.stuck) return detail;
+  const project = v && (v.project || v.repo);
+  if (!project || project === 'morfUpdate') {
+    // Bloqué, mais pas de cible morfUpdate déclarée : rien à relancer via l'agent.
+    return `${detail} <span class="badge badge-off" title="Service bloqué, mais aucune cible morfUpdate déclarée : relance indisponible">non relançable</span>`;
+  }
+  const unit = esc(u.unit || u.label || project);
+  const st = restartStatus.get(project);
+  if (!st) {
+    return `${detail} <button class="btn-restart-service" data-project="${esc(project)}">Relancer le service</button>`;
+  }
+  if (st.phase === 'confirm') {
+    return `${detail} <span class="upd"><span class="upd-ask">Relancer ${unit} ?</span>` +
+      `<button class="btn-restart-confirm" data-project="${esc(project)}">Confirmer</button>` +
+      `<button class="btn-restart-cancel" data-project="${esc(project)}">Annuler</button></span>`;
+  }
+  if (st.phase === 'succeeded') {
+    return `${detail} <span class="upd-done">✓ service relancé</span>`;
+  }
+  if (st.phase === 'failed' || st.phase === 'rejected') {
+    return `${detail} <span class="upd upd-fail">` +
+      `<span class="upd-fail-msg">✗ ${esc(st.detail || 'relance échouée')}</span>` +
+      `<button class="btn-restart-retry" data-project="${esc(project)}">Réessayer</button>` +
+      `<button class="btn-restart-dismiss" data-project="${esc(project)}">Masquer</button></span>`;
+  }
+  const label = st.phase === 'requesting' ? 'Demande envoyée'
+    : st.phase === 'queued' ? 'Redémarrage demandé'
+    : st.phase === 'restarting' ? 'Redémarrage en cours'
+    : st.phase === 'health_check' ? 'Vérification'
+    : 'En cours';
+  return `${detail} <span class="upd-run"><span class="upd-bar"><i></i></span>` +
+    `<span class="upd-step">${esc(label)}…</span></span>`;
+}
+
+// Lance (ou relance) une relance de service : POST vers morfMonitor, qui proxy
+// vers l'agent morfUpdate local. Le client n'envoie QUE le projet ; le service
+// systemd réel est résolu et exécuté côté agent.
+async function launchRestart(project) {
+  if (!project) return;
+  restartStatus.set(project, { phase: 'requesting' });
+  redrawServices();
+  try {
+    const response = await fetch('/api/restart', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok && response.status !== 202) {
+      let detail = result.error || 'demande refusée';
+      if (response.status === 400) {
+        detail = `« ${project} » n’est pas une cible déclarée dans morfupdate.json.`;
+      } else if (response.status === 409) {
+        detail = 'une autre opération est en cours (mise à jour ou relance).';
+      } else if (response.status === 503) {
+        detail = 'agent local injoignable. Vérifier morfupdate : ' +
+          'curl http://127.0.0.1:8794/healthz';
+      }
+      restartStatus.set(project, { phase: 'failed', detail });
+      redrawServices();
+      return;
+    }
+    if (result.id) {
+      restartStatus.set(project, { id: result.id, phase: 'queued' });
+      redrawServices();
+      followRestart(project, result.id);
+    }
+  } catch (error) {
+    restartStatus.set(project, { phase: 'failed', detail: `demande impossible : ${error.message}` });
+    redrawServices();
+  }
+}
+
+// Suit une relance jusqu'à son terme via la route commune /api/updates/<id>
+// (journal d'opérations partagé côté morfUpdate). Ne redessine qu'au changement.
+async function followRestart(project, id, attempt = 0) {
+  const retry = () => { setTimeout(() => followRestart(project, id, attempt + 1), 2000); };
+  try {
+    const response = await fetch(`/api/updates/${encodeURIComponent(id)}`);
+    if (!response.ok && response.status >= 500 && attempt < 60) { retry(); return; }
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'suivi indisponible');
+    const state = result.state || 'queued';
+    const current = restartStatus.get(project);
+    if (!current || current.phase !== state || current.detail !== result.detail) {
+      restartStatus.set(project, { id, phase: state, detail: result.detail });
+      redrawServices();
+    }
+    if (state === 'succeeded') {
+      refresh();
+      setTimeout(() => { restartStatus.delete(project); redrawServices(); }, 10000);
+      return;
+    }
+    if (state === 'failed' || state === 'rejected') { refresh(); return; }
+    setTimeout(() => followRestart(project, id, 0), 1500);
+  } catch (error) {
+    if (attempt < 60) { retry(); return; }
+    restartStatus.set(project, { id, phase: 'failed', detail: `suivi impossible : ${error.message}` });
+    redrawServices();
+  }
+}
+
 function renderServices(all) {
   const s = all.services || {};
 
@@ -776,7 +891,7 @@ function renderServices(all) {
           <td>${updateCell(v)}</td>
           <td class="mono">${svcCpu(u.resources)}</td>
           <td class="mono">${svcMem(u.resources)}</td>
-          <td class="mono">${esc(u.sub_state || u.state || '—')}</td>
+          <td class="mono">${restartCell(u, v)}</td>
         </tr>`;
         }).join('') + `</tbody></table></div>`
       : unavailable('Aucun service systemd supervisé.',
@@ -1258,6 +1373,17 @@ el('c-systemd').addEventListener('click', (ev) => {
           || btn.classList.contains('btn-update-retry')) {
     const known = updateStatus.get(project) || {};
     launchUpdate(project, btn.dataset.version || known.version);
+  } else if (btn.classList.contains('btn-restart-service')) {
+    // Pas de popup : la confirmation s'affiche dans la cellule elle-même.
+    restartStatus.set(project, { phase: 'confirm' });
+    redrawServices();
+  } else if (btn.classList.contains('btn-restart-cancel')
+          || btn.classList.contains('btn-restart-dismiss')) {
+    restartStatus.delete(project);
+    redrawServices();
+  } else if (btn.classList.contains('btn-restart-confirm')
+          || btn.classList.contains('btn-restart-retry')) {
+    launchRestart(project);
   }
 });
 
