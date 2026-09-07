@@ -3,6 +3,35 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.20.1] - 2026-09-07
+
+### Changed
+
+- **Temporal memory now tracks only the LOCAL host's services.** First real run on
+  pi4dev showed every morfMonitor recording incidents for the whole parc (including
+  other hosts) and, worse, opening perpetual `silent` episodes for roaming Qt
+  *applications* (PhotoHub, ComponentHub, SiteWatch) that have no host and are not
+  daemons - their downtime would have grown forever. Each morfMonitor is now the
+  observer of its **own** host only: no cross-host double counting, no incidents for
+  hostless apps. morfAnalytics will union the per-host memories later.
+
+### Fixed
+
+- **A crash auto-restarted between two ticks is now counted as an incident.** With
+  `Restart=always`, systemd brought a `kill -9`'d service back in under the 30 s
+  evaluation window, so the `failed` state was never sampled and only a
+  `restart_succeeded` was recorded. A rise in systemd `NRestarts` (which only counts
+  *automatic* restarts, not manual ones) now also emits `service_crashed` and counts
+  a crash incident; downtime stays uncredited because it is below tick granularity
+  (honest: it was not measured).
+- **Orphan open episodes are pruned.** An open episode whose instance is no longer
+  observed (out of local scope, vanished app, expired beacon entry) is dropped so it
+  stops accruing downtime; already-credited past downtime is kept.
+- **No `service_started` / `service_first_seen` storm on restart.** `service_started`
+  fires only on a real observed start (clean-stop or host-offline -> available), not
+  for services already running when morfMonitor boots; `service_first_seen` is now
+  emitted once ever (persisted), not on every morfMonitor restart.
+
 ## [0.20.0] - 2026-09-07
 
 ### Added

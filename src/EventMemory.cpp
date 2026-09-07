@@ -564,8 +564,30 @@ void EventMemory::closeEpisode(const QString& instance, qint64 /*closedAt*/) {
 // --- Boucle d'observation ----------------------------------------------------
 
 void EventMemory::observe(const QVector<Observation>& snapshot, qint64 nowSec) {
+    // 0. Instances reellement observees a ce tick.
+    QSet<QString> present;
+    for (const Observation& o : snapshot)
+        if (o.declared && !o.instance.isEmpty())
+            present.insert(o.instance);
+
+    // Episodes ouverts dont on n'observe PLUS l'instance (sortie du perimetre local,
+    // application itinerante disparue, entree beacon expiree) : on cesse de crediter
+    // et on les retire. Sans cela, un episode orphelin accumulerait du downtime
+    // indefiniment. Le downtime deja credite aux jours passes reste acquis ; seule
+    // l'accumulation FUTURE s'arrete. (Nettoie aussi les episodes herites d'une
+    // version anterieure au filtrage par hote local.)
+    bool droppedAny = false;
+    for (auto it = m_openEpisodes.begin(); it != m_openEpisodes.end(); ) {
+        if (present.contains(it.key())) { ++it; continue; }
+        m_tracked.remove(it.key());   // repart proprement si l'instance revient
+        it = m_openEpisodes.erase(it);
+        droppedAny = true;
+    }
+    if (droppedAny)
+        saveOpenEpisodes();
+
     // 1. Crediter la tranche ECOULEE depuis le tick precedent, AU TITRE DES ETATS
-    //    QUI TENAIENT PENDANT cette tranche (episodes deja ouverts), avant
+    //    QUI TENAIENT PENDANT cette tranche (episodes encore ouverts), avant
     //    d'appliquer les nouvelles transitions.
     if (m_lastTickSec > 0) {
         const qint64 slice = nowSec - m_lastTickSec;
@@ -607,15 +629,15 @@ void EventMemory::applyTransition(const Observation& o, qint64 nowSec) {
     const QString to   = compositeState(o);
     const QString day  = dayKeyOf(nowSec);
 
-    // Premiere apparition : evenement dedie + memorisation pour la table de vie.
-    if (from.isEmpty()) {
+    // Premiere apparition JAMAIS vue (persistee) : evenement unique. On ne le
+    // reemet pas a chaque redemarrage de morfMonitor (m_tracked est en RAM, donc
+    // `from` y est vide a chaque demarrage -- mais m_firstSeen, lui, persiste).
+    if (from.isEmpty() && !m_firstSeen.contains(o.instance)) {
         appendEvent(nowSec, o.service, o.host, o.instance,
                     QStringLiteral("service_first_seen"), QStringLiteral("info"),
                     QStringLiteral("beacon"), QString(), to, QString());
-        if (!m_firstSeen.contains(o.instance)) {
-            m_firstSeen[o.instance] = nowSec;
-            m_lifeDirty = true;
-        }
+        m_firstSeen[o.instance] = nowSec;
+        m_lifeDirty = true;
     }
 
     // Detection des relances (independante de l'etat) : NRestarts a augmente =>
@@ -623,14 +645,33 @@ void EventMemory::applyTransition(const Observation& o, qint64 nowSec) {
     if (o.nRestarts >= 0) {
         if (t.nRestarts >= 0 && o.nRestarts > t.nRestarts) {
             const int delta = static_cast<int>(o.nRestarts - t.nRestarts);
+            DayServiceStat& st = dayService(day, o.instance);
+            const auto ep = m_openEpisodes.find(o.instance);
+            const bool hadEpisode = (ep != m_openEpisodes.end());
+
+            // Crash auto-restaure ENTRE deux ticks : trop rapide pour qu'on ait
+            // observe l'etat « failed », mais NRestarts l'atteste (ce compteur
+            // systemd ne bouge que sur relance AUTOMATIQUE, pas sur un restart
+            // manuel). C'est un incident : on le compte. Le downtime, lui, est
+            // sous la granularite du tick, donc non credite -- honnete : on ne
+            // l'a pas mesure. Si un episode etait ouvert, l'incident est deja
+            // compte : on n'ajoute rien, la relance ne fait que le documenter.
+            if (!hadEpisode) {
+                appendEvent(nowSec, o.service, o.host, o.instance,
+                            QStringLiteral("service_crashed"),
+                            severityFor(QStringLiteral("service_crashed")),
+                            QStringLiteral("systemd"), QString(), QString(), QString());
+                st.crashes   += delta;
+                st.incidents += delta;
+                st.incCrash  += delta;
+            }
+
             appendEvent(nowSec, o.service, o.host, o.instance,
                         QStringLiteral("restart_succeeded"), QStringLiteral("info"),
                         QStringLiteral("systemd"), QString(), QString(), t.openEpisodeId);
-            DayServiceStat& st = dayService(day, o.instance);
             st.restarts       += delta;
             st.restartSuccess += delta;
-            const auto ep = m_openEpisodes.find(o.instance);
-            if (ep != m_openEpisodes.end()) {
+            if (hadEpisode) {
                 ep->restartAttempts += delta;
                 ep->restartOutcome = QStringLiteral("succeeded");
                 saveOpenEpisodes();
@@ -693,8 +734,11 @@ void EventMemory::applyTransition(const Observation& o, qint64 nowSec) {
                 dayService(day, o.instance).stops++;
             } else if (to == QLatin1String("available")
                        && (from == QLatin1String("stopped")
-                           || from == QLatin1String("host_offline")
-                           || from.isEmpty())) {
+                           || from == QLatin1String("host_offline"))) {
+                // service_started uniquement sur un VRAI demarrage observe
+                // (arret propre / machine eteinte -> en ligne). Pas quand `from`
+                // est vide : au demarrage de morfMonitor, un service deja en marche
+                // n'a pas « demarre » sous nos yeux -- seul service_first_seen le note.
                 appendEvent(nowSec, o.service, o.host, o.instance,
                             QStringLiteral("service_started"), QStringLiteral("info"),
                             QStringLiteral("systemd"), from, to, QString());

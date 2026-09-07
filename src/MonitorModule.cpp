@@ -913,11 +913,19 @@ void MonitorModule::feedMemory() {
         if (a.contains(QStringLiteral("last_seen_s")))
             ob.lastSeen = now - static_cast<qint64>(a.value(QStringLiteral("last_seen_s")).toDouble());
 
-        // Enrichissement cycle de vie OS : uniquement pour un service de CET hote,
-        // le seul dont morfMonitor lit systemd directement.
-        const bool isLocal = ob.host.isEmpty()
-            || ob.host.compare(localHost, Qt::CaseInsensitive) == 0;
-        if (isLocal && sysByApp.contains(ob.service)) {
+        // Chaque morfMonitor n'est l'observateur QUE de son hote : on ne suit que
+        // les services de CETTE machine. Ainsi pas de double comptage entre les
+        // morfMonitor du parc (chacun tient la memoire de son hote, morfAnalytics
+        // les reunira), et les applications itinerantes sans hote (PhotoHub,
+        // ComponentHub, SiteWatch...) -- qui ne sont pas des daemons -- ne
+        // generent aucun incident de disponibilite.
+        const bool isLocal = !ob.host.isEmpty()
+            && ob.host.compare(localHost, Qt::CaseInsensitive) == 0;
+        if (!isLocal)
+            continue;
+
+        // Enrichissement cycle de vie OS (systemd), disponible pour cet hote local.
+        if (sysByApp.contains(ob.service)) {
             const Sys& si = sysByApp.value(ob.service);
             ob.hasLifecycle  = true;
             ob.systemdActive = si.active;
