@@ -533,14 +533,26 @@ void HttpServer::reply(QTcpSocket* sock, int code, const QByteArray& reason, con
     if (!sock->property("head").toBool())
         resp += body;
     sock->write(resp);
-    // Vider le tampon d'écriture AVANT de fermer : sur une grande réponse (page HTML,
-    // /status volumineux), le corps déborde du tampon socket (~20 Ko constaté) et
-    // `disconnectFromHost` seul en tronque la fin côté client. On draine jusqu'à ce
-    // qu'il ne reste rien à écrire, avec un délai de garde pour ne jamais bloquer.
-    while (sock->bytesToWrite() > 0)
-        if (!sock->waitForBytesWritten(2000))
-            break;
+    sock->flush();
+    // Fermeture ASYNCHRONE, jamais bloquante. disconnectFromHost() passe la socket en
+    // ClosingState et Qt draine le tampon restant EN ARRIERE-PLAN avant de fermer
+    // (disconnected -> deleteLater). L'ancienne boucle waitForBytesWritten(2000)
+    // bloquait ici le THREAD PRINCIPAL le temps qu'un client lent absorbe une grosse
+    // reponse (/api/all fait ~20 Ko) ; sur un lien Wi-Fi degrade vers un observateur
+    // distant, ce blocage durait, et pendant ce temps le QTimer du heartbeat morfBeacon
+    // (MEME event-loop) ne pouvait plus emettre : morfMonitor « disparaissait » du parc
+    // alors qu'il tournait, declenchant de fausses alertes de panne fonctionnelle. On
+    // ne bloque donc plus jamais l'event-loop sur l'ecriture reseau.
     sock->disconnectFromHost();
+    // Garde-fou : un client reellement mort (Wi-Fi coupe en plein envoi) laisserait la
+    // socket en ClosingState. On la coupe apres 10 s pour ne pas accumuler de sockets
+    // pendant une degradation reseau -- large pour un client vivant, meme lent. `sock`
+    // en objet-contexte : si la socket est deja detruite (disconnected -> deleteLater),
+    // le timer est annule, donc aucun pointeur pendouillant.
+    QTimer::singleShot(10000, sock, [sock]() {
+        if (sock->state() != QAbstractSocket::UnconnectedState)
+            sock->abort();
+    });
 }
 
 } // namespace morfmonitor

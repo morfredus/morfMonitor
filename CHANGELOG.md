@@ -3,6 +3,28 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.21.1] - 2026-09-07
+
+### Fixed
+
+- **False "morfMonitor défaillant" alerts: the beacon no longer starves while serving
+  HTTP.** Root cause found from real pi4fred telegram alerts: `HttpServer::reply()`
+  ended with a synchronous `while (bytesToWrite) waitForBytesWritten(2000)` drain that
+  blocked the single event loop until a slow remote client (pi4dev over a degraded
+  Wi-Fi link) had absorbed a large `/api/all` (~20 KB). During that block the morfBeacon
+  heartbeat `QTimer` (same event loop) could not fire, so morfMonitor stopped announcing
+  its presence while running fine, and a *remote* observer then reported it as a
+  functional failure. This was morfMonitor-specific precisely because it is the parc's
+  main provider of large responses to remote pollers. Replies now close
+  **asynchronously** (background drain + 10 s dead-client guard), so the event loop is
+  never blocked on client I/O.
+- **Functional-failure alerts are now local-host only.** `evaluateFunctionalAlerts`
+  alerted on any declared service seen offline, including remote peers whose beacon
+  silence, over a lossy Wi-Fi link, is not reliable evidence of a fault (it produced
+  the false pi4dev → morfMonitor@pi4fred alerts). Each morfMonitor now alerts only about
+  its **own** host's services - the local observer is the authority, consistent with the
+  temporal-memory design.
+
 ## [0.21.0] - 2026-09-07
 
 ### Added

@@ -791,9 +791,20 @@ void MonitorModule::evaluateFunctionalAlerts() {
     // on ne reinvente aucune logique de sante, on la CONSOMME (coherence garantie).
     const QJsonArray apps = beaconAppsJson().value(QStringLiteral("apps")).toArray();
 
+    // On n'alerte QUE sur les services de CET hote. Le silence d'un service distant,
+    // vu a travers le reseau (un lien Wi-Fi peut perdre des datagrammes beacon sans
+    // que le service soit en panne), n'est pas une preuve fiable : c'est l'observateur
+    // LOCAL du service qui fait autorite -- meme principe que la memoire temporelle.
+    // Un morfMonitor distant qui alertait sur un pair fabriquait de faux « defaillant »
+    // (cas reel pi4dev -> morfMonitor@pi4fred). Chacun surveille son propre hote.
+    const QString localHost = QHostInfo::localHostName();
+
     QSet<QString> failingNow;
     for (const QJsonValue& v : apps) {
         const QJsonObject a = v.toObject();
+        const QString aHost = a.value(QStringLiteral("host")).toString();
+        if (aHost.isEmpty() || aHost.compare(localHost, Qt::CaseInsensitive) != 0)
+            continue;   // service distant ou sans hote : pas d'alerte (observation non fiable)
         // Panne FONCTIONNELLE = service DECLARE (donc attendu), absent des annonces,
         // alors que sa MACHINE est en ligne. Un poste entier hors ligne (host_online
         // faux) n'est PAS traite ici service par service : ce serait une panne
