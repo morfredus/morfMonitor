@@ -949,6 +949,14 @@ QJsonObject MonitorModule::dailyStatsJson(const QString& fromDay, const QString&
     return m_memory.dailyJson(fromDay, toDay, service);
 }
 
+QJsonObject MonitorModule::quarterlyStatsJson() const {
+    return m_memory.quarterlyJson();
+}
+
+QJsonObject MonitorModule::annualStatsJson() const {
+    return m_memory.annualJson();
+}
+
 QJsonObject MonitorModule::lifeJson() const {
     return m_memory.lifeJson();
 }

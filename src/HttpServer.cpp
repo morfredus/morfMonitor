@@ -268,6 +268,12 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
             const QString svc  = queryParam(query, "service");
             out = toJson(mon->dailyStatsJson(from, to, svc));
         }
+        // Roll-ups longs, derives des jours : trimestres et annees.
+        else if (path == "/api/stats/quarterly") {
+            out = toJson(mon->quarterlyStatsJson());
+        } else if (path == "/api/stats/annual") {
+            out = toJson(mon->annualStatsJson());
+        }
         // Table de vie : totaux depuis le debut, derives des jours.
         else if (path == "/api/stats/life") {
             out = toJson(mon->lifeJson());
@@ -276,7 +282,8 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
             out = "{\"error\":\"route inconnue\",\"routes\":[\"/api/system\","
                   "\"/api/resources\",\"/api/network\",\"/api/services\","
                   "\"/api/reboot\",\"/api/config\",\"/api/all\","
-                  "\"/api/events\",\"/api/stats/daily\",\"/api/stats/life\"]}";
+                  "\"/api/events\",\"/api/stats/daily\",\"/api/stats/quarterly\","
+                  "\"/api/stats/annual\",\"/api/stats/life\"]}";
         }
     } else if (path == "/healthz") {
         out = "{\"status\":\"ok\"}";

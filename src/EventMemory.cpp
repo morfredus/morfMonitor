@@ -812,6 +812,72 @@ QJsonObject EventMemory::dailyJson(const QString& fromDay, const QString& toDay,
     return o;
 }
 
+namespace {
+// Clef de periode d'un jour "yyyy-MM-dd" : trimestre "yyyy-Qn" ou annee "yyyy".
+QString periodKeyOf(const QString& day, const QString& kind) {
+    const QString year = day.left(4);
+    if (kind == QLatin1String("year"))
+        return year;
+    const int month = day.mid(5, 2).toInt();
+    const int q = (month > 0) ? ((month - 1) / 3 + 1) : 1;
+    return year + QStringLiteral("-Q") + QString::number(q);
+}
+} // namespace
+
+QJsonObject EventMemory::rollupJson(const QString& kind) const {
+    struct SAcc { int inc = 0, c = 0, st = 0, si = 0, crashes = 0, restarts = 0; double downtime = 0; };
+    struct PAcc { double observed = 0; int inc = 0, crashes = 0, restarts = 0; double downtime = 0;
+                  QHash<QString, SAcc> svc; };
+    QMap<QString, PAcc> periods;   // clef ordonnee
+
+    for (auto it = m_days.constBegin(); it != m_days.constEnd(); ++it) {
+        PAcc& p = periods[periodKeyOf(it.key(), kind)];
+        p.observed += it.value().observedSeconds;
+        for (auto s = it.value().services.constBegin(); s != it.value().services.constEnd(); ++s) {
+            const DayServiceStat& st = s.value();
+            SAcc& sa = p.svc[s.key()];
+            sa.inc += st.incidents; sa.c += st.incCrash; sa.st += st.incStuck; sa.si += st.incSilent;
+            sa.crashes += st.crashes; sa.restarts += st.restarts; sa.downtime += st.downtime;
+            p.inc += st.incidents; p.crashes += st.crashes; p.restarts += st.restarts;
+            p.downtime += st.downtime;
+        }
+    }
+
+    QJsonArray arr;
+    for (auto it = periods.constBegin(); it != periods.constEnd(); ++it) {
+        const PAcc& p = it.value();
+        QJsonObject services;
+        for (auto s = p.svc.constBegin(); s != p.svc.constEnd(); ++s) {
+            const SAcc& sa = s.value();
+            QJsonObject sj{
+                {"incidents", sa.inc},
+                {"by_cause", QJsonObject{{"crash", sa.c}, {"stuck", sa.st}, {"silent", sa.si}}},
+                {"crashes", sa.crashes}, {"restarts", sa.restarts},
+                {"downtime_seconds", sa.downtime}};
+            if (p.observed > 0)
+                sj["availability"] = (p.observed - sa.downtime) / p.observed;
+            services[s.key()] = sj;
+        }
+        QJsonObject global{
+            {"incidents", p.inc}, {"crashes", p.crashes}, {"restarts", p.restarts},
+            {"downtime_seconds", p.downtime}, {"observed_seconds", p.observed}};
+        if (p.observed > 0)
+            global["availability"] = (p.observed - p.downtime) / p.observed;
+        arr.append(QJsonObject{{"period", it.key()}, {"observed_seconds", p.observed},
+                               {"global", global}, {"services", services}});
+    }
+
+    QJsonObject o;
+    o["proto"]   = QStringLiteral("morfhistory/1");
+    o["kind"]    = kind;
+    o["periods"] = arr;
+    o["ts"]      = static_cast<double>(QDateTime::currentSecsSinceEpoch());
+    return o;
+}
+
+QJsonObject EventMemory::quarterlyJson() const { return rollupJson(QStringLiteral("quarter")); }
+QJsonObject EventMemory::annualJson()    const { return rollupJson(QStringLiteral("year")); }
+
 QJsonObject EventMemory::lifeJson() const {
     // Tout se DERIVE des jours (source de verite durable) ; on ne lit dans
     // m_firstSeen/m_lastEvent que ce qui n'est pas dans les agregats.

@@ -90,6 +90,12 @@ public:
     // Statistiques journalieres, bornes « yyyy-MM-dd » incluses (vides = tout).
     QJsonObject dailyJson(const QString& fromDay, const QString& toDay,
                           const QString& service) const;
+    // Statistiques trimestrielles / annuelles : DERIVEES des jours (le jour est la
+    // source de verite durable). Recalculees a la demande -- aucun stockage propre :
+    // le volume est trivial et les jours sont permanents.
+    QJsonObject quarterlyJson() const;
+    QJsonObject annualJson() const;
+
     // Table de vie : totaux depuis le debut, DERIVES des jours + premiere/derniere
     // apparition persistees.
     QJsonObject lifeJson() const;
@@ -160,6 +166,11 @@ private:
     void closeEpisode(const QString& instance, qint64 closedAt);
 
     // --- Persistance ---------------------------------------------------------
+    // Roll-up des jours par periode ("quarter" -> "YYYY-Qn", "year" -> "YYYY").
+    // Compteurs et durees se somment ; la disponibilite se RECALCULE depuis les
+    // durees agregees, jamais par moyenne de pourcentages.
+    QJsonObject rollupJson(const QString& kind) const;
+
     QString monthPath(const QString& day) const;   // daily/YYYY-MM.json
     void loadDaily();
     void saveDirtyMonths();

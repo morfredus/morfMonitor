@@ -71,6 +71,8 @@ public:
     QJsonObject eventsJson(qint64 sinceSec, qint64 untilSec, const QString& service) const;
     QJsonObject dailyStatsJson(const QString& fromDay, const QString& toDay,
                                const QString& service) const;
+    QJsonObject quarterlyStatsJson() const;
+    QJsonObject annualStatsJson() const;
     QJsonObject lifeJson() const;
 
     // Vue complète, en une seule requête. Un client qui affiche un tableau de

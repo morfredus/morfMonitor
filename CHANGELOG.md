@@ -3,6 +3,18 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.21.0] - 2026-09-07
+
+### Added
+
+- **Quarterly and annual roll-ups (`morfhistory/1`).** `GET /api/stats/quarterly`
+  and `GET /api/stats/annual` complete the retention pyramid. Both are **derived on
+  demand** from the permanent daily aggregates (no extra storage): counters and
+  durations sum, availability is **recomputed** from the aggregated durations per
+  period, never averaged from percentages. Each period carries a global block plus a
+  per-service breakdown (incidents by cause, crashes, restarts, downtime,
+  availability). Periods key as `YYYY-Qn` and `YYYY`.
+
 ## [0.20.1] - 2026-09-07
 
 ### Changed

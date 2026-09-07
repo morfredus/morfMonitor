@@ -2,7 +2,7 @@
 
 *Read in another language: **English** (this document) · [Français](README.fr.md).*
 
-[![Version](https://img.shields.io/badge/version-0.20.1-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.21.0-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![License](https://img.shields.io/badge/License-GPL--3.0--only-blue)
@@ -26,6 +26,16 @@ system itself. They all read morfMonitor instead.
 | `GET /api/reboot` | cause of the last reboot, with a confidence level |
 | `GET /api/config` | effective configuration (what is supervised) |
 | `GET /api/all` | everything, in a single request |
+| `GET /api/events` | recent event journal, 24 h window (contract `morfhistory/1`) |
+| `GET /api/stats/daily` · `/quarterly` · `/annual` · `/life` | supervision aggregates: incidents, downtime, availability over time |
+
+**Temporal memory (`morfhistory/1`).** Beyond "now", morfMonitor remembers what it
+observes: it turns the state changes it already detects (systemd lifecycle, beacon
+freshness, the stuck cross-check) into structured events, keeps 24 h of raw events,
+folds them into unavailability *episodes* (which own the downtime, so a crash plus a
+heartbeat loss is one incident), and consolidates permanent daily/quarterly/annual
+aggregates plus a life table. It owns this memory; morfAnalytics reads it. Storage
+lives under the service state directory, with atomic writes.
 
 Plus the framework routes: `GET /status` (morfBeacon-compatible), `/healthz`,
 `/modules`.

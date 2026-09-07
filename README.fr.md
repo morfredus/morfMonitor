@@ -2,7 +2,7 @@
 
 *Lire dans une autre langue : [English](README.md) · **Français** (ce document).*
 
-[![Version](https://img.shields.io/badge/version-0.20.1-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.21.0-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -38,6 +38,18 @@ affichent les mêmes données sans dupliquer une ligne.
 | `GET /api/reboot` | cause du dernier redémarrage, avec son degré de confiance |
 | `GET /api/config` | configuration effective (ce qui est supervisé) |
 | `GET /api/all` | tout, en une seule requête |
+| `GET /api/events` | journal d'événements récent, fenêtre 24 h (contrat `morfhistory/1`) |
+| `GET /api/stats/daily` · `/quarterly` · `/annual` · `/life` | agrégats de supervision : incidents, indisponibilité, disponibilité dans le temps |
+
+**Mémoire temporelle (`morfhistory/1`).** Au-delà du « maintenant », morfMonitor
+garde la mémoire de ce qu'il observe : il transforme les changements d'état qu'il
+détecte déjà (cycle de vie systemd, fraîcheur du beacon, le croisement « bloqué »)
+en événements structurés, conserve 24 h d'événements bruts, les regroupe en
+*épisodes* d'indisponibilité (c'est l'épisode qui porte la durée, si bien qu'un
+crash suivi d'une perte de heartbeat reste un seul incident), et consolide des
+agrégats permanents jour/trimestre/année plus une table de vie. Il est propriétaire
+de cette mémoire ; morfAnalytics la lit. Le stockage vit sous le dossier d'état du
+service, en écriture atomique.
 
 S'y ajoutent les routes du socle : `GET /status` (compatible morfBeacon),
 `/healthz`, `/modules`.
