@@ -169,9 +169,14 @@ Presque toutes les surprises viennent du **même malentendu** : le service ne li
 jamais les fichiers du dépôt. Il lit ceux qui ont été **déployés**.
 
 ```
-    config/morfmonitor.json   ──déploiement──>   /etc/morfsystem/morfmonitor/morfmonitor.json   ← lu
-    config/morfsystem.json    ──déploiement──>   /etc/morfsystem/morfsystem.json     ← lu
+    config/morfmonitor.json   ──déploiement──>   /etc/morfsystem/morfmonitor/morfmonitor.json   ← lu (config propre)
+    /etc/morfsystem/morfsystem.json   ← lu (config partagée du parc, propriété de `config.py shared`)
 ```
+
+morfMonitor ne déploie **que sa propre** `morfmonitor.json`. Le fichier partagé
+`morfsystem.json` ne lui appartient pas : il a un propriétaire unique, morfTools
+`config.py shared`. `morf install` le provisionne automatiquement avant
+d'enregistrer morfMonitor (qui le déclare prérequis via `requires_shared_config`).
 
 Modifier un fichier du dépôt ne change **rien** tant que `deploy-config.sh` n'a
 pas été lancé. C'est la cause la plus fréquente de « j'ai pourtant corrigé ça ».
@@ -180,7 +185,7 @@ pas été lancé. C'est la cause la plus fréquente de « j'ai pourtant corrigé
 |---|---|---|
 | J'ai modifié un fichier de `config/` et rien ne change | Le service lit `/opt` et `/etc` | `./scripts/linux/deploy-config.sh` |
 | Toutes les routes `/api/` répondent **503** | Aucun module de type `monitor` déclaré | `./scripts/linux/config-tool.sh check` |
-| Les listes services / sondes / applications sont **vides** | `morfsystem.json` n'est pas déployé | `./scripts/linux/deploy-config.sh --shared` |
+| Les listes services / sondes / applications sont **vides** | la config partagée `morfsystem.json` n'est pas installée | `./config.py shared install` (depuis le clone morfTools) |
 | J'ai ajouté une entrée à `systemd_services` ou `beacon_apps`, elle n'apparaît pas | `update` ajoute les **clés**, jamais les **entrées de liste** | `./scripts/linux/deploy-config.sh` (il écrase) |
 | J'ai édité le `.example.json`, c'est l'autre qui part | Le fichier **réel** est prioritaire | Éditer `config/morfsystem.json` |
 | Une application est en **anomalie permanente** | `enabled: true` sur une application lancée par intermittence | La passer à `false` |
@@ -204,7 +209,7 @@ elle vous convient, ne créez pas de fichier réel. Si vous en créez un, c'est
 
 ## Configuration partagée
 
-morfMonitor et morfDashboard lisent **le même fichier** :
+morfMonitor et morfDashboard **lisent** le même fichier :
 `/etc/morfsystem/morfsystem.json` (voir `config/morfsystem.example.json`).
 
 C'est la source unique de vérité des composants supervisés. Ajouter un service,
@@ -213,6 +218,16 @@ modification de code, dans aucun des deux programmes.
 
 Le format est du JSON, et non un fichier Python ou un en-tête C++, précisément
 pour qu'aucun des deux langages ne soit privilégié.
+
+**Propriété.** Ce fichier a un propriétaire unique : morfTools `config.py shared`
+(`install`, `merge`, `apply`), dont la source est `config/morfsystem.example.json`
+dans ce clone. morfMonitor et morfDashboard en sont **consommateurs** - ils ne le
+déploient jamais. morfMonitor le déclare prérequis (`requires_shared_config` dans
+`service.json`) : morfdeploy refuse d'enregistrer le service tant que le fichier
+n'existe pas, et `morf install` lance `config.py shared merge` d'abord, si bien
+qu'une install à blanc marche du premier coup. morfMonitor tourne malgré tout sans
+lui (listes de supervision vides plutôt qu'une panne) : c'est un contrat d'install,
+pas une dépendance d'exécution.
 
 Il remplace les listes `SERVICE_LABELS`, `NETWORK_SERVICES` et `BEACON_APPS`
 autrefois codées dans le Dashboard.
@@ -313,35 +328,30 @@ de diverger, à propos du fichier qui décide si le service fonctionne.
 
 ## Déployer les configurations
 
-Il y a **deux fichiers**, et ils ne vont pas au même endroit :
+Il y a **deux fichiers**, et ils ont **deux propriétaires différents** :
 
-| Fichier du dépôt | Destination | Contenu | Lu par |
+| Fichier du dépôt | Destination | Propriétaire (qui le pose) | Lu par |
 |---|---|---|---|
-| `config/morfmonitor.json` | `/etc/morfsystem/morfmonitor/` | port, adresse d'écoute, modules | morfMonitor |
-| `config/morfsystem.json` | `/etc/morfsystem/` | ce qui est **supervisé** | morfMonitor **et** morfDashboard |
+| `config/morfmonitor.json` | `/etc/morfsystem/morfmonitor/` | l'install de morfMonitor (`service.py` / `morf install`) | morfMonitor |
+| `config/morfsystem.example.json` | `/etc/morfsystem/morfsystem.json` | morfTools `config.py shared` **uniquement** | morfMonitor **et** morfDashboard |
 
-Une seule commande pousse les deux :
-
-```sh
-./scripts/linux/deploy-config.sh
-```
-
-C'est tout. Elle sauvegarde chaque fichier existant, affiche les différences
-appliquées, copie, puis redémarre `morfmonitor` et `morfdashboard`.
-
-**Ne pas préfixer par `sudo`** : le script n'élève que les écritures système.
-
-Pour n'en pousser qu'un :
+La config propre de morfMonitor est posée à l'installation du service. Le fichier
+**partagé** du parc est installé séparément par son propriétaire unique :
 
 ```sh
-./scripts/linux/deploy-config.sh --service      # seulement /opt
-./scripts/linux/deploy-config.sh --shared       # seulement /etc
-./scripts/linux/deploy-config.sh --no-restart   # sans redémarrer
+# depuis le clone morfTools
+./config.py shared install     # première installation (écrase depuis le clone)
+./config.py shared merge       # mise à niveau non destructive : ajoute les clés, garde les valeurs locales
 ```
 
-La source est votre fichier réel (`config/morfsystem.json`) s'il existe, sinon
-l'exemple (`config/morfsystem.example.json`). Garder un vrai fichier dans le
-clone en fait donc la référence déployée.
+`morf install` lance l'étape `merge` automatiquement avant d'enregistrer
+morfMonitor : sur une machine neuve, inutile de la lancer à la main. La source est
+votre fichier réel (`config/morfsystem.json`) s'il existe dans le clone, sinon
+l'exemple.
+
+> Le script historique `./scripts/linux/deploy-config.sh` sert encore pour la
+> config propre du service, mais le `morfsystem.json` partagé ne passe plus par
+> morfMonitor - utiliser `config.py shared` pour lui.
 
 ### Les autres outils, et quand ils servent
 
