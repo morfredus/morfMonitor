@@ -14,32 +14,39 @@
 {
   "unit": "morfanalytics",
   "label": "morfAnalytics",
-  "enabled": true
+  "enabled": true,
+  "repo": "morfAnalytics"
 },
 {
   "unit": "morfcollector",
   "label": "morfCollector",
-  "enabled": true
+  "enabled": true,
+  "repo": "morfCollector"
 },
 {
   "unit": "morfdashboard",
   "label": "DashBoard",
-  "enabled": true
+  "app": "morfDashboard",
+  "enabled": true,
+  "repo": "morfDashboard"
 },
 {
   "unit": "morfmonitor",
   "label": "morfMonitor",
-  "enabled": true
+  "enabled": true,
+  "repo": "morfMonitor"
 },
 {
   "unit": "morfnotify",
   "label": "morfNotify",
-  "enabled": true
+  "enabled": true,
+  "repo": "morfNotify"
 },
 {
   "unit": "morfsensor",
   "label": "morfSensor",
-  "enabled": true
+  "enabled": true,
+  "repo": "morfSensor"
 },
 {
   "unit": "morfsync",

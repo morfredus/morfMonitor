@@ -3,6 +3,23 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.21.6] - 2026-09-08
+
+### Fixed
+
+- **The example shared config now carries a `repo` for every supervised service, so a
+  blank install reports versions like a hand-maintained machine.** In
+  `config/morfsystem.example.json`, only `morfsync`, `morfphoto` and `morfupdate`
+  declared a `repo`; the other `systemd_services` entries (morfanalytics, morfcollector,
+  morfdashboard, morfmonitor, morfnotify, morfsensor) had none. `VersionMonitor` skips a
+  target without a repo (no remote check), so the "running version", "latest release" and
+  "up to date" columns stayed blank for those services on any machine using the example -
+  visible after a fresh install (e.g. a MacBook), while Pis with a hand-filled config were
+  fine. Every entry now declares its repo (and morfdashboard its announced `app`), mirroring
+  the working parc config. On a machine already carrying the old example, refresh it with
+  `config.py shared install` (a `merge` will not rewrite existing list entries) and restart
+  morfmonitor. No binary change.
+
 ## [0.21.5] - 2026-09-08
 
 ### Fixed
