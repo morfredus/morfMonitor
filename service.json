@@ -9,7 +9,7 @@
     "linux": "/opt/morfmonitor",
     "windows": "%ProgramData%/morfmonitor"
   },
-  "_comment_configs": "Copied at install. Never overwritten by default: these hold settings edited by hand on the machine. An absolute destination is honoured as-is, which is how the shared parc file reaches /etc/morfsystem.",
+  "_comment_configs": "Copied at install. Never overwritten by default: these hold settings edited by hand on the machine. Only this service's OWN config is listed here; the shared parc file (morfsystem.json) is NOT -- it has a single owner, morfTools `config.py shared`, and morfMonitor merely declares it a prerequisite (see requires_shared_config).",
   "configs": [
     {
       "source": "config/morfmonitor.example.json",
@@ -18,15 +18,10 @@
         "/etc/morfmonitor/morfmonitor.json",
         "/opt/morfmonitor/morfmonitor.json"
       ]
-    },
-    {
-      "source": "config/morfsystem.json",
-      "dest": {
-        "linux": "/etc/morfsystem/morfsystem.json",
-        "windows": "%ProgramData%/morfsystem/morfsystem.json"
-      }
     }
   ],
+  "_comment_requires_shared_config": "morfMonitor supervises the parc described by the shared /etc/morfsystem/morfsystem.json. That file is owned and placed by morfTools `config.py shared`, never by this install. Declaring it a prerequisite makes morfdeploy VERIFY it exists before registering the unit -- it never creates it. `morf install` runs `config.py shared merge` beforehand, so the prerequisite is already met; a bare service.py install stops with the command that places the file.",
+  "requires_shared_config": true,
   "status_url": "http://127.0.0.1:8790/status",
   "_comment_config_dir": "La configuration vit sous /etc/morfsystem/<service> : un point d'entree UNIQUE dans /etc pour tout le parc, et non a cote du binaire dans /opt. Effacer /opt/<service> pour reinstaller proprement n'emporte donc pas les reglages.",
   "config_dir": {

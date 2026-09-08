@@ -3,6 +3,25 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.21.5] - 2026-09-08
+
+### Fixed
+
+- **A fresh install no longer aborts, and the shared parc config is no longer
+  double-owned.** `service.json` used to list the shared `/etc/morfsystem/morfsystem.json`
+  as one of morfMonitor's own `configs`, naming a source (`config/morfsystem.json`)
+  that a clone never has - only `config/morfsystem.example.json` is tracked. morfdeploy
+  correctly refused to register a service against a configuration it could not place,
+  so on a clean machine (a fresh Linux x86_64, a new Pi) the binary installed but
+  `morfmonitor.service` was never created and nothing listened on 8790. The shared file
+  is not morfMonitor's to deploy: it has a single owner, morfTools `config.py shared`.
+  That `configs` entry is removed; morfMonitor now declares
+  `requires_shared_config: true` instead, so morfdeploy VERIFIES the shared file is
+  present as a prerequisite (never creating it), and `morf install` places it first via
+  `config.py shared merge`. morfMonitor's runtime already tolerates its absence
+  gracefully (it supervises the host with empty parc lists rather than failing); this
+  changes only the install contract, not that behaviour.
+
 ## [0.21.4] - 2026-09-08
 
 ### Changed
