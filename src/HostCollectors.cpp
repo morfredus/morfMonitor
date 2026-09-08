@@ -321,20 +321,14 @@ QJsonObject ResourceCollector::collect() {
         struct Vol { QString mount; QJsonObject d; };
         std::vector<Vol> vols;
         QSet<QString> devices;
-        for (const QStorageInfo& v : QStorageInfo::mountedVolumes()) {
-            // fileSystemType() se lit dans la table des montages, SANS statvfs : sûr même
-            // sur un montage réseau figé. On filtre donc AVANT tout accès aux tailles
-            // (isReady/bytesTotal), qui eux déclenchent le statvfs bloquant.
-            const QByteArray fstype = v.fileSystemType().toLower();
-            if (kPseudoFs.contains(fstype))
-                continue;   // tmpfs, squashfs des snaps… « pleins » à 100 %, fausse alerte
-            if (kNetworkFs.contains(fstype))
-                continue;   // montage réseau : jamais de statvfs (voir kNetworkFs ci-dessus)
+        // Construit une entree disque a partir d'un QStorageInfo LOCAL. Le statfs
+        // (isReady/bytesTotal) n'est fait QUE sur un montage local -> instantane et sur.
+        const auto addVol = [&](const QStorageInfo& v) {
             if (!v.isValid() || !v.isReady() || v.isReadOnly() || v.bytesTotal() <= 0)
-                continue;
+                return;
             const QString device = QString::fromUtf8(v.device());
             if (devices.contains(device))
-                continue;   // montage bind : le même volume sous un autre chemin
+                return;   // montage bind : le meme volume sous un autre chemin
             devices.insert(device);
 
             QJsonObject d;
@@ -345,7 +339,50 @@ QJsonObject ResourceCollector::collect() {
             d["percent"] = qRound((1.0 - static_cast<double>(v.bytesAvailable())
                                    / static_cast<double>(v.bytesTotal())) * 1000.0) / 10.0;
             vols.push_back({v.rootPath(), d});
+        };
+
+#ifdef Q_OS_LINUX
+        // CRUCIAL : on n'enumere PAS via QStorageInfo::mountedVolumes(). Celui-ci fait un
+        // statfs() sur CHAQUE point de montage PENDANT l'enumeration -- y compris un
+        // partage CIFS/NFS en automount. Quand le serveur dort (PC source en veille), ce
+        // statfs bloque jusqu'au timeout CIFS (~180 s) et GELE tout l'event-loop
+        // mono-thread : morfMonitor cesse de ticker et d'emettre son beacon, puis se
+        // signale lui-meme « bloque » / trou d'observation (prouve par strace :
+        // statfs("/mnt/photos_pc-fred", SMB2_SUPER_MAGIC) pendant la collecte). Filtrer
+        // APRES coup par le type de FS ne suffit pas : le statfs bloquant est deja fait.
+        // On lit donc /proc/mounts en TEXTE (aucun statfs), on ecarte pseudo/reseau/autofs
+        // par le TYPE, et on ne statfs QUE les montages locaux survivants.
+        QFile mtab(QStringLiteral("/proc/mounts"));
+        if (mtab.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            const QList<QByteArray> lines = mtab.readAll().split('\n');
+            for (const QByteArray& line : lines) {
+                const QList<QByteArray> f = line.split(' ');
+                if (f.size() < 3)
+                    continue;
+                const QByteArray fstype = f.at(2).toLower();
+                if (kPseudoFs.contains(fstype) || kNetworkFs.contains(fstype))
+                    continue;   // tmpfs/squashfs/autofs... et cifs/nfs... : jamais de statfs
+                // Point de montage : /proc/mounts echappe espace=\040, tab=\011,
+                // saut de ligne=\012, antislash=\134. On les restitue.
+                QString mp = QString::fromUtf8(f.at(1));
+                mp.replace(QLatin1String("\\040"), QLatin1String(" "))
+                  .replace(QLatin1String("\\011"), QLatin1String("\t"))
+                  .replace(QLatin1String("\\012"), QLatin1String("\n"))
+                  .replace(QLatin1String("\\134"), QLatin1String("\\"));
+                addVol(QStorageInfo(mp));   // statfs sur un LOCAL uniquement : sur
+            }
         }
+#else
+        // Windows : pas d'automount CIFS bloquant a la Linux. L'enumeration standard
+        // convient ; les partages reseau restent ecartes par le meme filtre de type
+        // (fileSystemType() ne declenche pas de statfs).
+        for (const QStorageInfo& v : QStorageInfo::mountedVolumes()) {
+            const QByteArray fstype = v.fileSystemType().toLower();
+            if (kPseudoFs.contains(fstype) || kNetworkFs.contains(fstype))
+                continue;
+            addVol(v);
+        }
+#endif
         // Tri par point de montage : « / » d'abord, puis /boot, /home… L'ordre
         // de mountedVolumes() est celui du montage, qui varie d'un boot à
         // l'autre — un affichage qui change de place à chaque redémarrage se

@@ -27,6 +27,7 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QTimer>
+#include <QPointer>
 #include <QRegularExpression>
 
 #include <utility>
@@ -198,7 +199,10 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
             // l'agent lié à 127.0.0.1 et ne reçoit ni hôte ni URL à choisir.
             // L'adresse du navigateur ne définit donc pas la portée de la
             // mise à jour et ne doit pas bloquer cette délégation locale.
-            out = handleLocalUpdate(body, code, reason);
+            // Relais ASYNC : le handler possede la reponse (envoyee dans le
+            // callback reseau), on ne retombe donc pas sur le reply() final.
+            handleLocalUpdate(sock, body);
+            return;
         }
     }
     else if (path.startsWith("/api/updates/")) {
@@ -206,7 +210,8 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
             code = 405; reason = "Method Not Allowed";
             out = "{\"error\":\"use GET /api/updates/<id>\",\"allow\":\"GET\"}";
         } else {
-            out = handleLocalUpdateStatus(path.mid(QByteArray("/api/updates/").size()), code, reason);
+            handleLocalUpdateStatus(sock, path.mid(QByteArray("/api/updates/").size()));
+            return;
         }
     }
     // Relance manuelle d'un service bloqué : même délégation locale que les mises
@@ -218,7 +223,8 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
             code = 405; reason = "Method Not Allowed";
             out = "{\"error\":\"use POST /api/restart\",\"allow\":\"POST\"}";
         } else {
-            out = handleLocalRestart(body, code, reason);
+            handleLocalRestart(sock, body);
+            return;
         }
     }
     // ---- Routes GET (et HEAD) --------------------------------------------
@@ -342,54 +348,34 @@ QByteArray HttpServer::handleForgetMachine(const QByteArray& body, int& code, QB
     return toJson(QJsonObject{{"forgotten", host}, {"ok", true}});
 }
 
-QByteArray HttpServer::handleLocalUpdate(const QByteArray& body, int& code, QByteArray& reason) {
+void HttpServer::handleLocalUpdate(QTcpSocket* sock, const QByteArray& body) {
     if (!m_config.updateAgentEnabled) {
-        code = 503; reason = "Service Unavailable";
-        return "{\"error\":\"agent de mise à jour indisponible\"}";
+        reply(sock, 503, "Service Unavailable",
+              "{\"error\":\"agent de mise à jour indisponible\"}");
+        return;
     }
     const QJsonDocument request = QJsonDocument::fromJson(body);
     const QJsonObject object = request.object();
     static const QRegularExpression identifier(
         QStringLiteral("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"));
     const QString project = object.value("project").toString();
-    const QString versionRaw = object.value("version").toString();
-    QString version = versionRaw;
+    QString version = object.value("version").toString();
     if (version.startsWith(QLatin1Char('v')) || version.startsWith(QLatin1Char('V')))
         version.remove(0, 1);
     if (!request.isObject() || !identifier.match(project).hasMatch()
         || !identifier.match(version).hasMatch()) {
-        code = 400; reason = "Bad Request";
-        return "{\"error\":\"projet et version déclarés requis\"}";
+        reply(sock, 400, "Bad Request", "{\"error\":\"projet et version déclarés requis\"}");
+        return;
     }
-    QJsonObject payload{{"project", project}, {"version", version}};
-    QNetworkAccessManager manager;
-    QNetworkRequest agent(QUrl(QStringLiteral("http://127.0.0.1:8794/api/v1/updates")));
-    agent.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
-    QNetworkReply* reply = manager.post(agent, QJsonDocument(payload).toJson(QJsonDocument::Compact));
-    QEventLoop loop;
-    QTimer timeout;
-    timeout.setSingleShot(true);
-    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-    QObject::connect(&timeout, &QTimer::timeout, reply, &QNetworkReply::abort);
-    timeout.start(5000);
-    loop.exec();
-    const QByteArray response = reply->readAll();
-    const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-    const bool failed = reply->error() != QNetworkReply::NoError;
-    reply->deleteLater();
-    if (failed || status == 0) {
-        code = 503; reason = "Service Unavailable";
-        return "{\"error\":\"agent de mise à jour indisponible\"}";
-    }
-    code = status;
-    reason = status == 202 ? "Accepted" : (status == 409 ? "Conflict" : "Bad Request");
-    return response.isEmpty() ? "{\"error\":\"réponse d’agent invalide\"}" : response;
+    const QJsonObject payload{{"project", project}, {"version", version}};
+    relayToAgent(sock, "POST", QStringLiteral("http://127.0.0.1:8794/api/v1/updates"),
+                 QJsonDocument(payload).toJson(QJsonDocument::Compact));
 }
 
-QByteArray HttpServer::handleLocalRestart(const QByteArray& body, int& code, QByteArray& reason) {
+void HttpServer::handleLocalRestart(QTcpSocket* sock, const QByteArray& body) {
     if (!m_config.updateAgentEnabled) {
-        code = 503; reason = "Service Unavailable";
-        return "{\"error\":\"agent local indisponible\"}";
+        reply(sock, 503, "Service Unavailable", "{\"error\":\"agent local indisponible\"}");
+        return;
     }
     const QJsonDocument request = QJsonDocument::fromJson(body);
     const QJsonObject object = request.object();
@@ -397,63 +383,80 @@ QByteArray HttpServer::handleLocalRestart(const QByteArray& body, int& code, QBy
         QStringLiteral("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"));
     const QString project = object.value("project").toString();
     if (!request.isObject() || !identifier.match(project).hasMatch()) {
-        code = 400; reason = "Bad Request";
-        return "{\"error\":\"projet déclaré requis\"}";
+        reply(sock, 400, "Bad Request", "{\"error\":\"projet déclaré requis\"}");
+        return;
     }
-    // Le client ne fournit QUE le projet (clé morfUpdate.targets). Le service
-    // systemd réel est résolu par l'agent, jamais reçu ni exécuté tel quel.
-    QJsonObject payload{{"project", project}};
-    QNetworkAccessManager manager;
-    QNetworkRequest agent(QUrl(QStringLiteral("http://127.0.0.1:8794/api/v1/restart")));
-    agent.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
-    QNetworkReply* reply = manager.post(agent, QJsonDocument(payload).toJson(QJsonDocument::Compact));
-    QEventLoop loop;
-    QTimer timeout;
-    timeout.setSingleShot(true);
-    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-    QObject::connect(&timeout, &QTimer::timeout, reply, &QNetworkReply::abort);
-    timeout.start(5000);
-    loop.exec();
-    const QByteArray response = reply->readAll();
-    const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-    const bool failed = reply->error() != QNetworkReply::NoError;
-    reply->deleteLater();
-    if (failed || status == 0) {
-        code = 503; reason = "Service Unavailable";
-        return "{\"error\":\"agent local injoignable\"}";
-    }
-    code = status;
-    reason = status == 202 ? "Accepted" : (status == 409 ? "Conflict" : "Bad Request");
-    return response.isEmpty() ? "{\"error\":\"réponse d’agent invalide\"}" : response;
+    // Le client ne fournit QUE le projet (cle morfUpdate.targets). Le service
+    // systemd reel est resolu par l'agent, jamais recu ni execute tel quel.
+    const QJsonObject payload{{"project", project}};
+    relayToAgent(sock, "POST", QStringLiteral("http://127.0.0.1:8794/api/v1/restart"),
+                 QJsonDocument(payload).toJson(QJsonDocument::Compact));
 }
 
-QByteArray HttpServer::handleLocalUpdateStatus(const QByteArray& id, int& code, QByteArray& reason) {
+void HttpServer::handleLocalUpdateStatus(QTcpSocket* sock, const QByteArray& id) {
     static const QRegularExpression identifier(QStringLiteral("^[A-Za-z0-9-]{1,128}$"));
     if (!m_config.updateAgentEnabled || !identifier.match(QString::fromUtf8(id)).hasMatch()) {
-        code = 400; reason = "Bad Request";
-        return "{\"error\":\"identifiant d’opération invalide\"}";
+        reply(sock, 400, "Bad Request", "{\"error\":\"identifiant d’opération invalide\"}");
+        return;
     }
-    QNetworkAccessManager manager;
-    QNetworkReply* reply = manager.get(QNetworkRequest(
-        QUrl(QStringLiteral("http://127.0.0.1:8794/api/v1/updates/") + QString::fromUtf8(id))));
-    QEventLoop loop;
-    QTimer timeout;
-    timeout.setSingleShot(true);
-    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-    QObject::connect(&timeout, &QTimer::timeout, reply, &QNetworkReply::abort);
-    timeout.start(5000);
-    loop.exec();
-    const QByteArray response = reply->readAll();
-    const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-    const bool failed = reply->error() != QNetworkReply::NoError;
-    reply->deleteLater();
-    if (failed || status == 0) {
-        code = 503; reason = "Service Unavailable";
-        return "{\"error\":\"agent de mise à jour indisponible\"}";
+    relayToAgent(sock, "GET",
+                 QStringLiteral("http://127.0.0.1:8794/api/v1/updates/") + QString::fromUtf8(id),
+                 QByteArray());
+}
+
+// Cœur commun du relais async vers l'agent morfUpdate local (voir HttpServer.h).
+void HttpServer::relayToAgent(QTcpSocket* sock, const QByteArray& method,
+                              const QString& url, const QByteArray& body) {
+    if (!m_relay)
+        m_relay = new QNetworkAccessManager(this);
+    QNetworkRequest req{QUrl(url)};
+    if (!body.isEmpty())
+        req.setHeader(QNetworkRequest::ContentTypeHeader, QByteArrayLiteral("application/json"));
+    // Borne les 5 s SANS boucle d'evenements imbriquee ni QTimer : Qt annule la
+    // requete au-dela et emet finished avec une erreur (status restera 0).
+    req.setTransferTimeout(5000);
+    QNetworkReply* rep = (method == "POST") ? m_relay->post(req, body) : m_relay->get(req);
+
+    // Le client attend, sa socket reste ouverte. QPointer : s'il se deconnecte
+    // (onglet ferme, coupure reseau) avant la reponse de l'agent, la socket est
+    // detruite (disconnected -> deleteLater) et le pointeur s'annule -> on n'ecrit
+    // alors rien. L'operation, elle, vit cote agent : elle ne depend pas du client.
+    QPointer<QTcpSocket> guard(sock);
+    connect(rep, &QNetworkReply::finished, this, [this, rep, guard]() {
+        const int status = rep->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const QByteArray response = rep->readAll();
+        const QString relayErr = rep->errorString();
+        rep->deleteLater();
+        if (!guard)
+            return;
+        // status == 0 : AUCUNE reponse HTTP = vrai injoignable (agent eteint, refus,
+        // timeout). Sinon morfUpdate a REPONDU : on propage code + corps tels quels
+        // (QNetworkReply::error() est non-nul pour tout 4xx/5xx : s'y fier masquait
+        // les erreurs applicatives legitimes derriere un 503 trompeur).
+        if (status == 0) {
+            reply(guard, 503, "Service Unavailable",
+                  toJson(QJsonObject{
+                      {"error", QStringLiteral("agent injoignable (127.0.0.1:8794)")},
+                      {"detail", relayErr}}));
+            return;
+        }
+        reply(guard, status, reasonForStatus(status),
+              response.isEmpty() ? QByteArray("{\"error\":\"réponse d’agent invalide\"}")
+                                 : response);
+    });
+}
+
+QByteArray HttpServer::reasonForStatus(int status) {
+    switch (status) {
+        case 200: return "OK";
+        case 202: return "Accepted";
+        case 400: return "Bad Request";
+        case 404: return "Not Found";
+        case 409: return "Conflict";
+        case 500: return "Internal Server Error";
+        case 503: return "Service Unavailable";
+        default:  return status < 400 ? "OK" : "Error";
     }
-    code = status;
-    reason = status == 200 ? "OK" : "Bad Request";
-    return response.isEmpty() ? "{\"error\":\"réponse d’agent invalide\"}" : response;
 }
 
 QByteArray HttpServer::buildStatusJson() const {

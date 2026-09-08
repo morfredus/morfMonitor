@@ -12,6 +12,7 @@
 
 class QTcpServer;
 class QTcpSocket;
+class QNetworkAccessManager;
 
 namespace morfmonitor {
 
@@ -58,12 +59,30 @@ private:
     void handleRequest(QTcpSocket* sock, const QByteArray& method,
                        const QByteArray& path, const QByteArray& body);
     QByteArray handleForgetMachine(const QByteArray& body, int& code, QByteArray& reason);
-    QByteArray handleLocalUpdate(const QByteArray& body, int& code, QByteArray& reason);
-    QByteArray handleLocalUpdateStatus(const QByteArray& id, int& code, QByteArray& reason);
-    // Relais loopback pour la relance manuelle d'un service bloqué : proxy vers
-    // l'agent morfUpdate local (127.0.0.1:8794/api/v1/restart). Le statut se suit
-    // par la route commune /api/updates/<id> (journal d'opérations partagé).
-    QByteArray handleLocalRestart(const QByteArray& body, int& code, QByteArray& reason);
+
+    // --- Relais vers l'agent local morfUpdate (127.0.0.1:8794) ---------------
+    // ASYNCHRONES : ces handlers valident la requete de façon synchrone (agent
+    // active ? projet/identifiant valide ?) puis, si tout est bon, lancent la
+    // requete reseau vers morfUpdate SANS bloquer -- la reponse au client est
+    // ecrite plus tard, dans le callback Qt (voir relayToAgent). Aucune boucle
+    // d'evenements imbriquee, aucune attente bloquante : l'event-loop de
+    // morfMonitor n'est jamais perturbe pendant que morfUpdate travaille. En cas
+    // d'erreur de validation, le handler repond lui-meme (synchrone) et n'ouvre
+    // aucune requete. Chacun possede donc entierement sa reponse (comme
+    // serveWebAsset) : handleRequest les appelle puis `return`.
+    void handleLocalUpdate(QTcpSocket* sock, const QByteArray& body);
+    void handleLocalUpdateStatus(QTcpSocket* sock, const QByteArray& id);
+    void handleLocalRestart(QTcpSocket* sock, const QByteArray& body);
+
+    // Cœur commun du relais async. Emet `method` (GET/POST) vers `url` avec `body`
+    // (vide pour un GET), timeout de transfert 5 s (borne sans boucle imbriquee),
+    // et, a la reponse : distingue transport (status == 0 => 503 injoignable +
+    // detail) et reponse applicative (status != 0 => propage code + corps de
+    // morfUpdate tels quels). Sûr si le client se deconnecte entre-temps (QPointer).
+    void relayToAgent(QTcpSocket* sock, const QByteArray& method,
+                      const QString& url, const QByteArray& body);
+    static QByteArray reasonForStatus(int status);
+
     QByteArray buildStatusJson() const;
 
     // Sert un asset embarque (:/web/...). Renvoie false si le chemin ne
@@ -77,6 +96,9 @@ private:
     ModuleRegistry* m_registry;
     QTcpServer*     m_server;
     QElapsedTimer   m_uptime;
+    // QNAM persistant pour le relais async vers morfUpdate (cree a la demande).
+    // Membre (pas sur la pile) : la requete survit au retour du handler.
+    QNetworkAccessManager* m_relay = nullptr;
 };
 
 } // namespace morfmonitor

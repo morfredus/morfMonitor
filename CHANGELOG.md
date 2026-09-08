@@ -3,6 +3,56 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.21.4] - 2026-09-08
+
+### Changed
+
+- **The update/restart relay is now fully asynchronous - no nested event loop.**
+  `/api/updates`, `/api/updates/<id>` and `/api/restart` validated the request
+  synchronously then blocked morfMonitor's single event loop in a nested
+  `QEventLoop` (up to 5 s) while waiting for morfUpdate, perturbing the beacon/tick
+  during a click. They now validate synchronously and, on success, fire the loopback
+  request through a persistent `QNetworkAccessManager` and return immediately; the
+  client's reply is written later from the Qt `finished` callback. The 5 s bound is
+  kept via `QNetworkRequest::setTransferTimeout` (no `QTimer`, no loop). Transport vs
+  HTTP distinction (0.21.3) is preserved, morfUpdate's status+body are propagated
+  exactly, and a client that disconnects mid-wait is handled safely (`QPointer`) -
+  the operation lives on the host regardless of the requester. Same behaviour across
+  the three handlers.
+
+## [0.21.3] - 2026-09-08
+
+### Fixed
+
+- **The update/restart buttons now surface morfUpdate's real answer instead of a
+  fake "agent unavailable".** The loopback relay (`morfMonitor → 127.0.0.1:8794`)
+  treated the reply as failed whenever `QNetworkReply::error()` was set - but that
+  is set for **any** HTTP 4xx/5xx. So every legitimate morfUpdate response other
+  than 2xx (400 bad project, 409 "release has no manifest", ...) was masked as a
+  generic `503 agent indisponible`, making the button look broken while the agent
+  was actually answering. The relay now treats only `status == 0` (no HTTP reply at
+  all: agent down, connection refused, timeout) as unreachable; any real status is
+  propagated with morfUpdate's body. Unreachable responses now also carry a
+  `detail` with the transport error. Applies to `/api/updates`, `/api/updates/<id>`
+  and `/api/restart`.
+
+## [0.21.2] - 2026-09-08
+
+### Fixed
+
+- **Disk collection no longer freezes the event loop on a stale network automount.**
+  On pi4fred, morfMonitor recorded itself as `stuck` + `monitor_gap` every night,
+  exactly when the kernel logged `CIFS VFS: \\192.168.1.14 has not responded in 180
+  seconds` (PC-FRED asleep). Root cause proven by strace:
+  `QStorageInfo::mountedVolumes()` runs a `statfs()` on **every** mount point during
+  enumeration - including the CIFS share mounted via `x-systemd.automount` - so a
+  stale server blocks that `statfs` for ~180 s, freezing the single-threaded event
+  loop (no beacon, no tick). The existing network-FS filter ran *after*
+  enumeration, too late. Disk enumeration now reads `/proc/mounts` as text (no
+  `statfs`), drops pseudo/network/autofs filesystems by type, and `statfs` only the
+  surviving **local** mounts - so a sleeping share can never stall supervision.
+  Windows keeps the standard enumeration (no such automount blocking).
+
 ## [0.21.1] - 2026-09-07
 
 ### Fixed
