@@ -75,6 +75,13 @@ public:
     QJsonObject annualStatsJson() const;
     QJsonObject lifeJson() const;
 
+    // Historique de sante FIFO (48 h) des services sondes : un echantillon par
+    // minute, releve a chaque interrogation /status. Sert au diagnostic — voir la
+    // heap declinante d'un service avant un figeage, et l'instant ou il cesse de
+    // repondre (trou dans la serie, ou uptime_s qui repart de zero apres reboot).
+    // `service` filtre par nom d'application (vide = tous).
+    QJsonObject healthHistoryJson(const QString& service) const;
+
     // Vue complète, en une seule requête. Un client qui affiche un tableau de
     // bord veut tout à la fois : lui imposer cinq requêtes multiplierait les
     // allers-retours sans rien apporter.
@@ -287,6 +294,32 @@ private:
     // l'une l'autre à chaque heartbeat — l'affichage alternait entre les hôtes
     // toutes les quinze secondes. PROTOCOL.md avait prévu le champ pour ça.
     QHash<QString, BeaconSeen> m_beaconSeen;
+
+    // --- Historique de sante FIFO (diagnostic) -------------------------------
+    // Un echantillon par service et par minute, conserve 48 h. Stocke A PART du
+    // registre beacon (et non dans BeaconSeen) pour SURVIVRE a la disparition du
+    // service : c'est justement quand il tombe qu'on veut garder ses derniers
+    // points. Cle = identite d'instance, comme m_beaconSeen.
+    struct HealthSample {
+        qint64 ts        = 0;   // secondes epoch du releve
+        int    uptimeS   = -1;  // /status uptime_s (-1 si absent)
+        int    freeHeapB = -1;  // metrics.free_heap_b (-1 si absent)
+        int    freeBlockB = -1; // metrics.free_block_b (-1 si absent)
+    };
+    struct HealthSeries {
+        QString app;
+        QString host;
+        QVector<HealthSample> samples;
+    };
+    QHash<QString, HealthSeries> m_health;
+    qint64  m_healthLastSaveMs = 0;
+
+    // Enregistre un point de sante depuis un /status fraichement lu (sous-echantillonne
+    // a 1/min, purge au-dela de 48 h).
+    void recordHealth(const QString& key, const QString& app, const QString& host,
+                      const QJsonObject& status);
+    void loadHealth();
+    void saveHealth() const;
 
     // Suivi des pannes fonctionnelles par instance, pour anti-rebond / anti-spam /
     // retour a la normale (voir evaluateFunctionalAlerts). `sinceS` : depuis quand le

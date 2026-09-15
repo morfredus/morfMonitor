@@ -3,6 +3,20 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.22.0] - 2026-09-16
+
+### Added
+
+- **48 h health FIFO of monitored services (`GET /api/health/history`).** On every
+  `/status` poll morfMonitor now records one sample per minute per service -
+  `uptime_s` plus the `metrics.free_heap_b` / `free_block_b` reported by the
+  service - kept for 48 hours and persisted under the state directory
+  (`health.json`), so a morfMonitor restart keeps the trend. Polling is driven by
+  the 30 s maintenance timer (not only when a dashboard is open), so the series is
+  continuous. This is a diagnostic aid: a declining heap before a freeze, and the
+  exact moment a device stops answering (gap in the series, or `uptime_s` resetting
+  after a reboot), become visible. `?service=<app>` filters by application.
+
 ## [0.21.6] - 2026-09-08
 
 ### Fixed

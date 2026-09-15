@@ -23,6 +23,7 @@
 #include <QNetworkRequest>
 #include <QHostInfo>
 #include <QFile>
+#include <QSaveFile>
 #include <QSet>
 #include <QTimer>
 #include <QRegularExpression>
@@ -179,6 +180,10 @@ bool MonitorModule::start() {
     // que le registre des machines (/var/lib/morfmonitor via StateDirectory).
     m_memory.load(resolveStateDir(), m_config.beaconOfflineAfterS());
 
+    // Historique de sante FIFO : recharge les points des 48 dernieres heures (un
+    // redemarrage de morfMonitor ne perd donc pas la tendance heap deja captee).
+    loadHealth();
+
     m_beaconSocket = new QUdpSocket(this);
     // ShareAddress : d'autres programmes de la machine (le Dashboard en mode
     // dégradé, par exemple) écoutent le même port de diffusion.
@@ -218,6 +223,8 @@ void MonitorModule::stop() {
     // Persiste la derniere annonce de chaque machine avant de partir : au
     // prochain demarrage, « vu il y a ... » repart d'une base fraiche.
     m_machines.flush();
+    // Fige l'historique de sante FIFO (la sauvegarde courante est espacee a 1/min).
+    saveHealth();
     // Persiste la memoire temporelle (agregats, curseur, episodes ouverts) : un
     // incident en cours et l'histoire consolidee survivent a l'arret.
     m_memory.flush();
@@ -375,7 +382,136 @@ void MonitorModule::fetchActivityIfStale(const QString& key) {
         // morfMonitor n'infere jamais cet etat : il recopie ce que le service declare.
         if (o.contains(QStringLiteral("hardware")))
             entry->hardware = o.value(QStringLiteral("hardware")).toObject();
+
+        // Point de sante FIFO (diagnostic) : on profite de ce /status frais pour
+        // relever uptime + heap. Sous-echantillonne a 1/min dans recordHealth.
+        recordHealth(key, entry->app, entry->host, o);
     });
+}
+
+// --- Historique de sante FIFO -------------------------------------------------
+
+void MonitorModule::recordHealth(const QString& key, const QString& app,
+                                 const QString& host, const QJsonObject& status) {
+    const qint64 nowS = QDateTime::currentSecsSinceEpoch();
+    HealthSeries& s = m_health[key];
+    s.app = app;
+    s.host = host;
+
+    // Sous-echantillonnage : au plus un point par minute (48 h => ~2880 points).
+    if (!s.samples.isEmpty() && nowS - s.samples.last().ts < 60)
+        return;
+
+    HealthSample smp;
+    smp.ts = nowS;
+    if (status.contains(QStringLiteral("uptime_s")))
+        smp.uptimeS = status.value(QStringLiteral("uptime_s")).toInt(-1);
+    const QJsonObject metrics = status.value(QStringLiteral("metrics")).toObject();
+    if (metrics.contains(QStringLiteral("free_heap_b")))
+        smp.freeHeapB = metrics.value(QStringLiteral("free_heap_b")).toInt(-1);
+    if (metrics.contains(QStringLiteral("free_block_b")))
+        smp.freeBlockB = metrics.value(QStringLiteral("free_block_b")).toInt(-1);
+    s.samples.append(smp);
+
+    // Purge au-dela de 48 h.
+    const qint64 cutoff = nowS - 48 * 3600;
+    while (!s.samples.isEmpty() && s.samples.first().ts < cutoff)
+        s.samples.removeFirst();
+
+    // Persistance espacee (au plus une ecriture par minute).
+    const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+    if (nowMs - m_healthLastSaveMs > 60000) {
+        m_healthLastSaveMs = nowMs;
+        saveHealth();
+    }
+}
+
+void MonitorModule::saveHealth() const {
+    const QString dir = resolveStateDir();
+    if (dir.isEmpty())
+        return;                       // persistance desactivee : RAM seule
+    QDir().mkpath(dir);
+    QJsonObject root;
+    for (auto it = m_health.constBegin(); it != m_health.constEnd(); ++it) {
+        QJsonObject so;
+        so[QStringLiteral("app")]  = it->app;
+        so[QStringLiteral("host")] = it->host;
+        QJsonArray arr;
+        for (const auto& smp : it->samples) {
+            QJsonArray p;             // [ts, uptime, heap, bloc] : compact
+            p.append(static_cast<double>(smp.ts));
+            p.append(smp.uptimeS);
+            p.append(smp.freeHeapB);
+            p.append(smp.freeBlockB);
+            arr.append(p);
+        }
+        so[QStringLiteral("samples")] = arr;
+        root[it.key()] = so;
+    }
+    QSaveFile f(QDir(dir).filePath(QStringLiteral("health.json")));
+    if (f.open(QIODevice::WriteOnly)) {
+        f.write(QJsonDocument(root).toJson(QJsonDocument::Compact));
+        f.commit();
+    }
+}
+
+void MonitorModule::loadHealth() {
+    const QString dir = resolveStateDir();
+    if (dir.isEmpty())
+        return;
+    QFile f(QDir(dir).filePath(QStringLiteral("health.json")));
+    if (!f.open(QIODevice::ReadOnly))
+        return;
+    const QJsonObject root = QJsonDocument::fromJson(f.readAll()).object();
+    const qint64 cutoff = QDateTime::currentSecsSinceEpoch() - 48 * 3600;
+    for (auto it = root.constBegin(); it != root.constEnd(); ++it) {
+        const QJsonObject so = it.value().toObject();
+        HealthSeries s;
+        s.app  = so.value(QStringLiteral("app")).toString();
+        s.host = so.value(QStringLiteral("host")).toString();
+        const QJsonArray arr = so.value(QStringLiteral("samples")).toArray();
+        for (const auto& v : arr) {
+            const QJsonArray p = v.toArray();
+            if (p.size() < 4)
+                continue;
+            HealthSample smp;
+            smp.ts         = static_cast<qint64>(p.at(0).toDouble());
+            smp.uptimeS    = p.at(1).toInt(-1);
+            smp.freeHeapB  = p.at(2).toInt(-1);
+            smp.freeBlockB = p.at(3).toInt(-1);
+            if (smp.ts >= cutoff)      // on jette au chargement ce qui a plus de 48 h
+                s.samples.append(smp);
+        }
+        if (!s.samples.isEmpty())
+            m_health[it.key()] = s;
+    }
+}
+
+QJsonObject MonitorModule::healthHistoryJson(const QString& service) const {
+    QJsonArray series;
+    for (auto it = m_health.constBegin(); it != m_health.constEnd(); ++it) {
+        if (!service.isEmpty() && it->app != service)
+            continue;
+        QJsonObject so;
+        so[QStringLiteral("service")]  = it->app;
+        so[QStringLiteral("host")]     = it->host;
+        so[QStringLiteral("instance")] = it.key();
+        QJsonArray arr;
+        for (const auto& smp : it->samples) {
+            QJsonObject o;
+            o[QStringLiteral("ts")] = static_cast<double>(smp.ts);
+            if (smp.uptimeS >= 0)    o[QStringLiteral("uptime_s")]    = smp.uptimeS;
+            if (smp.freeHeapB >= 0)  o[QStringLiteral("free_heap_b")] = smp.freeHeapB;
+            if (smp.freeBlockB >= 0) o[QStringLiteral("free_block_b")] = smp.freeBlockB;
+            arr.append(o);
+        }
+        so[QStringLiteral("samples")] = arr;
+        series.append(so);
+    }
+    QJsonObject out;
+    out[QStringLiteral("retention_h")] = 48;
+    out[QStringLiteral("series")]      = series;
+    return out;
 }
 
 QJsonArray MonitorModule::activitiesJson(qint64 nowSecs) const {
@@ -866,6 +1002,15 @@ void MonitorModule::evaluateFunctionalAlerts() {
 void MonitorModule::feedMemory() {
     const qint64 now = QDateTime::currentSecsSinceEpoch();
     const int offlineAfter = m_config.beaconOfflineAfterS();
+
+    // Sonde periodique de sante : declenche un /status pour chaque service EN
+    // LIGNE, afin d'alimenter l'historique FIFO meme quand AUCUN dashboard n'est
+    // ouvert (sinon la heap n'etait relevee que pendant qu'un client regardait).
+    // fetchActivityIfStale est deja throttle (5 s) et enregistre uptime+heap.
+    for (const QString& key : m_beaconSeen.keys()) {
+        if (now - m_beaconSeen.value(key).lastSeen <= offlineAfter)
+            fetchActivityIfStale(key);
+    }
 
     // Etat systemd LOCAL (preuve de vie/cycle de vie OS). Reutilise le cache ; ne
     // relance systemctl qu'a l'expiration, exactement comme servicesJson.

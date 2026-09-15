@@ -283,13 +283,20 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
         // Table de vie : totaux depuis le debut, derives des jours.
         else if (path == "/api/stats/life") {
             out = toJson(mon->lifeJson());
+        }
+        // Historique de sante FIFO (48 h) : uptime + heap par service, releve a
+        // chaque /status. Diagnostic d'un figeage (heap declinante, instant de
+        // rupture). service=<nom> filtre (optionnel).
+        else if (path == "/api/health/history") {
+            const QString svc = queryParam(query, "service");
+            out = toJson(mon->healthHistoryJson(svc));
         } else {
             code = 404; reason = "Not Found";
             out = "{\"error\":\"route inconnue\",\"routes\":[\"/api/system\","
                   "\"/api/resources\",\"/api/network\",\"/api/services\","
                   "\"/api/reboot\",\"/api/config\",\"/api/all\","
                   "\"/api/events\",\"/api/stats/daily\",\"/api/stats/quarterly\","
-                  "\"/api/stats/annual\",\"/api/stats/life\"]}";
+                  "\"/api/stats/annual\",\"/api/stats/life\",\"/api/health/history\"]}";
         }
     } else if (path == "/healthz") {
         out = "{\"status\":\"ok\"}";
