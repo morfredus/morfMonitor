@@ -3,6 +3,17 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.24.1] - 2026-09-16
+
+### Fixed
+
+- **Log views auto-update and stop jumping to the top.** The Diagnostic panel
+  rebuilt its HTML every cycle, resetting each log's scroll to the top on any new
+  line; and the "open in full" page never refreshed at all. Both now update in
+  place while **preserving scroll** - stuck to the bottom when you are following
+  the flow (tail), position kept otherwise - and the full-page view refreshes on
+  the same loop.
+
 ## [0.24.0] - 2026-09-16
 
 ### Added

@@ -1324,15 +1324,20 @@ async function renderEspDiag() {
             <a href="#" class="esp-open" data-src="${esc(s.source)}">${esc(s.source)}</a>
             <span class="muted">${esc(s.host || '')}</span>
           </div>
-          <pre class="esp-log">${lines}</pre>
+          <pre class="esp-log" data-src="${esc(s.source)}">${lines}</pre>
           <div class="esp-actions">
             <a class="btn" href="/api/logs/download?source=${src}">Télécharger les logs (${total})</a>
             <a class="btn" href="/api/logs/diagnostic?source=${src}">Télécharger diagnostic</a>
             <button class="btn ghost" data-open="${esc(s.source)}">Ouvrir en grand</button>
           </div></div>`;
       }).join('');
-      el('c-esp-logs').innerHTML =
+      // Rebuild puis restauration du défilement : sinon chaque cycle (5 s)
+      // renverrait les logs en haut, alors qu'on veut suivre le flux (tail).
+      const container = el('c-esp-logs');
+      const st = captureLogScroll(container);
+      container.innerHTML =
         header('Logs des équipements (UDP)', `${sources.length} source(s)`) + blocks;
+      restoreLogScroll(container, st);
     }
   } catch (_) { /* panneau secondaire : echec silencieux */ }
 }
@@ -1340,6 +1345,50 @@ async function renderEspDiag() {
 function diagVisible() {
   const p = el('page-diagnostic');
   return p && p.classList.contains('active');
+}
+
+// Source affichée sur la page détail (« ouvrir en grand »), ou null.
+let logDetailSource = null;
+
+// Préservation du défilement d'un log qu'on rafraîchit : si l'utilisateur suit le
+// flux (collé en bas), on reste collé en bas (tail) ; sinon on garde sa position,
+// pour ne pas le renvoyer en haut à chaque nouvelle ligne. `atBottom` avec une
+// petite tolérance (8 px) car le défilement fractionnaire n'atteint pas l'exact.
+function logAtBottom(pre) {
+  return pre.scrollHeight - pre.scrollTop - pre.clientHeight < 8;
+}
+function captureLogScroll(container) {
+  const st = {};
+  container.querySelectorAll('.esp-log[data-src]').forEach((pre) => {
+    st[pre.dataset.src] = { top: pre.scrollTop, bottom: logAtBottom(pre) };
+  });
+  return st;
+}
+function restoreLogScroll(container, st) {
+  container.querySelectorAll('.esp-log[data-src]').forEach((pre) => {
+    const s = st[pre.dataset.src];
+    // Nouveau bloc (pas d'état précédent) : on démarre en bas, comme un tail.
+    pre.scrollTop = s ? (s.bottom ? pre.scrollHeight : s.top) : pre.scrollHeight;
+  });
+}
+
+// Rafraîchit le log de la page détail EN PLACE (sans reconstruire la page), en
+// préservant le défilement. Appelée en boucle tant que la page détail est active.
+async function refreshLogDetail() {
+  const pre = el('logdetail-pre');
+  if (!logDetailSource || !pre) return;
+  try {
+    const r = await fetch(`/api/logs?source=${encodeURIComponent(logDetailSource)}&limit=1000`);
+    const j = r.ok ? await r.json() : { sources: [] };
+    const s = (j.sources || [])[0];
+    const lines = s
+      ? (s.lines || []).map((l) => `${new Date(l.ts * 1000).toLocaleString('fr-FR')}  ${esc(l.line)}`).join('\n')
+      : '(aucun log capté pour cette source)';
+    const bottom = logAtBottom(pre);
+    const top = pre.scrollTop;
+    pre.innerHTML = lines;
+    pre.scrollTop = bottom ? pre.scrollHeight : top;
+  } catch (_) { /* panneau secondaire : échec silencieux */ }
 }
 
 // Bascule d'affichage vers une page (nav comprise) sans toucher a la logique de
@@ -1351,36 +1400,29 @@ function showOnlyPage(id, navPage) {
 }
 
 function goDiagnostic() {
+  logDetailSource = null;   // on quitte la page détail
   showOnlyPage('page-diagnostic', 'diagnostic');
   location.hash = 'diagnostic';
   renderEspDiag();
 }
 
-// Page dediee au log d'un equipement : log complet (jusqu'a 1000 lignes) +
-// telechargements + retour.
-async function openLogDetail(source) {
+// Page dédiée au log d'un équipement : coquille rendue UNE fois (en-tête +
+// actions + <pre> vide), puis le contenu du log est rafraîchi en place par
+// refreshLogDetail() (appelée en boucle), pour se mettre à jour sans reconstruire
+// la page ni renvoyer le défilement en haut.
+function openLogDetail(source) {
+  logDetailSource = source;
   showOnlyPage('page-logdetail', null);
   location.hash = `logs/${encodeURIComponent(source)}`;
-  el('c-logdetail').innerHTML = header(`Logs — ${esc(source)}`) + '<p class="muted">Chargement…</p>';
   const src = encodeURIComponent(source);
   const actions = `<div class="esp-actions">
       <button class="btn" onclick="goDiagnostic()">← Retour</button>
       <a class="btn" href="/api/logs/download?source=${src}">Télécharger les logs</a>
       <a class="btn" href="/api/logs/diagnostic?source=${src}">Télécharger diagnostic</a></div>`;
-  try {
-    const r = await fetch(`/api/logs?source=${src}&limit=1000`);
-    const j = r.ok ? await r.json() : { sources: [] };
-    const s = (j.sources || [])[0];
-    const lines = s
-      ? (s.lines || []).map((l) => `${new Date(l.ts * 1000).toLocaleString('fr-FR')}  ${esc(l.line)}`).join('\n')
-      : '(aucun log capté pour cette source)';
-    el('c-logdetail').innerHTML =
-      header(`Logs — ${esc(source)}`, s ? esc(s.host || '') : '') + actions
-      + `<pre class="esp-log esp-log-full">${lines}</pre>`;
-  } catch (e) {
-    el('c-logdetail').innerHTML = header(`Logs — ${esc(source)}`) + actions
-      + `<p class="muted">Indisponible : ${esc(e.message)}</p>`;
-  }
+  el('c-logdetail').innerHTML = header(`Logs — ${esc(source)}`) + actions
+    + '<pre id="logdetail-pre" class="esp-log esp-log-full" data-src="'
+    + esc(source) + '">Chargement…</pre>';
+  refreshLogDetail();
 }
 
 // Ouverture de la page detail au clic sur un equipement (lien du titre ou bouton
@@ -1441,7 +1483,10 @@ async function refresh() {
     renderMachines(all);
     renderEcosysteme(all);
     renderDiagnostic(all, config);
-    if (diagVisible()) renderEspDiag();  // panneau ESP32 : seulement s'il est visible
+    // Panneau ESP32 : la page détail (log en grand) se met à jour en place ;
+    // sinon le panneau Diagnostic, seulement s'il est visible.
+    if (el('page-logdetail').classList.contains('active')) refreshLogDetail();
+    else if (diagVisible()) renderEspDiag();
 
     setConn('ok', 'en ligne');
     el('foot-refresh').textContent =
