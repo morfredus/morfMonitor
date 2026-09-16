@@ -571,6 +571,7 @@ QJsonObject MonitorModule::logsJson(const QString& source, int limit) const {
         QJsonObject so;
         so[QStringLiteral("source")] = it.key();
         so[QStringLiteral("host")]   = it->host;
+        so[QStringLiteral("count")]  = it->lines.size();  // total dans le ring (pour le bouton)
         QJsonArray lines;
         const int start = qMax(0, it->lines.size() - limit);
         for (int i = start; i < it->lines.size(); ++i) {
@@ -584,6 +585,87 @@ QJsonObject MonitorModule::logsJson(const QString& source, int limit) const {
     }
     QJsonObject out;
     out[QStringLiteral("sources")] = sources;
+    return out;
+}
+
+QString MonitorModule::logsText(const QString& source) const {
+    QString out;
+    for (auto it = m_logs.constBegin(); it != m_logs.constEnd(); ++it) {
+        if (!source.isEmpty() && it.key() != source)
+            continue;
+        if (source.isEmpty())            // export global : un entete par source
+            out += QStringLiteral("=== %1 (%2) ===\n").arg(it.key(), it->host);
+        for (const auto& l : it->lines) {
+            out += QDateTime::fromSecsSinceEpoch(l.ts)
+                       .toString(QStringLiteral("yyyy-MM-dd HH:mm:ss"));
+            out += QLatin1String("  ");
+            out += l.line;
+            out += QLatin1Char('\n');
+        }
+    }
+    if (out.isEmpty())
+        out = QStringLiteral("(aucun log capte pour cette source)\n");
+    return out;
+}
+
+QString MonitorModule::diagnosticText(const QString& source) const {
+    const auto fmtBytes = [](int b) -> QString {
+        if (b < 0) return QStringLiteral("—");
+        if (b >= 1024 * 1024) return QString::number(b / 1048576.0, 'f', 2) + QStringLiteral(" MiB");
+        if (b >= 1024)        return QString::number(b / 1024.0, 'f', 1) + QStringLiteral(" KiB");
+        return QString::number(b) + QStringLiteral(" B");
+    };
+    const auto fmtDur = [](int s) -> QString {
+        if (s < 0) return QStringLiteral("—");
+        const int d = s / 86400, h = (s % 86400) / 3600, m = (s % 3600) / 60;
+        QString r;
+        if (d)       r += QString::number(d) + QStringLiteral("j ");
+        if (d || h)  r += QString::number(h) + QStringLiteral("h ");
+        r += QString::number(m) + QStringLiteral("min");
+        return r;
+    };
+
+    // Serie de sante correspondant a la source (par nom d'app ou cle d'instance).
+    const HealthSeries* hs = nullptr;
+    for (auto it = m_health.constBegin(); it != m_health.constEnd(); ++it) {
+        if (it->app == source || it.key() == source) { hs = &it.value(); break; }
+    }
+    QString ip;
+    const auto lit = m_logs.constFind(source);
+    if (lit != m_logs.constEnd())
+        ip = lit->host;
+
+    QString out;
+    out += QStringLiteral("=== morfMonitor diagnostic ===\n");
+    out += QStringLiteral("Date : %1\n").arg(QDateTime::currentDateTime().toString(Qt::ISODate));
+    out += QStringLiteral("Service : %1\n").arg(source);
+    out += QStringLiteral("IP : %1\n").arg(ip.isEmpty() ? QStringLiteral("—") : ip);
+    if (hs && !hs->samples.isEmpty()) {
+        const HealthSample& last = hs->samples.last();
+        int minHeap = -1;
+        for (const auto& s : hs->samples)
+            if (s.freeHeapB >= 0 && (minHeap < 0 || s.freeHeapB < minHeap))
+                minHeap = s.freeHeapB;
+        out += QStringLiteral("Uptime : %1\n").arg(fmtDur(last.uptimeS));
+        out += QStringLiteral("Heap libre : %1\n").arg(fmtBytes(last.freeHeapB));
+        out += QStringLiteral("Plus gros bloc : %1\n").arg(fmtBytes(last.freeBlockB));
+        out += QStringLiteral("Heap min 48h : %1\n").arg(fmtBytes(minHeap));
+    } else {
+        out += QStringLiteral("(pas d'historique de sante pour cette source)\n");
+    }
+
+    out += QStringLiteral("\n=== HEALTH HISTORY ===\n");
+    if (hs) {
+        for (const auto& s : hs->samples) {
+            out += QDateTime::fromSecsSinceEpoch(s.ts)
+                       .toString(QStringLiteral("yyyy-MM-dd HH:mm:ss"));
+            out += QStringLiteral("  heap=%1  bloc=%2  uptime=%3s\n")
+                       .arg(s.freeHeapB).arg(s.freeBlockB).arg(s.uptimeS);
+        }
+    }
+
+    out += QStringLiteral("\n=== LOGS ===\n");
+    out += logsText(source);
     return out;
 }
 

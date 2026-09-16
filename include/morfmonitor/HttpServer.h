@@ -90,7 +90,8 @@ private:
     bool serveWebAsset(QTcpSocket* sock, const QByteArray& path);
 
     void reply(QTcpSocket* sock, int code, const QByteArray& reason, const QByteArray& body,
-               const QByteArray& contentType = "application/json; charset=utf-8");
+               const QByteArray& contentType = "application/json; charset=utf-8",
+               const QByteArray& extraHeaders = QByteArray());
 
     ServiceConfig   m_config;
     ModuleRegistry* m_registry;

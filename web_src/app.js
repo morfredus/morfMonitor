@@ -1317,9 +1317,19 @@ async function renderEspDiag() {
       const blocks = sources.map((s) => {
         const lines = (s.lines || []).map((l) =>
           `${new Date(l.ts * 1000).toLocaleTimeString('fr-FR')}  ${esc(l.line)}`).join('\n');
+        const src = encodeURIComponent(s.source);
+        const total = (typeof s.count === 'number') ? s.count : (s.lines || []).length;
         return `<div class="esp-block">
-          <div class="esp-title">${esc(s.source)} <span class="muted">${esc(s.host || '')}</span></div>
-          <pre class="esp-log">${lines}</pre></div>`;
+          <div class="esp-title">
+            <a href="#" class="esp-open" data-src="${esc(s.source)}">${esc(s.source)}</a>
+            <span class="muted">${esc(s.host || '')}</span>
+          </div>
+          <pre class="esp-log">${lines}</pre>
+          <div class="esp-actions">
+            <a class="btn" href="/api/logs/download?source=${src}">Télécharger les logs (${total})</a>
+            <a class="btn" href="/api/logs/diagnostic?source=${src}">Télécharger diagnostic</a>
+            <button class="btn ghost" data-open="${esc(s.source)}">Ouvrir en grand</button>
+          </div></div>`;
       }).join('');
       el('c-esp-logs').innerHTML =
         header('Logs des équipements (UDP)', `${sources.length} source(s)`) + blocks;
@@ -1331,6 +1341,56 @@ function diagVisible() {
   const p = el('page-diagnostic');
   return p && p.classList.contains('active');
 }
+
+// Bascule d'affichage vers une page (nav comprise) sans toucher a la logique de
+// rafraichissement : la page detail vit hors du menu.
+function showOnlyPage(id, navPage) {
+  document.querySelectorAll('.page').forEach((p) => p.classList.toggle('active', p.id === id));
+  document.querySelectorAll('#nav button').forEach((b) =>
+    b.classList.toggle('active', !!navPage && b.dataset.page === navPage));
+}
+
+function goDiagnostic() {
+  showOnlyPage('page-diagnostic', 'diagnostic');
+  location.hash = 'diagnostic';
+  renderEspDiag();
+}
+
+// Page dediee au log d'un equipement : log complet (jusqu'a 1000 lignes) +
+// telechargements + retour.
+async function openLogDetail(source) {
+  showOnlyPage('page-logdetail', null);
+  location.hash = `logs/${encodeURIComponent(source)}`;
+  el('c-logdetail').innerHTML = header(`Logs — ${esc(source)}`) + '<p class="muted">Chargement…</p>';
+  const src = encodeURIComponent(source);
+  const actions = `<div class="esp-actions">
+      <button class="btn" onclick="goDiagnostic()">← Retour</button>
+      <a class="btn" href="/api/logs/download?source=${src}">Télécharger les logs</a>
+      <a class="btn" href="/api/logs/diagnostic?source=${src}">Télécharger diagnostic</a></div>`;
+  try {
+    const r = await fetch(`/api/logs?source=${src}&limit=1000`);
+    const j = r.ok ? await r.json() : { sources: [] };
+    const s = (j.sources || [])[0];
+    const lines = s
+      ? (s.lines || []).map((l) => `${new Date(l.ts * 1000).toLocaleString('fr-FR')}  ${esc(l.line)}`).join('\n')
+      : '(aucun log capté pour cette source)';
+    el('c-logdetail').innerHTML =
+      header(`Logs — ${esc(source)}`, s ? esc(s.host || '') : '') + actions
+      + `<pre class="esp-log esp-log-full">${lines}</pre>`;
+  } catch (e) {
+    el('c-logdetail').innerHTML = header(`Logs — ${esc(source)}`) + actions
+      + `<p class="muted">Indisponible : ${esc(e.message)}</p>`;
+  }
+}
+
+// Ouverture de la page detail au clic sur un equipement (lien du titre ou bouton
+// « Ouvrir en grand »). Delegation : les blocs sont reconstruits a chaque cycle.
+document.addEventListener('click', (ev) => {
+  const t = ev.target.closest('.esp-open, [data-open]');
+  if (!t) return;
+  ev.preventDefault();
+  openLogDetail(t.dataset.src || t.dataset.open);
+});
 
 async function refresh() {
   try {

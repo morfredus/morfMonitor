@@ -297,6 +297,27 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
             const QString src = queryParam(query, "source");
             const int lim = queryParam(query, "limit").toInt();
             out = toJson(mon->logsJson(src, lim));
+        }
+        // Export A LA DEMANDE du ring RAM, en TEXTE BRUT (pas de nouvelle
+        // persistance) : le ring lui-meme reste la seule copie cote superviseur.
+        // Telechargement des lignes d'un equipement.
+        else if (path == "/api/logs/download") {
+            const QString src = queryParam(query, "source");
+            const QByteArray fn = (src.isEmpty() ? QByteArray("equipements") : src.toUtf8())
+                                  + "-logs.txt";
+            reply(sock, 200, "OK", mon->logsText(src).toUtf8(), "text/plain; charset=utf-8",
+                  "Content-Disposition: attachment; filename=\"" + fn + "\"\r\n");
+            return;
+        }
+        // Bundle diagnostic d'un equipement : constantes + historique de sante +
+        // logs, dans un seul fichier texte a joindre au rapport d'un incident.
+        else if (path == "/api/logs/diagnostic") {
+            const QString src = queryParam(query, "source");
+            const QByteArray fn = (src.isEmpty() ? QByteArray("equipement") : src.toUtf8())
+                                  + "-diagnostic.txt";
+            reply(sock, 200, "OK", mon->diagnosticText(src).toUtf8(), "text/plain; charset=utf-8",
+                  "Content-Disposition: attachment; filename=\"" + fn + "\"\r\n");
+            return;
         } else {
             code = 404; reason = "Not Found";
             out = "{\"error\":\"route inconnue\",\"routes\":[\"/api/system\","
@@ -530,10 +551,12 @@ bool HttpServer::serveWebAsset(QTcpSocket* sock, const QByteArray& path) {
 }
 
 void HttpServer::reply(QTcpSocket* sock, int code, const QByteArray& reason, const QByteArray& body,
-                       const QByteArray& contentType) {
+                       const QByteArray& contentType, const QByteArray& extraHeaders) {
     QByteArray resp;
     resp += "HTTP/1.1 " + QByteArray::number(code) + " " + reason + "\r\n";
     resp += "Content-Type: " + contentType + "\r\n";
+    if (!extraHeaders.isEmpty())   // en-tetes additionnels (ex. Content-Disposition)
+        resp += extraHeaders;
     // Rien de ce que sert ce service ne doit etre mis en cache. Une reponse
     // /api/ en cache afficherait un etat perime dans un outil de supervision --
     // le contraire de sa raison d'etre. Et un asset en cache fait survivre

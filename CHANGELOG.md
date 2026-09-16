@@ -3,6 +3,22 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.24.0] - 2026-09-16
+
+### Added
+
+- **On-demand raw log export.** Per device in the Diagnostic panel, a
+  "Télécharger les logs (N)" button exports the full RAM ring as plain text
+  (`GET /api/logs/download?source=`), timestamped, no reinvented format - an
+  export of the buffer, not a new persistence (the ring stays the only copy).
+- **Diagnostic bundle.** A "Télécharger diagnostic" button
+  (`GET /api/logs/diagnostic?source=`) produces a single text file bundling the
+  constants (uptime, free heap, largest block, 48 h min heap), the health history
+  and the logs - a self-contained package to attach when reporting an incident.
+- **Per-device log page.** Clicking a device (or "Ouvrir en grand") opens a
+  dedicated page showing its full log (up to 1000 lines) with a back button and
+  the same download actions.
+
 ## [0.23.0] - 2026-09-16
 
 ### Added

@@ -258,3 +258,16 @@ footer a:hover { text-decoration: underline; }
   font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px;
   line-height: 1.45; white-space: pre-wrap; word-break: break-word; color: var(--text);
 }
+
+/* Actions de log (telechargements + ouverture en grand). */
+.esp-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.btn {
+  display: inline-block; padding: 6px 12px; border: 1px solid var(--line);
+  border-radius: 6px; background: var(--surface-2); color: var(--text-hi);
+  font-size: 13px; cursor: pointer; text-decoration: none;
+}
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn.ghost { background: transparent; }
+.esp-open { color: var(--accent); text-decoration: none; }
+.esp-open:hover { text-decoration: underline; }
+.esp-log-full { max-height: 68vh; }

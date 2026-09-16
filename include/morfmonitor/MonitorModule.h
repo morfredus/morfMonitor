@@ -87,6 +87,14 @@ public:
     // (vide = toutes) ; `limit` borne le nombre de lignes rendues par source.
     QJsonObject logsJson(const QString& source, int limit) const;
 
+    // Export TEXTE BRUT du ring d'un equipement (horodatage de reception + ligne),
+    // pour telechargement. Toutes sources concatenees si `source` est vide.
+    QString logsText(const QString& source) const;
+
+    // Bundle diagnostic TEXTE d'un equipement : constantes (uptime/heap...) +
+    // historique de sante + logs, dans un seul fichier a joindre a un incident.
+    QString diagnosticText(const QString& source) const;
+
     // Vue complète, en une seule requête. Un client qui affiche un tableau de
     // bord veut tout à la fois : lui imposer cinq requêtes multiplierait les
     // allers-retours sans rien apporter.
