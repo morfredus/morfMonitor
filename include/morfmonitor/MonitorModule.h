@@ -82,6 +82,11 @@ public:
     // `service` filtre par nom d'application (vide = tous).
     QJsonObject healthHistoryJson(const QString& service) const;
 
+    // Logs recents captes par UDP depuis les equipements ESP32 :
+    // { sources:[{source, host, lines:[{ts,line}]}] }. `source` filtre par nom
+    // (vide = toutes) ; `limit` borne le nombre de lignes rendues par source.
+    QJsonObject logsJson(const QString& source, int limit) const;
+
     // Vue complète, en une seule requête. Un client qui affiche un tableau de
     // bord veut tout à la fois : lui imposer cinq requêtes multiplierait les
     // allers-retours sans rien apporter.
@@ -320,6 +325,22 @@ private:
                       const QJsonObject& status);
     void loadHealth();
     void saveHealth() const;
+
+    // --- Captation des logs UDP des equipements ESP32 ------------------------
+    // MeteoHub (et la sonde) DIFFUSENT deja leurs logs en broadcast UDP. morfMonitor
+    // les ecoute et garde un anneau des dernieres lignes PAR SOURCE, pour une
+    // consultation centralisee (l'appareil peut geler ou rebooter : ses dernieres
+    // lignes survivent ici). RAM seule : un log est ephemere par nature, et
+    // morfMonitor, lui, ne gele pas quand un appareil supervise gele.
+    struct LogLine { qint64 ts = 0; QString line; };
+    struct LogRing { QString host; QVector<LogLine> lines; };
+    QHash<QString, LogRing> m_logs;      // cle = nom d'app (ou IP si inconnue)
+    QUdpSocket* m_logSocket = nullptr;
+
+    void onLogDatagram();
+    // Nom lisible d'une source a partir de son IP : l'application beacon vue a
+    // cette adresse, ou l'IP a defaut.
+    QString sourceForIp(const QString& ip) const;
 
     // Suivi des pannes fonctionnelles par instance, pour anti-rebond / anti-spam /
     // retour a la normale (voir evaluateFunctionalAlerts). `sinceS` : depuis quand le

@@ -3,6 +3,22 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.23.0] - 2026-09-16
+
+### Added
+
+- **ESP32 UDP log capture (`GET /api/logs`).** morfMonitor now listens on the
+  broadcast log port (5005) used by the ESP32 devices (MeteoHub, the probe) and
+  keeps a ring of the last ~400 lines per source, labelled by beacon app name (or
+  sender IP if unknown). Centralised, so a device's last lines survive its freeze
+  or reboot without a terminal kept open. RAM-only (logs are ephemeral, and
+  morfMonitor does not freeze when a supervised device does). `source=` filters,
+  `limit=` bounds the returned lines.
+- **Diagnostic dashboard panel.** The Diagnostic page now shows, per ESP32 device,
+  a health block (free heap, largest block, 48 h min heap, uptime) with a heap
+  sparkline from the FIFO, plus a recent-logs view - loaded only while the page is
+  visible. Easy consultation of "why did it freeze" straight from morfMonitor.
+
 ## [0.22.0] - 2026-09-16
 
 ### Added

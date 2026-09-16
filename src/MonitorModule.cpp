@@ -193,6 +193,16 @@ bool MonitorModule::start() {
                 this, &MonitorModule::onBeaconDatagram);
     }
 
+    // Ecoute des logs UDP diffuses par les equipements ESP32 (MeteoHub, sonde) sur
+    // le port 5005. ShareAddress : un YAT ou un autre outil peuvent ecouter le meme
+    // broadcast en parallele. On observe, on ne repond jamais.
+    m_logSocket = new QUdpSocket(this);
+    if (m_logSocket->bind(QHostAddress::AnyIPv4, 5005,
+                          QUdpSocket::ShareAddress | QUdpSocket::ReuseAddressHint)) {
+        connect(m_logSocket, &QUdpSocket::readyRead,
+                this, &MonitorModule::onLogDatagram);
+    }
+
     // Amorce la mesure CPU : /proc/stat ne donne que des compteurs cumules, si
     // bien que la premiere lecture ne peut produire aucun taux. Sans cette
     // amorce, la toute premiere requete a l'API renverrait un CPU absent — que
@@ -511,6 +521,69 @@ QJsonObject MonitorModule::healthHistoryJson(const QString& service) const {
     QJsonObject out;
     out[QStringLiteral("retention_h")] = 48;
     out[QStringLiteral("series")]      = series;
+    return out;
+}
+
+// --- Captation des logs UDP des equipements ESP32 ----------------------------
+
+QString MonitorModule::sourceForIp(const QString& ip) const {
+    // L'application beacon vue a cette adresse donne un nom parlant ; a defaut,
+    // l'IP brute (un equipement qui logue sans encore s'etre annonce).
+    for (auto it = m_beaconSeen.constBegin(); it != m_beaconSeen.constEnd(); ++it) {
+        if (it->sourceIp == ip && !it->app.isEmpty())
+            return it->app;
+    }
+    return ip;
+}
+
+void MonitorModule::onLogDatagram() {
+    constexpr int kMaxLinesPerSource = 400;   // anneau : dernieres lignes gardees
+    while (m_logSocket && m_logSocket->hasPendingDatagrams()) {
+        const QNetworkDatagram dg = m_logSocket->receiveDatagram();
+        const QString ip = dg.senderAddress().toString();
+        const QString source = sourceForIp(ip);
+        LogRing& ring = m_logs[source];
+        ring.host = ip;
+
+        // Un datagramme peut porter plusieurs lignes ; on decoupe et on ignore les
+        // vides. L'horodatage est celui de la RECEPTION (l'ESP32 n'a pas toujours
+        // l'heure), suffisant pour situer un evenement dans le temps.
+        const qint64 nowS = QDateTime::currentSecsSinceEpoch();
+        const QString text = QString::fromUtf8(dg.data());
+        for (const QString& raw : text.split(QLatin1Char('\n'))) {
+            const QString line = raw.trimmed();
+            if (line.isEmpty())
+                continue;
+            ring.lines.append({nowS, line});
+        }
+        while (ring.lines.size() > kMaxLinesPerSource)
+            ring.lines.removeFirst();
+    }
+}
+
+QJsonObject MonitorModule::logsJson(const QString& source, int limit) const {
+    if (limit <= 0 || limit > 1000)
+        limit = 200;
+    QJsonArray sources;
+    for (auto it = m_logs.constBegin(); it != m_logs.constEnd(); ++it) {
+        if (!source.isEmpty() && it.key() != source)
+            continue;
+        QJsonObject so;
+        so[QStringLiteral("source")] = it.key();
+        so[QStringLiteral("host")]   = it->host;
+        QJsonArray lines;
+        const int start = qMax(0, it->lines.size() - limit);
+        for (int i = start; i < it->lines.size(); ++i) {
+            QJsonObject l;
+            l[QStringLiteral("ts")]   = static_cast<double>(it->lines.at(i).ts);
+            l[QStringLiteral("line")] = it->lines.at(i).line;
+            lines.append(l);
+        }
+        so[QStringLiteral("lines")] = lines;
+        sources.append(so);
+    }
+    QJsonObject out;
+    out[QStringLiteral("sources")] = sources;
     return out;
 }
 

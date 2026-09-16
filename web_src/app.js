@@ -1257,6 +1257,81 @@ function showServiceProblem(title, detail) {
   el('c-ressources').innerHTML = `<div class="card span-all">${block}</div>`;
 }
 
+// --- Diagnostic des equipements ESP32 (sante FIFO + logs UDP) ---------------
+// Panneau secondaire de l'onglet Diagnostic : on ne le charge que lorsqu'il est
+// visible, et ses echecs sont silencieux (il ne doit jamais casser la page).
+
+// Mini-courbe SVG d'une serie de valeurs (les null = trous, ignores).
+function sparkline(vals, w = 320, h = 40) {
+  const nums = vals.filter((v) => typeof v === 'number');
+  if (nums.length < 2) return '';
+  const min = Math.min(...nums), max = Math.max(...nums), span = (max - min) || 1;
+  const step = w / (vals.length - 1);
+  const pts = vals
+    .map((v, i) => (typeof v === 'number'
+      ? `${(i * step).toFixed(1)},${(h - ((v - min) / span) * h).toFixed(1)}` : null))
+    .filter(Boolean).join(' ');
+  return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" `
+    + `preserveAspectRatio="none"><polyline points="${pts}"/></svg>`;
+}
+
+async function renderEspDiag() {
+  try {
+    const [hR, lR] = await Promise.all([
+      fetch('/api/health/history'), fetch('/api/logs?limit=60'),
+    ]);
+    const health = hR.ok ? await hR.json() : { series: [] };
+    const logs = lR.ok ? await lR.json() : { sources: [] };
+
+    // Sante : heap + uptime, une courbe par equipement.
+    const series = health.series || [];
+    if (!series.length) {
+      el('c-esp-sante').innerHTML = header('Santé des équipements')
+        + '<p class="muted">Aucun équipement supervisé n’a encore rapporté sa santé (heap/uptime via /status).</p>';
+    } else {
+      const blocks = series.map((s) => {
+        const samples = s.samples || [];
+        const heaps = samples.map((p) => (typeof p.free_heap_b === 'number' ? p.free_heap_b : null));
+        const heapNums = heaps.filter((v) => typeof v === 'number');
+        const minHeap = heapNums.length ? Math.min(...heapNums) : null;
+        const last = samples.length ? samples[samples.length - 1] : {};
+        return `<div class="esp-block">
+          <div class="esp-title">${esc(s.service || s.instance)} <span class="muted">${esc(s.host || '')}</span></div>
+          ${row('Heap libre', last.free_heap_b != null ? bytes(last.free_heap_b) : '—')}
+          ${row('Plus gros bloc', last.free_block_b != null ? bytes(last.free_block_b) : '—')}
+          ${row('Heap min (48 h)', minHeap != null ? bytes(minHeap) : '—')}
+          ${row('Uptime', last.uptime_s != null ? duration(last.uptime_s) : '—')}
+          <div class="esp-spark">${sparkline(heaps)}</div>
+        </div>`;
+      }).join('');
+      el('c-esp-sante').innerHTML =
+        header('Santé des équipements', `${series.length} suivi(s) · heap sur 48 h`) + blocks;
+    }
+
+    // Logs UDP recents, un bloc par source.
+    const sources = logs.sources || [];
+    if (!sources.length) {
+      el('c-esp-logs').innerHTML = header('Logs des équipements (UDP)')
+        + '<p class="muted">Aucun log reçu. Les équipements ESP32 diffusent leurs logs en broadcast UDP (port 5005) : ils doivent être sur le même réseau que morfMonitor.</p>';
+    } else {
+      const blocks = sources.map((s) => {
+        const lines = (s.lines || []).map((l) =>
+          `${new Date(l.ts * 1000).toLocaleTimeString('fr-FR')}  ${esc(l.line)}`).join('\n');
+        return `<div class="esp-block">
+          <div class="esp-title">${esc(s.source)} <span class="muted">${esc(s.host || '')}</span></div>
+          <pre class="esp-log">${lines}</pre></div>`;
+      }).join('');
+      el('c-esp-logs').innerHTML =
+        header('Logs des équipements (UDP)', `${sources.length} source(s)`) + blocks;
+    }
+  } catch (_) { /* panneau secondaire : echec silencieux */ }
+}
+
+function diagVisible() {
+  const p = el('page-diagnostic');
+  return p && p.classList.contains('active');
+}
+
 async function refresh() {
   try {
     const [allR, statusR, configR] = await Promise.all([
@@ -1306,6 +1381,7 @@ async function refresh() {
     renderMachines(all);
     renderEcosysteme(all);
     renderDiagnostic(all, config);
+    if (diagVisible()) renderEspDiag();  // panneau ESP32 : seulement s'il est visible
 
     setConn('ok', 'en ligne');
     el('foot-refresh').textContent =
@@ -1330,6 +1406,7 @@ el('nav').addEventListener('click', (ev) => {
     p.classList.toggle('active', p.id === `page-${btn.dataset.page}`);
   });
   location.hash = btn.dataset.page;
+  if (btn.dataset.page === 'diagnostic') renderEspDiag();  // chargement immediat
 });
 
 // « Oublier une machine » : geste explicite et irreversible, donc confirme. La

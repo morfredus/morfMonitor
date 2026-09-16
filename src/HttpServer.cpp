@@ -290,6 +290,13 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
         else if (path == "/api/health/history") {
             const QString svc = queryParam(query, "service");
             out = toJson(mon->healthHistoryJson(svc));
+        }
+        // Logs recents captes par UDP depuis les equipements ESP32 (MeteoHub,
+        // sonde). source=<nom> filtre, limit=<n> borne les lignes par source.
+        else if (path == "/api/logs") {
+            const QString src = queryParam(query, "source");
+            const int lim = queryParam(query, "limit").toInt();
+            out = toJson(mon->logsJson(src, lim));
         } else {
             code = 404; reason = "Not Found";
             out = "{\"error\":\"route inconnue\",\"routes\":[\"/api/system\","

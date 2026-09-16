@@ -243,3 +243,18 @@ footer a:hover { text-decoration: underline; }
     background: linear-gradient(90deg, var(--accent-2), var(--accent));
   }
 }
+
+/* Diagnostic ESP32 : blocs sante + logs UDP. */
+.muted { color: var(--text-dim); font-size: 0.9em; }
+.esp-block { padding: 8px 0; border-top: 1px solid var(--line); }
+.esp-block:first-of-type { border-top: 0; }
+.esp-title { font-weight: 600; color: var(--text-hi); margin-bottom: 4px; }
+.esp-spark { margin-top: 6px; color: var(--accent); }
+.spark { width: 100%; height: 40px; }
+.spark polyline { fill: none; stroke: currentColor; stroke-width: 1.5; }
+.esp-log {
+  max-height: 260px; overflow: auto; margin: 4px 0 0;
+  padding: 8px; background: var(--surface-2); border-radius: 6px;
+  font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px;
+  line-height: 1.45; white-space: pre-wrap; word-break: break-word; color: var(--text);
+}
