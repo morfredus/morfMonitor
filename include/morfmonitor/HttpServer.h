@@ -38,7 +38,7 @@ class ModuleRegistry;
 // Cette contrainte n'est pas cosmetique. morfMonitor annonce « il n'affiche
 // rien » : sa responsabilite est de collecter et d'exposer, pas de presenter.
 // Tant que la vue Web reste un client de l'API publique, elle n'est qu'une
-// SECONDE VUE des memes donnees — extractible a tout moment vers un projet
+// SECONDE VUE des memes donnees - extractible a tout moment vers un projet
 // separe sans reecriture. Le jour ou elle lirait MonitorModule directement,
 // cette propriete serait perdue en silence.
 // -----------------------------------------------------------------------------

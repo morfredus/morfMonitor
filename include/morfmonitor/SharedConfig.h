@@ -133,11 +133,11 @@ public:
     // ici. Ils appartiennent a la configuration propre du service
     // (morfmonitor.json). Ils ont figure dans ce fichier partage sans jamais
     // etre utilises, ce qui a fait croire que le port etait regle alors que le
-    // service ecoutait ailleurs — et l'a mis en collision avec morfAnalytics.
+    // service ecoutait ailleurs - et l'a mis en collision avec morfAnalytics.
     // Un reglage qui ne regle rien est pire qu'un reglage absent.
 
     // Vue JSON de la configuration effective, exposee par l'API. Elle permet a
-    // un client de savoir ce qui est supervise sans lire le fichier lui-meme —
+    // un client de savoir ce qui est supervise sans lire le fichier lui-meme -
     // utile pour un client qui n'a pas acces au disque de la machine (ESP32,
     // navigateur, application distante).
     QJsonObject toJson() const;

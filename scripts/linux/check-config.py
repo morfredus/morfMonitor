@@ -9,7 +9,7 @@ l'utilisateur ne pourrait pas retrouver.
 
 Mais cette regle laisse un angle mort : une valeur DEJA PRESENTE qui est devenue
 invalide n'est jamais signalee. C'est exactement ce qui est arrive au module
-`example` — herite du gabarit, jamais reconnu par la fabrique de morfMonitor.
+`example` - herite du gabarit, jamais reconnu par la fabrique de morfMonitor.
 La cle `modules` existait, donc la fusion n'y touchait pas ; le service demarrait,
 ecoutait, annoncait sa presence sur le LAN... et repondait 503 sur TOUTES les
 routes /api/, faute du moindre module de supervision.

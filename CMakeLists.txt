@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 # =============================================================================
-#  morfMonitor — squelette reutilisable de service morfSystem.
+#  morfMonitor - squelette reutilisable de service morfSystem.
 #
 #  POUR CREER UN NOUVEAU SERVICE : le plus simple est le script de clonage
 #      scripts/new-service.sh   morfmonservice MorfMonService   (Linux/macOS)
@@ -30,7 +30,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # --- Qt : generation automatique du moc (classes QObject) -----------------
 set(CMAKE_AUTOMOC ON)
 # AUTORCC : compile resources/web.qrc (assets de l'interface Web) dans le
-# binaire. Fourni par Qt Core — n'introduit aucune dependance Qt Widgets.
+# binaire. Fourni par Qt Core - n'introduit aucune dependance Qt Widgets.
 set(CMAKE_AUTORCC ON)
 
 # Core + Network : serveur HTTP entrant, client HTTP sortant, JSON. Ajouter

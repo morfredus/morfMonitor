@@ -53,8 +53,8 @@ def merge(example, live, path=""):
 
 def merge_modules(example_mods, live_mods, path):
     """Les modules sont une liste d'objets, pas un dictionnaire : on apparie par
-    `id`, a defaut par `type`. On ne cree jamais de module absent localement —
-    ce serait activer une fonction que l'utilisateur n'a pas demandee — mais on
+    `id`, a defaut par `type`. On ne cree jamais de module absent localement -
+    ce serait activer une fonction que l'utilisateur n'a pas demandee - mais on
     complete ceux qui existent."""
     added = []
     for ex in example_mods:

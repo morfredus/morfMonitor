@@ -233,8 +233,8 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
         out = "{\"error\":\"method not allowed\",\"allow\":\"GET, HEAD\"}";
     } else if (path.startsWith("/api/")) {
         // API de supervision : la raison d'etre du service. Toutes les routes
-        // renvoient du JSON et sont utilisables par n'importe quel client —
-        // Dashboard local, navigateur, application Qt, ESP32 — sans qu'aucun
+        // renvoient du JSON et sont utilisables par n'importe quel client -
+        // Dashboard local, navigateur, application Qt, ESP32 - sans qu'aucun
         // n'ait besoin de lire /proc ni d'appeler systemctl lui-meme.
         auto* mon = m_registry
             ? qobject_cast<MonitorModule*>(m_registry->firstOfType(QStringLiteral("monitor")))
@@ -324,7 +324,8 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
                   "\"/api/resources\",\"/api/network\",\"/api/services\","
                   "\"/api/reboot\",\"/api/config\",\"/api/all\","
                   "\"/api/events\",\"/api/stats/daily\",\"/api/stats/quarterly\","
-                  "\"/api/stats/annual\",\"/api/stats/life\",\"/api/health/history\"]}";
+                  "\"/api/stats/annual\",\"/api/stats/life\",\"/api/health/history\","
+                  "\"/api/logs\",\"/api/logs/download\",\"/api/logs/diagnostic\"]}";
         }
     } else if (path == "/healthz") {
         out = "{\"status\":\"ok\"}";

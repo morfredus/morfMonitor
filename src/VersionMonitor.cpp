@@ -201,7 +201,7 @@ QJsonArray VersionMonitor::toJson(const QHash<QString, Running>& runningByApp) c
         if (!hasLatest) {
             // Jamais de release obtenue : « non vérifié » tant qu'aucune tentative,
             // sinon « Vérification impossible ». Jamais « à jour » hors ligne.
-            state = (e.lastCheckMs == 0) ? QStringLiteral("—")
+            state = (e.lastCheckMs == 0) ? QStringLiteral("-")
                                          : QStringLiteral("Vérification impossible");
         } else if (!runningKnown) {
             state = QStringLiteral("Version inconnue");

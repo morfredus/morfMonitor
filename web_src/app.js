@@ -10,7 +10,7 @@
  * Regle de robustesse : la collecte de morfMonitor est portable, mais toutes
  * les metriques n'existent pas partout (CPU, memoire, charge et temperature
  * viennent de /proc et /sys, donc de Linux). Une donnee absente doit produire
- * un message explicite — jamais une case vide, jamais « 0 », qui se lirait
+ * un message explicite - jamais une case vide, jamais « 0 », qui se lirait
  * comme une mesure alors que c'est une absence de mesure.
  */
 
@@ -77,7 +77,7 @@ function duration(sec) {
 }
 
 function ago(sec) {
-  if (typeof sec !== 'number') return '—';
+  if (typeof sec !== 'number') return '-';
   if (sec < 60) return `il y a ${Math.round(sec)} s`;
   return `il y a ${Math.round(sec / 60)} min`;
 }
@@ -86,7 +86,7 @@ function ago(sec) {
 // peut n'avoir plus ete vue depuis longtemps, et « il y a 4320 min » ne se lit
 // pas. Reserve aux machines, dont l'absence se compte en heures, pas en minutes.
 function agoLong(sec) {
-  if (typeof sec !== 'number') return '—';
+  if (typeof sec !== 'number') return '-';
   if (sec < 60) return `il y a ${Math.round(sec)} s`;
   if (sec < 3600) return `il y a ${Math.round(sec / 60)} min`;
   if (sec < 86400) return `il y a ${Math.round(sec / 3600)} h`;
@@ -95,7 +95,7 @@ function agoLong(sec) {
 
 function row(label, value) {
   return `<div class="info-row"><span class="info-label">${esc(label)}</span>` +
-         `<span class="info-value">${value ?? '—'}</span></div>`;
+         `<span class="info-value">${value ?? '-'}</span></div>`;
 }
 
 function badge(kind, text) {
@@ -139,7 +139,7 @@ function actProgress(a) {
 // Duree ecoulee depuis le debut, calculee cote client (started_at est un epoch s
 // serveur ; l'ecart d'horloge entre machines reste negligeable pour une duree).
 function actDuration(a) {
-  if (typeof a.started_at !== 'number') return '—';
+  if (typeof a.started_at !== 'number') return '-';
   const s = Math.max(0, Math.floor(Date.now() / 1000) - a.started_at);
   if (s < 60) return `${s} s`;
   if (s < 3600) return `${Math.floor(s / 60)} min`;
@@ -154,12 +154,12 @@ function activitesTable(acts) {
     `<th class="mono">Durée</th><th>Détail</th>` +
     `</tr></thead><tbody>` +
     acts.map((a) => `<tr>` +
-      `<td><strong>${esc(a.service || '—')}</strong>` +
+      `<td><strong>${esc(a.service || '-')}</strong>` +
         (a.host ? ` <span class="info-label">${esc(a.host)}</span>` : '') + `</td>` +
-      `<td>${esc(a.type || '—')}</td>` +
+      `<td>${esc(a.type || '-')}</td>` +
       `<td class="mono">${actProgress(a)}</td>` +
       `<td class="mono">${esc(actDuration(a))}</td>` +
-      `<td>${a.detail ? esc(a.detail) : '—'}</td>` +
+      `<td>${a.detail ? esc(a.detail) : '-'}</td>` +
     `</tr>`).join('') +
     `</tbody></table></div>`;
 }
@@ -200,7 +200,7 @@ function systemdBadge(u) {
 // Consommation d'un service : CPU instantane et memoire du CGROUP complet de
 // l'unite, telles que morfMonitor les mesure via systemd. Le bloc `resources`
 // est ABSENT pour un service arrete ou desactive : non pas « 0 % », mais « non
-// applicable, rien ne tourne ». On rend alors « — », qui dit la meme chose sans
+// applicable, rien ne tourne ». On rend alors « - », qui dit la meme chose sans
 // laisser croire a une mesure a zero.
 function svcCpu(res) {
   if (!res || typeof res.cpu_percent !== 'number') {
@@ -209,9 +209,9 @@ function svcCpu(res) {
     // le temps CPU cumule s'il existe.
     if (res && typeof res.cpu_time_usec === 'number') {
       const d = duration(res.cpu_time_usec / 1e6);
-      return d ? `<span title="temps CPU cumulé">${esc(d)}</span>` : '—';
+      return d ? `<span title="temps CPU cumulé">${esc(d)}</span>` : '-';
     }
-    return '—';
+    return '-';
   }
   // Le temps CPU cumule accompagne le taux en infobulle : instantane pour la
   // charge actuelle, cumule pour le contexte, sans surcharger la colonne.
@@ -221,8 +221,8 @@ function svcCpu(res) {
 }
 
 function svcMem(res) {
-  if (!res || typeof res.memory_bytes !== 'number') return '—';
-  return esc(bytes(res.memory_bytes) || '—');
+  if (!res || typeof res.memory_bytes !== 'number') return '-';
+  return esc(bytes(res.memory_bytes) || '-');
 }
 
 // Etat d'une sonde reseau. Le backend distingue quatre cas et prend soin de ne
@@ -254,7 +254,7 @@ function webUiLink(a) {
     // Distinguer « annonce une interface mais son detail n'a pu etre lu » de
     // « n'en annonce aucune » : la premiere est un incident, la seconde un fait.
     const declares = Array.isArray(a.capabilities) && a.capabilities.includes('web_ui');
-    return declares ? badge('warn', 'annoncée, injoignable') : '<span class="info-label">—</span>';
+    return declares ? badge('warn', 'annoncée, injoignable') : '<span class="info-label">-</span>';
   }
   const label = esc(ui.label || serviceName(a.app));
   const title = ui.description ? ` title="${esc(ui.description)}"` : '';
@@ -297,7 +297,7 @@ function apiCell(a) {
 
 // Nom d'affichage d'un service : on part du nom qu'il ANNONCE (champ `app` du
 // heartbeat), jamais d'un libellé défini ici. Un service renommé s'affiche
-// alors correctement de lui-même, sans qu'on touche à morfMonitor — la config
+// alors correctement de lui-même, sans qu'on touche à morfMonitor - la config
 // n'est plus une seconde source de vérité qui peut mentir.
 //
 // Seul le préfixe « morf » est normalisé : minuscule, et la lettre suivante en
@@ -306,7 +306,7 @@ function apiCell(a) {
 // peut pas les deviner : « morfTemplateService » reste tel quel. Un nom sans
 // préfixe morf (ComponentHub, MeteoHub) est affiché exactement comme annoncé.
 function serviceName(app) {
-  if (typeof app !== 'string' || !app) return '—';
+  if (typeof app !== 'string' || !app) return '-';
   if (/^morf/i.test(app)) {
     const rest = app.slice(4);
     return 'morf' + (rest ? rest.charAt(0).toUpperCase() + rest.slice(1) : '');
@@ -323,12 +323,12 @@ function stateBadge(state) {
 }
 
 // État MATÉRIEL rapporté par le service (contrat morfBeacon : bloc hardware).
-// On affiche le libellé TEL QUEL, sans jamais déduire la présence : « — » quand
+// On affiche le libellé TEL QUEL, sans jamais déduire la présence : « - » quand
 // le service ne gère aucun matériel (bloc absent). « none » (aucun matériel
 // attendu) est neutre, PAS une alerte ; seul « degraded » est en orange.
 function hardwareCell(a) {
   const hw = a.hardware;
-  if (!hw || !hw.state) return '—';
+  if (!hw || !hw.state) return '-';
   const label = hw.label || hw.state;
   if (hw.state === 'present')  return badge('ok',   label);
   if (hw.state === 'degraded') return badge('warn', label);
@@ -339,8 +339,8 @@ function hardwareCell(a) {
 
 // Adresses IPv4 des interfaces REELLEMENT actives, sous la forme
 // « 192.168.1.105 (wlan0) ». L'adresse ne vivait que dans l'onglet Réseau ;
-// or c'est la premiere chose qu'on cherche quand un client externe — SSH, un
-// client FTP, un signet — cesse de se connecter apres un changement de bail
+// or c'est la premiere chose qu'on cherche quand un client externe - SSH, un
+// client FTP, un signet - cesse de se connecter apres un changement de bail
 // DHCP. La faire chercher dans un second onglet transforme une question de
 // trois secondes en enquete.
 function primaryAddresses(all) {
@@ -356,20 +356,20 @@ function renderEtat(all, status) {
   const addr = primaryAddresses(all);
 
   el('c-machine').innerHTML = header('Machine') +
-    row('Nom', esc(sys.hostname || '—')) +
+    row('Nom', esc(sys.hostname || '-')) +
     row('Adresse', addr || '<span class="info-label">aucune interface active</span>') +
     (sys.model ? row('Modèle', esc(sys.model)) : '') +
-    row('Système', esc([sys.os, sys.arch].filter(Boolean).join(' · ') || '—')) +
-    row('Noyau', esc(sys.kernel || '—')) +
-    row('Démarrée le', esc(sys.boot_time || '—')) +
-    row('Uptime', duration(sys.uptime_s) || '—');
+    row('Système', esc([sys.os, sys.arch].filter(Boolean).join(' · ') || '-')) +
+    row('Noyau', esc(sys.kernel || '-')) +
+    row('Démarrée le', esc(sys.boot_time || '-')) +
+    row('Uptime', duration(sys.uptime_s) || '-');
 
   el('c-sante').innerHTML = header('Service') +
     row('État', stateBadge(status.state)) +
-    row('Version', esc(status.version || '—')) +
-    row('Uptime service', duration(status.uptime_s) || '—') +
-    row('Protocole', esc(status.proto || '—')) +
-    row('Modules actifs', esc((status.metrics && status.metrics.modules) ?? '—'));
+    row('Version', esc(status.version || '-')) +
+    row('Uptime service', duration(status.uptime_s) || '-') +
+    row('Protocole', esc(status.proto || '-')) +
+    row('Modules actifs', esc((status.metrics && status.metrics.modules) ?? '-'));
 
   // Apercu : la reponse courte a « est-ce que tout va bien ? ».
   const pb = problems(all);
@@ -407,10 +407,10 @@ function renderRessources(all) {
   const temp = r.temperature || {};
   if (typeof r.cpu_percent === 'number' || typeof r.cpu_freq_mhz === 'number') {
     parts.push(`<div class="card">${header('Processeur')}` +
-      row('Utilisation', typeof r.cpu_percent === 'number' ? `${r.cpu_percent.toFixed(1)} %` : '—') +
+      row('Utilisation', typeof r.cpu_percent === 'number' ? `${r.cpu_percent.toFixed(1)} %` : '-') +
       meter(r.cpu_percent) +
-      row('Fréquence', typeof r.cpu_freq_mhz === 'number' ? `${r.cpu_freq_mhz} MHz` : '—') +
-      row('Température CPU', typeof temp.cpu_c === 'number' ? `${temp.cpu_c.toFixed(1)} °C` : '—') +
+      row('Fréquence', typeof r.cpu_freq_mhz === 'number' ? `${r.cpu_freq_mhz} MHz` : '-') +
+      row('Température CPU', typeof temp.cpu_c === 'number' ? `${temp.cpu_c.toFixed(1)} °C` : '-') +
       (typeof temp.gpu_c === 'number' ? row('Température GPU', `${temp.gpu_c.toFixed(1)} °C`) : '') +
       `</div>`);
   }
@@ -418,9 +418,9 @@ function renderRessources(all) {
   if (r.memory) {
     const m = r.memory;
     parts.push(`<div class="card">${header('Mémoire')}` +
-      row('Utilisée', `${bytes(m.used_b) ?? '—'} / ${bytes(m.total_b) ?? '—'}`) +
+      row('Utilisée', `${bytes(m.used_b) ?? '-'} / ${bytes(m.total_b) ?? '-'}`) +
       meter(m.percent) +
-      row('Disponible', bytes(m.available_b ?? m.free_b) ?? '—') +
+      row('Disponible', bytes(m.available_b ?? m.free_b) ?? '-') +
       `</div>`);
   }
 
@@ -438,14 +438,14 @@ function renderRessources(all) {
     const s = r.swap;
     parts.push(`<div class="card">${header('Swap')}` +
       (s.total_b
-        ? row('Utilisé', `${bytes(s.used_b) ?? '—'} / ${bytes(s.total_b)}`) + meter(s.percent) +
-          row('Libre', bytes(s.free_b) ?? '—')
+        ? row('Utilisé', `${bytes(s.used_b) ?? '-'} / ${bytes(s.total_b)}`) + meter(s.percent) +
+          row('Libre', bytes(s.free_b) ?? '-')
         : row('Configuré', 'non')) +
       `</div>`);
   }
 
   // Une carte PAR VOLUME : la racine seule mentait dès que /home est une
-  // partition séparée — « / » à 90 % affole alors que les données ont
+  // partition séparée - « / » à 90 % affole alors que les données ont
   // ailleurs toute la place, et inversement un /home plein restait invisible.
   // `disks` liste les volumes réels ; `disk` (la seule racine) reste le repli
   // face à un service qui n'a pas encore été mis à jour.
@@ -453,9 +453,9 @@ function renderRessources(all) {
               : r.disk ? [r.disk] : [];
   disks.forEach((d) => {
     parts.push(`<div class="card">${header('Stockage', d.mount || '')}` +
-      row('Utilisé', `${bytes(d.used_b) ?? '—'} / ${bytes(d.total_b) ?? '—'}`) +
+      row('Utilisé', `${bytes(d.used_b) ?? '-'} / ${bytes(d.total_b) ?? '-'}`) +
       meter(d.percent) +
-      row('Libre', bytes(d.free_b) ?? '—') +
+      row('Libre', bytes(d.free_b) ?? '-') +
       `</div>`);
   });
 
@@ -490,7 +490,7 @@ function renderRessources(all) {
   const missing = Object.keys(expected).filter((k) => r[k] === undefined);
   if (missing.length) {
     // Depuis que Windows collecte le CPU et la mémoire, il ne manque plus
-    // souvent que la charge moyenne — une notion Unix, non une limite de
+    // souvent que la charge moyenne - une notion Unix, non une limite de
     // collecte. Le message le dit alors précisément, plutôt que d'imputer à
     // « /proc » une absence qui n'en vient pas.
     const onlyLoad = missing.length === 1 && missing[0] === 'load';
@@ -527,15 +527,15 @@ function renderReseau(all) {
     // masquer derriere un compteur. Au-dela de deux, on resume pour ne pas
     // etirer la ligne.
     const v6 = i.ipv6 || [];
-    const v6txt = v6.length === 0 ? '—'
+    const v6txt = v6.length === 0 ? '-'
                 : v6.length <= 2  ? v6.join(', ')
                                   : `${v6.slice(0, 2).join(', ')} +${v6.length - 2}`;
     return `<tr>
       <td class="mono">${esc(i.name)}</td>
       <td>${st}</td>
-      <td class="mono">${esc((i.ipv4 || []).join(', ') || '—')}</td>
+      <td class="mono">${esc((i.ipv4 || []).join(', ') || '-')}</td>
       <td class="mono">${esc(v6txt)}</td>
-      <td class="mono">${esc(i.mac || '—')}</td>
+      <td class="mono">${esc(i.mac || '-')}</td>
     </tr>`;
   }).join('');
 
@@ -550,9 +550,9 @@ function renderReseau(all) {
 // prerelease ignorée, raison d'un état indéterminé). L'état est CALCULÉ par le
 // backend (Version::compare, sémantique) : le frontend ne fait que l'habiller.
 function versionBadge(v) {
-  if (!v) return '<span class="mono">—</span>';
-  const st = v.state || '—';
-  if (st === '—') return '<span class="mono">—</span>';   // non vérifié
+  if (!v) return '<span class="mono">-</span>';
+  const st = v.state || '-';
+  if (st === '-') return '<span class="mono">-</span>';   // non vérifié
   let kind = 'off';
   if (st === 'À jour' || st === 'Version locale plus récente') kind = 'ok';
   else if (st === 'Mise à jour disponible' || st === 'Vérification impossible') kind = 'warn';
@@ -560,7 +560,7 @@ function versionBadge(v) {
   const bits = [];
   if (v.repo) bits.push(`dépôt interrogé : ${v.owner || 'morfredus'}/${v.repo}`);
   if (v.last_success_s) bits.push(`dernière vérification réussie ${agoLong(nowS - v.last_success_s)}`);
-  if (v.stale) bits.push('contrôle actuel impossible — dernière info connue affichée');
+  if (v.stale) bits.push('contrôle actuel impossible - dernière info connue affichée');
   else if (v.last_check_s) bits.push(`dernier contrôle ${agoLong(nowS - v.last_check_s)}`);
   if (v.error) bits.push(`détail : ${v.error}`);
   const tip = bits.join(' · ');
@@ -649,7 +649,7 @@ function updateCell(v) {
 }
 
 // Lance (ou relance) une mise à jour : POST vers morfMonitor, qui proxy vers
-// l'agent morfUpdate local. Aucun popup — tout retour passe par updateStatus.
+// l'agent morfUpdate local. Aucun popup - tout retour passe par updateStatus.
 async function launchUpdate(project, version) {
   if (!project || !version) return;
   updateStatus.set(project, { version, phase: 'requesting' });
@@ -735,7 +735,7 @@ async function followUpdate(project, id, version, attempt = 0) {
 // sans popup. Aucune décision automatique : le bouton n'apparaît que pour un
 // service bloqué, et c'est l'humain qui déclenche.
 function restartCell(u, v) {
-  const detail = esc(u.sub_state || u.state || '—');
+  const detail = esc(u.sub_state || u.state || '-');
   if (!u.stuck) return detail;
   const project = v && (v.project || v.repo);
   if (!project || project === 'morfUpdate') {
@@ -858,7 +858,7 @@ function renderServices(all) {
   // le signale plutôt que d'afficher un numéro sans provenance.
   const localHost = (all.system && all.system.hostname) || '';
   const runCell = (v) => {
-    if (!v || !v.running) return '—';
+    if (!v || !v.running) return '-';
     const foreign = v.running_host && localHost &&
       v.running_host.toLowerCase() !== localHost.toLowerCase();
     return foreign
@@ -869,7 +869,7 @@ function renderServices(all) {
   const units = s.systemd || [];
   const versionsBar =
     `<div class="unavailable" style="display:flex;align-items:center;justify-content:space-between;margin:.2rem 0 .6rem">` +
-    `<span>Comparaison avec la dernière release publiée sur GitHub — ${esc(checkMeta)}.</span>` +
+    `<span>Comparaison avec la dernière release publiée sur GitHub - ${esc(checkMeta)}.</span>` +
     `<button class="btn-check-versions">Vérifier les versions</button></div>`;
 
   el('c-systemd').innerHTML = header('Services systemd', `${units.length} supervisés`) +
@@ -884,10 +884,10 @@ function renderServices(all) {
           const v = verByLabel[u.label || u.unit];
           return `<tr>
           <td>${esc(u.label || u.unit)}</td>
-          <td class="mono">${esc(u.unit || '—')}</td>
+          <td class="mono">${esc(u.unit || '-')}</td>
           <td>${systemdBadge(u)}</td>
           <td class="mono">${runCell(v)}</td>
-          <td class="mono">${esc((v && v.latest) || '—')}</td>
+          <td class="mono">${esc((v && v.latest) || '-')}</td>
           <td>${updateCell(v)}</td>
           <td class="mono">${svcCpu(u.resources)}</td>
           <td class="mono">${svcMem(u.resources)}</td>
@@ -912,9 +912,9 @@ function renderServices(all) {
          </tr></thead><tbody>` +
         eco.map((v) => `<tr>
           <td>${esc(v.service)}</td>
-          <td class="mono">${esc(v.kind || '—')}</td>
+          <td class="mono">${esc(v.kind || '-')}</td>
           <td class="mono">${runCell(v)}</td>
-          <td class="mono">${esc(v.latest || '—')}</td>
+          <td class="mono">${esc(v.latest || '-')}</td>
           <td>${versionBadge(v)}</td>
         </tr>`).join('') + `</tbody></table></div>`
       : unavailable('Aucun projet d’écosystème déclaré.',
@@ -930,12 +930,12 @@ function renderServices(all) {
          </tr></thead><tbody>` +
         probes.map((p) => `<tr>
           <td>${esc(p.label || p.name)}</td>
-          <td class="mono">${esc(p.host || '—')}</td>
-          <td class="mono">${esc(p.port ?? '—')}</td>
+          <td class="mono">${esc(p.host || '-')}</td>
+          <td class="mono">${esc(p.port ?? '-')}</td>
           <td>${probeBadge(p)}</td>
           <td class="mono">${esc(
               p.error ? p.error
-              : (typeof p.latency_ms === 'number' ? `${Math.round(p.latency_ms)} ms` : '—'))}</td>
+              : (typeof p.latency_ms === 'number' ? `${Math.round(p.latency_ms)} ms` : '-'))}</td>
         </tr>`).join('') + `</tbody></table></div>` +
         (grace
           ? `<div class="unavailable" style="margin-top:.8rem"><strong>Délai de grâce en cours.</strong><br>` +
@@ -959,7 +959,7 @@ function machineStateBadge(m) {
 }
 
 // Machines du parc : la memoire, par MACHINE, de ce que morfMonitor a decouvert.
-// Un poste entierement eteint tient ici en UNE ligne (« pi4dev — éteinte — vue il
+// Un poste entierement eteint tient ici en UNE ligne (« pi4dev - éteinte - vue il
 // y a 3 h »), au lieu de faire clignoter en rouge chacun de ses services dans le
 // tableau ci-dessous. L'absence d'une machine connue est elle-meme une
 // information ; on la garde, sans la confondre avec une panne de service.
@@ -985,7 +985,7 @@ function renderMachines(all) {
         machines.map((m) => `<tr>
           <td class="mono">${esc(m.host)}</td>
           <td>${machineStateBadge(m)}</td>
-          <td class="mono">${m.online ? '—' : esc(agoLong(m.last_seen_s))}</td>
+          <td class="mono">${m.online ? '-' : esc(agoLong(m.last_seen_s))}</td>
           <td>${m.state === 'active' ? ''
             : `<button class="btn-forget" data-host="${esc(m.host)}" title="Retirer cette machine du parc">Oublier</button>`}</td>
         </tr>`).join('') + `</tbody></table></div>` +
@@ -993,7 +993,7 @@ function renderMachines(all) {
         `<p style="margin:0">Ces machines sont apprises seules à partir des annonces ` +
         `morfBeacon : aucune n’est déclarée à la main. Une machine éteinte reste ` +
         `mémorisée, puis passe en <em>archivée</em> après une longue absence, sans ` +
-        `être supprimée. <strong>Oublier</strong> la retire définitivement — à ` +
+        `être supprimée. <strong>Oublier</strong> la retire définitivement - à ` +
         `n’utiliser que pour une machine réellement partie du parc.</p></div>`
       : unavailable('Aucune machine connue pour l’instant.',
           'Dès qu’un poste (rôle host) diffuse un heartbeat morfBeacon, il est mémorisé ici.'));
@@ -1048,17 +1048,17 @@ function renderEcosysteme(all) {
           <!-- La MACHINE est le nom que l'instance ANNONCE (champ host du
                heartbeat) : c'est lui qu'on tape suivi de .local pour la
                joindre par mDNS. Un même service présent sur plusieurs
-               machines occupe une ligne par machine — l'identité vient du
+               machines occupe une ligne par machine - l'identité vient du
                champ instance du protocole, jamais du seul nom. -->
-          <td class="mono">${esc(a.host || '—')}</td>
-          <td class="mono">${esc(a.ip || '—')}</td>
+          <td class="mono">${esc(a.host || '-')}</td>
+          <td class="mono">${esc(a.ip || '-')}</td>
           <!-- Le PORT est celui du /status annoncé dans le heartbeat
                (champ status_port) : c'est par lui que le service se joint,
                et il diffère d'un service à l'autre (8790 morfMonitor,
                8789 morfNotify...). Absent tant qu'aucune instance n'a été
                entendue (application déclarée mais hors ligne). -->
-          <td class="mono">${a.status_port ? esc(a.status_port) : '—'}</td>
-          <td class="mono">${esc(a.version || '—')}</td>
+          <td class="mono">${a.status_port ? esc(a.status_port) : '-'}</td>
+          <td class="mono">${esc(a.version || '-')}</td>
           <!-- L'ÉTAT dit ce qu'on observe, jamais ce qu'on a déclaré. Ces deux
                faits sont indépendants : « est-ce que ça tourne ? » se constate,
                « dois-je être alerté si ça s'arrête ? » se décide. Les tester
@@ -1072,13 +1072,13 @@ function renderEcosysteme(all) {
                                                        : badge('err', 'hors ligne')}</td>
           <!-- Matériel : ce que le SERVICE déclare (present/none/degraded), affiché
                tel quel. morfMonitor n'infère jamais la présence du matériel. -->
-          <td>${a.online ? hardwareCell(a) : '—'}</td>
-          <td class="mono">${esc(a.last_seen_s === undefined ? '—' : ago(a.last_seen_s))}</td>
+          <td>${a.online ? hardwareCell(a) : '-'}</td>
+          <td class="mono">${esc(a.last_seen_s === undefined ? '-' : ago(a.last_seen_s))}</td>
           <td>${webUiLink(a)}</td>
           <td>${apiCell(a)}</td>
         </tr>`).join('') + `</tbody></table></div>` +
         // Un paragraphe par idée, pas un pavé : le texte se consulte, il ne se
-        // lit pas d'une traite. La durée n'est jamais écrite en dur — elle
+        // lit pas d'une traite. La durée n'est jamais écrite en dur - elle
         // vient de morfsystem.json, et un texte qui dirait « 60 s » mentirait
         // dès que la configuration en déciderait autrement.
         `<div class="unavailable" style="margin-top:.8rem">` +
@@ -1094,7 +1094,7 @@ function renderEcosysteme(all) {
         `(<code>morfsystem.json</code>). Ce n’est pas une erreur.</p>` +
         `<p style="margin:.6rem 0 0">Un même service installé sur plusieurs machines ` +
         `apparaît une fois par machine.</p>` +
-        `<p style="margin:.6rem 0 0">Après ${esc(offlineAfter ?? '—')} secondes sans ` +
+        `<p style="margin:.6rem 0 0">Après ${esc(offlineAfter ?? '-')} secondes sans ` +
         `heartbeat, un service est considéré hors ligne.</p></div>`
       : unavailable('Aucune annonce reçue.',
           'Aucun service morfSystem ne diffuse sur le port beacon, ou le pare-feu bloque la diffusion UDP.'));
@@ -1120,7 +1120,7 @@ function problems(all) {
   });
   // Seule une application DECLAREE justifie une alerte quand elle disparait :
   // declarer, c'est dire « je m'attends a ce service ». Une application
-  // simplement entendue puis arretee — un outil de bureau que l'on ferme — n'a
+  // simplement entendue puis arretee - un outil de bureau que l'on ferme - n'a
   // jamais ete promise a personne, et la signaler indefiniment noierait les
   // vraies pannes.
   //
@@ -1202,7 +1202,7 @@ function renderDiagnostic(all, config) {
   el('c-reboot').innerHTML = header('Dernier redémarrage') +
     row('Cause', esc(rb.cause || 'inconnue')) +
     row('Confiance', typeof rb.confidence === 'number'
-        ? `${Math.round(rb.confidence * 100)} %` : '—') +
+        ? `${Math.round(rb.confidence * 100)} %` : '-') +
     (rb.label ? `<div class="unavailable" style="margin-top:.6rem">${esc(rb.label)}</div>` : '') +
     (rb.evidence ? `<div class="unavailable" style="margin-top:.5rem">${esc(rb.evidence)}</div>` : '');
 
@@ -1222,7 +1222,7 @@ function renderDiagnostic(all, config) {
 
   el('c-config').innerHTML = header('Configuration partagée') +
     row('Chargée', cfg.loaded ? badge('ok', 'oui') : badge('err', 'non')) +
-    row('Chemin', `<span class="mono">${esc(cfg.path || '—')}</span>`) +
+    row('Chemin', `<span class="mono">${esc(cfg.path || '-')}</span>`) +
     (cfg.loaded ? row('Déclare', esc(counts)) : '') +
     (cfg.loaded
       ? ''
@@ -1243,7 +1243,7 @@ function setConn(kind, text) {
 // « Le service ne repond pas » et « le service repond mais n'a rien a dire »
 // sont deux pannes differentes, avec deux causes et deux remedes differents.
 // Les confondre sous un meme « injoignable » envoie chercher un probleme reseau
-// la ou il s'agit d'une configuration — c'est le contraire du diagnostic.
+// la ou il s'agit d'une configuration - c'est le contraire du diagnostic.
 function showServiceProblem(title, detail) {
   const block = header('Diagnostic') + unavailable(title, detail);
   ['c-machine', 'c-interfaces', 'c-systemd', 'c-ecosystem-libs', 'c-beacon', 'c-anomalies'].forEach((id) => {
@@ -1297,10 +1297,10 @@ async function renderEspDiag() {
         const last = samples.length ? samples[samples.length - 1] : {};
         return `<div class="esp-block">
           <div class="esp-title">${esc(s.service || s.instance)} <span class="muted">${esc(s.host || '')}</span></div>
-          ${row('Heap libre', last.free_heap_b != null ? bytes(last.free_heap_b) : '—')}
-          ${row('Plus gros bloc', last.free_block_b != null ? bytes(last.free_block_b) : '—')}
-          ${row('Heap min (48 h)', minHeap != null ? bytes(minHeap) : '—')}
-          ${row('Uptime', last.uptime_s != null ? duration(last.uptime_s) : '—')}
+          ${row('Heap libre', last.free_heap_b != null ? bytes(last.free_heap_b) : '-')}
+          ${row('Plus gros bloc', last.free_block_b != null ? bytes(last.free_block_b) : '-')}
+          ${row('Heap min (48 h)', minHeap != null ? bytes(minHeap) : '-')}
+          ${row('Uptime', last.uptime_s != null ? duration(last.uptime_s) : '-')}
           <div class="esp-spark">${sparkline(heaps)}</div>
         </div>`;
       }).join('');
@@ -1419,7 +1419,7 @@ function openLogDetail(source) {
       <button class="btn" onclick="goDiagnostic()">← Retour</button>
       <a class="btn" href="/api/logs/download?source=${src}">Télécharger les logs</a>
       <a class="btn" href="/api/logs/diagnostic?source=${src}">Télécharger diagnostic</a></div>`;
-  el('c-logdetail').innerHTML = header(`Logs — ${esc(source)}`) + actions
+  el('c-logdetail').innerHTML = header(`Logs - ${esc(source)}`) + actions
     + '<pre id="logdetail-pre" class="esp-log esp-log-full" data-src="'
     + esc(source) + '">Chargement…</pre>';
   refreshLogDetail();
@@ -1443,7 +1443,7 @@ async function refresh() {
     const config = configR.ok ? await configR.json().catch(() => ({})) : {};
 
     // 503 : le service tourne (il a repondu), mais aucun module de supervision
-    // n'est actif. Le corps porte la raison — le lire plutot que de traiter
+    // n'est actif. Le corps porte la raison - le lire plutot que de traiter
     // tout code != 200 comme une injoignabilite.
     if (!allR.ok) {
       let apiMsg = `HTTP ${allR.status}`;
@@ -1454,15 +1454,15 @@ async function refresh() {
         el('hdr-host').textContent = status.host || '';
         setConn('warn', 'sans données');
         showServiceProblem(
-          `morfMonitor répond, mais ne collecte rien — ${apiMsg}.`,
+          `morfMonitor répond, mais ne collecte rien - ${apiMsg}.`,
           'Le service tourne et annonce sa présence, mais aucun module de type ' +
           '« monitor » n’est actif : les routes /api/ n’ont donc rien à renvoyer. ' +
-          'Vérifier la section « modules » de morfmonitor.json — seul le type ' +
+          'Vérifier la section « modules » de morfmonitor.json - seul le type ' +
           '« monitor » est reconnu. Si aucune configuration n’est trouvée, le ' +
           'service consigne la raison au démarrage (journalctl -u morfmonitor).');
       } else {
         setConn('err', 'injoignable');
-        showServiceProblem(`Service injoignable — ${apiMsg}.`,
+        showServiceProblem(`Service injoignable - ${apiMsg}.`,
           'Ni /api/all ni /status ne répondent.');
       }
       el('foot-refresh').textContent =

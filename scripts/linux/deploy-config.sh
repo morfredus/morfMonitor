@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# deploy-config.sh — copie les configurations du depot vers leurs emplacements
+# deploy-config.sh - copie les configurations du depot vers leurs emplacements
 #                    d'installation. C'est LE script de deploiement.
 #
 # Il y a DEUX fichiers de configuration, et ils ne vont pas au meme endroit :
@@ -49,7 +49,7 @@ SHARED_DIR="${MT_SHARED_DIR:-/etc/morfsystem}"
 SERVICE_NAME="${MT_SERVICE_NAME:-morfmonitor}"
 
 # Commande d'elevation. Vide quand on est deja root, et surchargeable par
-# MT_SUDO pour deployer vers un emplacement accessible sans privileges — ce qui
+# MT_SUDO pour deployer vers un emplacement accessible sans privileges - ce qui
 # rend le script VERIFIABLE. Sans cela il n'etait testable que sur une machine
 # reelle, et un « sudo » d'une autre plateforme (Windows en fournit un qui
 # renvoie toujours 0) faisait passer les verifications pour bonnes a tort.

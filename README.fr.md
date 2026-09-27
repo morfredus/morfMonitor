@@ -2,7 +2,7 @@
 
 *Lire dans une autre langue : [English](README.md) · **Français** (ce document).*
 
-[![Version](https://img.shields.io/badge/version-0.24.1-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.24.5-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -40,6 +40,13 @@ affichent les mêmes données sans dupliquer une ligne.
 | `GET /api/all` | tout, en une seule requête |
 | `GET /api/events` | journal d'événements récent, fenêtre 24 h (contrat `morfhistory/1`) |
 | `GET /api/stats/daily` · `/quarterly` · `/annual` · `/life` | agrégats de supervision : incidents, indisponibilité, disponibilité dans le temps |
+| `GET /api/health/history?service=` | historique de santé sur 48 h par service (uptime, heap), relevé à chaque `/status` |
+| `GET /api/logs?source=&limit=` | lignes de logs UDP captées des ESP32 (anneau en RAM, ~400 lignes par source) |
+| `GET /api/logs/download?source=` · `GET /api/logs/diagnostic?source=` | les mêmes logs en fichier texte, et le bilan diagnostic d'un équipement (constantes + historique de santé + logs) |
+| `POST /api/updates` · `GET /api/updates/<id>` | lancer une mise à jour, puis suivre son opération (relayé à l'agent morfUpdate local) |
+| `POST /api/versions/check` | rafraîchir tout de suite le cache « dernière release » sans attendre son TTL |
+| `POST /api/restart` | relancer un service de la liste blanche (relayé à morfUpdate, suivi via `/api/updates/<id>`) |
+| `POST /api/machines/forget` | oublier une machine apprise par le registre beacon (`{"host": "..."}`) |
 
 **Mémoire temporelle (`morfhistory/1`).** Au-delà du « maintenant », morfMonitor
 garde la mémoire de ce qu'il observe : il transforme les changements d'état qu'il
@@ -156,12 +163,15 @@ ou exposé, indiquer l'adresse du LAN. Il n'y a aucune authentification : le
 modèle de confiance est le réseau local, conformément au principe de
 l'écosystème.
 
-La page Diagnostic n'expose **délibérément aucun visualiseur de journaux**. Elle
-dérive ses anomalies des données que l'API renvoie déjà. Exposer la sortie de
-journald élargirait le profil d'exposition bien au-delà de métriques : une ligne
-de log peut citer des chemins, des valeurs de configuration et, dans un message
-d'erreur, des identifiants manipulés par d'autres services. C'est une décision
-séparée.
+La page Diagnostic n'expose **délibérément aucun visualiseur journald**. Montrer
+les journaux système de la machine élargirait le profil d'exposition bien au-delà
+de métriques : une ligne de log peut citer des chemins, des valeurs de
+configuration et, dans un message d'erreur, des identifiants manipulés par
+d'autres services. Seule exception, les **équipements ESP32** (MeteoHub, la
+sonde) : leurs logs UDP (port 5005) circulent déjà en clair sur le LAN.
+morfMonitor en garde les ~400 dernières lignes par équipement, en RAM seulement,
+et la page Diagnostic les affiche à côté du bloc santé de chacun (heap libre, plus
+grand bloc, uptime). Rien n'est écrit sur disque.
 
 ## Le système ne fait pas ce que j'attends
 
@@ -178,15 +188,15 @@ morfMonitor ne déploie **que sa propre** `morfmonitor.json`. Le fichier partag�
 `config.py shared`. `morf install` le provisionne automatiquement avant
 d'enregistrer morfMonitor (qui le déclare prérequis via `requires_shared_config`).
 
-Modifier un fichier du dépôt ne change **rien** tant que `deploy-config.sh` n'a
-pas été lancé. C'est la cause la plus fréquente de « j'ai pourtant corrigé ça ».
+Modifier un fichier du dépôt ne change **rien** tant que
+`./service.py config push --force` n'a pas été lancé. C'est la cause la plus fréquente de « j'ai pourtant corrigé ça ».
 
 | Ce que je constate | Pourquoi | Quoi faire |
 |---|---|---|
-| J'ai modifié un fichier de `config/` et rien ne change | Le service lit `/opt` et `/etc` | `./scripts/linux/deploy-config.sh` |
+| J'ai modifié un fichier de `config/` et rien ne change | Le service lit `/etc` | `./service.py config push --force` |
 | Toutes les routes `/api/` répondent **503** | Aucun module de type `monitor` déclaré | `./scripts/linux/config-tool.sh check` |
 | Les listes services / sondes / applications sont **vides** | la config partagée `morfsystem.json` n'est pas installée | `./config.py shared install` (depuis le clone morfTools) |
-| J'ai ajouté une entrée à `systemd_services` ou `beacon_apps`, elle n'apparaît pas | `update` ajoute les **clés**, jamais les **entrées de liste** | `./scripts/linux/deploy-config.sh` (il écrase) |
+| J'ai ajouté une entrée à `systemd_services` ou `beacon_apps`, elle n'apparaît pas | `update` ajoute les **clés**, jamais les **entrées de liste** | `./config.py shared apply` depuis morfTools (il écrase) |
 | J'ai édité le `.example.json`, c'est l'autre qui part | Le fichier **réel** est prioritaire | Éditer `config/morfsystem.json` |
 | Une application est en **anomalie permanente** | `enabled: true` sur une application lancée par intermittence | La passer à `false` |
 | Une application affiche **« désactivé »** | `enabled: false` | La passer à `true` si son absence doit alerter |
@@ -307,8 +317,9 @@ ses configurations - est declare dans `service.json` a cote. Les quatre etapes
 d'installation vivent une seule fois pour tout le parc ; seul le gestionnaire
 de services change selon la plateforme.
 
-Les anciens scripts `scripts/linux/` et `scripts/windows/` fonctionnent
-toujours, inchanges.
+Deux paires `scripts/linux/` et `scripts/windows/` subsistent : `config-tool`, et
+l'ancien `deploy-config`, remplacé par `service.py config push --force` et conservé
+seulement jusqu'à son retrait.
 
 Chaque script a son équivalent Windows dans `scripts/windows/` (tâche
 planifiée) :
@@ -317,7 +328,7 @@ planifiée) :
 |---|---|---|
 | Installer | `service.py install` | `service.py install` |
 | Mettre à jour | `service.py update` | `service.py update` |
-| Déployer la config du dépôt | `deploy-config.sh` | `deploy-config.ps1` |
+| Déployer la config du dépôt | `service.py config push --force` | `service.py config push --force` |
 | Gérer la config déployée | `config-tool.sh` | `config-tool.ps1` |
 
 La logique JSON reste en Python (`merge-config.py`, `check-config.py`),
@@ -349,33 +360,30 @@ morfMonitor : sur une machine neuve, inutile de la lancer à la main. La source 
 votre fichier réel (`config/morfsystem.json`) s'il existe dans le clone, sinon
 l'exemple.
 
-> Le script historique `./scripts/linux/deploy-config.sh` sert encore pour la
-> config propre du service, mais le `morfsystem.json` partagé ne passe plus par
-> morfMonitor - utiliser `config.py shared` pour lui.
-
 ### Les autres outils, et quand ils servent
 
-`deploy-config.sh` **écrase**. Ce n'est pas toujours ce qu'on veut :
+`config push --force` **écrase** (après une sauvegarde datée). Ce n'est pas
+toujours ce qu'on veut :
 
 | Besoin | Outil |
 |---|---|
-| Pousser mes fichiers tels quels | `deploy-config.sh` ← le cas courant |
+| Pousser ma config propre telle quelle | `./service.py config push --force` ← le cas courant |
+| Pousser le `morfsystem.json` partagé tel quel | `./config.py shared apply` (morfTools) |
 | Ajouter les clés nouvelles **sans** toucher à mes réglages | `service.py update` |
 | Savoir pourquoi le service ne collecte rien | `config-tool.sh check` |
 | Comparer déployé et dépôt | `config-tool.sh diff` |
 
-**`install` et `update` suivent la même règle de source** que `deploy` : votre
-fichier réel s'il existe, l'exemple sinon. Et tous trois traitent désormais les
-**deux** configurations - `install` ne plaçait que celle du service, si bien
-qu'une installation neuve démarrait sans rien superviser.
+**`install`, `update` et `config push` suivent la même règle de source** : votre
+fichier réel s'il existe, l'exemple sinon.
 
 `install` ne remplace jamais un fichier existant : il ne pose que ce qui manque.
 
 **Une limite à connaître** : `update` ajoute les **clés** nouvelles, jamais les
 **entrées de liste**. Un service ajouté à `systemd_services` ou une application
 ajoutée à `beacon_apps` n'arrivera donc pas par `update` - ce serait activer une
-surveillance que vous n'avez pas demandée. Pour les récupérer, utiliser
-`deploy-config.sh`, qui écrase.
+surveillance que vous n'avez pas demandée. Pour les récupérer, pousser le fichier
+(`config push --force` pour la config du service, `config.py shared apply` pour la
+config partagée) : les deux écrasent.
 
 ## Philosophie
 

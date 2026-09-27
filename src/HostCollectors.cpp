@@ -22,8 +22,8 @@
 
 // Les collecteurs de ressources parlent au systeme, et le systeme differe :
 // Linux lit /proc et /sys, Windows appelle l'API Win32. C'est la frontiere de
-// plateforme la plus basse du parc, isolee ici pour que le reste — modules,
-// API, interface — n'en sache jamais rien et serve le meme JSON partout.
+// plateforme la plus basse du parc, isolee ici pour que le reste - modules,
+// API, interface - n'en sache jamais rien et serve le meme JSON partout.
 #ifdef _WIN32
 #  ifndef WIN32_LEAN_AND_MEAN
 #    define WIN32_LEAN_AND_MEAN
@@ -233,7 +233,7 @@ QJsonObject ResourceCollector::collect() {
     //
     // La charge « load average » n'est PAS reproduite : c'est une moyenne de
     // file d'exécution propre à Unix, sans équivalent fidèle sous Windows. On
-    // l'omet plutôt que d'en fabriquer une fausse — le taux CPU répond à la
+    // l'omet plutôt que d'en fabriquer une fausse - le taux CPU répond à la
     // même question, « est-ce occupé ? ». La fréquence courante et la
     // température, qui demandent des pilotes ou WMI et restent peu fiables,
     // sont omises pour la même raison d'honnêteté.
@@ -245,7 +245,7 @@ QJsonObject ResourceCollector::collect() {
                      | static_cast<quint64>(ft.dwLowDateTime);
             };
             // kernelFt INCLUT le temps d'inactivité : total = kernel + user, et
-            // l'occupation est la part non-inactive entre deux relevés — le même
+            // l'occupation est la part non-inactive entre deux relevés - le même
             // calcul de delta que /proc/stat, d'où le partage de l'état
             // précédent (m_prevTotal / m_prevIdle).
             const quint64 idle  = toU64(idleFt);
@@ -279,7 +279,7 @@ QJsonObject ResourceCollector::collect() {
             // le fichier d'échange isolément : ses champs pageFile décrivent le
             // plafond de validation (RAM + pagefile), dont on ne peut pas
             // déduire l'occupation du pagefile sans se tromper. Une première
-            // tentative affichait « 100 % » — précisément la fausse alerte que
+            // tentative affichait « 100 % » - précisément la fausse alerte que
             // morfMonitor existe pour éviter. On le déclare donc non configuré,
             // ce qui est neutre, plutôt que de publier un chiffre inventé.
             o["swap"] = QJsonObject{{"total_b", 0}, {"percent", 0}};
@@ -288,7 +288,7 @@ QJsonObject ResourceCollector::collect() {
 #endif
 
     // --- Disque : tous les volumes REELS montés -----------------------------
-    // La racine seule mentait dès que /home est une partition séparée —
+    // La racine seule mentait dès que /home est une partition séparée -
     // installation Linux classique sur un portable : « / » à 90 % affole alors
     // que les données ont ailleurs toute la place, et inversement un /home
     // plein restait invisible. On liste donc chaque volume réel, en écartant
@@ -299,7 +299,7 @@ QJsonObject ResourceCollector::collect() {
     // il écartait aussi TOUS les volumes Windows (« C: », « D: »), dont le
     // périphérique ne commence pas par /dev/. QStorageInfo est portable ; le
     // filtre ne devait pas cesser de l'être. La liste des pseudo-systèmes vaut
-    // sur les deux plateformes — inexistants sous Windows, ils n'y retirent
+    // sur les deux plateformes - inexistants sous Windows, ils n'y retirent
     // rien.
     {
         static const QSet<QByteArray> kPseudoFs = {
@@ -385,7 +385,7 @@ QJsonObject ResourceCollector::collect() {
 #endif
         // Tri par point de montage : « / » d'abord, puis /boot, /home… L'ordre
         // de mountedVolumes() est celui du montage, qui varie d'un boot à
-        // l'autre — un affichage qui change de place à chaque redémarrage se
+        // l'autre - un affichage qui change de place à chaque redémarrage se
         // lit comme une panne.
         std::sort(vols.begin(), vols.end(),
                   [](const Vol& a, const Vol& b) { return a.mount < b.mount; });

@@ -3,6 +3,49 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.24.5] - 2026-09-27
+
+### Changed
+
+- Re-vendored morfBeacon to 0.7.2 (documentation-only release; `include/` and
+  `src/` unchanged).
+- Re-vendored morfUpdate (`third_party/morf/morfupdate`) to 0.8.2 (vendoring-only release; `include/` and
+  `src/` unchanged).
+
+## [0.24.4] - 2026-09-27
+
+### Changed
+
+- Re-vendored morfDeploy to 0.20.7 (dead-code removal and punctuation only; no
+  behaviour change).
+- Re-vendored morfUpdate from 0.5.3 to 0.8.1. The copy used by the service-version
+  view had fallen behind (it is not in the `morf doctor` vendored-copy inventory);
+  morfMonitor only uses the release-checking core, which builds unchanged.
+
+## [0.24.3] - 2026-09-27
+
+### Changed
+
+- Em dashes replaced by `-` in the project's own files (code comments, UI
+  placeholders, docs), per the parc punctuation rule.
+
+## [0.24.2] - 2026-09-27
+
+### Fixed
+
+- **The READMEs said the Diagnostic page had no log viewer**, while 0.23.0 added the
+  ESP32 recent-logs view there. The text now separates what stays excluded (the
+  machine's journald) from the exception (ESP32 UDP logs, RAM only).
+- **Undocumented routes.** The HTTP API tables now list `/api/health/history`,
+  `/api/logs`, `/api/logs/download`, `/api/logs/diagnostic`, `/api/updates`,
+  `/api/updates/<id>`, `/api/versions/check`, `/api/restart` and
+  `/api/machines/forget`. The 404 route hint also names the three log routes.
+- **Docs and example comments steered to the legacy `deploy-config.sh`.** Both
+  READMEs and both `config/*.example.json` comments now point to
+  `service.py config push --force` (own config) and morfTools `config.py shared`
+  (shared file). The `deploy-config` scripts remain, flagged as legacy, until they
+  are retired.
+
 ## [0.24.1] - 2026-09-16
 
 ### Fixed
@@ -595,7 +638,7 @@ et du [versionnage sémantique](https://semver.org/lang/fr/).
   sont exposées dans `services.machines`.
 - **Vue par machine dans l'onglet Écosystème.** Une carte « Machines du parc »
   liste chaque machine et son état ; un poste entièrement éteint y tient en une
-  seule ligne (« pi4dev — éteinte — vue il y a 3 h ») au lieu de faire clignoter en
+  seule ligne (« pi4dev - éteinte - vue il y a 3 h ») au lieu de faire clignoter en
   rouge chacun de ses services, désormais masqués du tableau beacon.
 
 ### Modifié

@@ -2,7 +2,7 @@
 
 *Read in another language: **English** (this document) · [Français](README.fr.md).*
 
-[![Version](https://img.shields.io/badge/version-0.24.1-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.24.5-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![License](https://img.shields.io/badge/License-GPL--3.0--only-blue)
@@ -28,6 +28,13 @@ system itself. They all read morfMonitor instead.
 | `GET /api/all` | everything, in a single request |
 | `GET /api/events` | recent event journal, 24 h window (contract `morfhistory/1`) |
 | `GET /api/stats/daily` · `/quarterly` · `/annual` · `/life` | supervision aggregates: incidents, downtime, availability over time |
+| `GET /api/health/history?service=` | 48 h health history per service (uptime, heap), sampled at each `/status` |
+| `GET /api/logs?source=&limit=` | captured ESP32 UDP log lines (RAM ring, ~400 lines per source) |
+| `GET /api/logs/download?source=` · `GET /api/logs/diagnostic?source=` | the same logs as a text file, and a device's diagnostic bundle (constants + health history + logs) |
+| `POST /api/updates` · `GET /api/updates/<id>` | start an update, then follow its operation (relayed to the local morfUpdate agent) |
+| `POST /api/versions/check` | refresh the "latest release" cache now instead of waiting for its TTL |
+| `POST /api/restart` | restart a whitelisted service (relayed to morfUpdate, followed through `/api/updates/<id>`) |
+| `POST /api/machines/forget` | forget a machine learned from the beacon registry (`{"host": "..."}`) |
 
 **Temporal memory (`morfhistory/1`).** Beyond "now", morfMonitor remembers what it
 observes: it turns the state changes it already detects (systemd lifecycle, beacon
@@ -108,11 +115,14 @@ Set `"web_enabled": false` to serve the JSON routes only.
 host, set the LAN address instead. There is no authentication: the trust model
 is the local network, consistent with the ecosystem's LAN-only design.
 
-The diagnostic page deliberately exposes **no raw log viewer**. It reports
-anomalies derived from data the API already returns. Surfacing journald output
-would broaden the exposure profile well beyond metrics - log lines can quote
-paths, configuration values and, in error messages, credentials handled by other
-services. That remains a separate decision.
+The diagnostic page deliberately exposes **no journald viewer**. Surfacing the
+machine's system logs would broaden the exposure profile well beyond metrics - log
+lines can quote paths, configuration values and, in error messages, credentials
+handled by other services. The one exception is the **ESP32 devices** (MeteoHub,
+the probe): their UDP logs (port 5005) are already broadcast on the LAN, so
+morfMonitor keeps the last ~400 lines per device in RAM and the Diagnostic page
+shows them next to each device's health block (free heap, largest block, uptime).
+Nothing is written to disk.
 
 ## The system does not do what I expect
 
@@ -129,15 +139,16 @@ morfMonitor deploys **only its own** `morfmonitor.json`. The shared
 `config.py shared`. `morf install` provisions it automatically before registering
 morfMonitor (which declares it a prerequisite via `requires_shared_config`).
 
-Editing a repository file changes **nothing** until `deploy-config.sh` has run.
+Editing a repository file changes **nothing** until `./service.py config push --force`
+has run.
 That is the most common cause of "but I already fixed that".
 
 | What I see | Why | What to do |
 |---|---|---|
-| I edited a file in `config/` and nothing changed | The service reads `/opt` and `/etc` | `./scripts/linux/deploy-config.sh` |
+| I edited a file in `config/` and nothing changed | The service reads `/etc` | `./service.py config push --force` |
 | Every `/api/` route answers **503** | No module of type `monitor` is declared | `./scripts/linux/config-tool.sh check` |
 | The services / probes / apps lists are **empty** | the shared `morfsystem.json` is not installed | `./config.py shared install` (from the morfTools clone) |
-| I added an entry to `systemd_services` or `beacon_apps` and it does not show | `update` adds **keys**, never **list entries** | `./scripts/linux/deploy-config.sh` (it overwrites) |
+| I added an entry to `systemd_services` or `beacon_apps` and it does not show | `update` adds **keys**, never **list entries** | `./config.py shared apply` from morfTools (it overwrites) |
 | I edited the `.example.json` but the other one is deployed | The **real** file wins | Edit `config/morfsystem.json` |
 | An application is permanently **flagged** | `enabled: true` on an app that runs occasionally | Set it to `false` |
 | An application shows **"désactivé"** | `enabled: false` | Set it to `true` if its absence should alert |
@@ -200,17 +211,15 @@ file is installed separately by its single owner:
 so on a fresh machine you do not run it by hand. The source is your real file
 (`config/morfsystem.json`) when it exists in the clone, and the example otherwise.
 
-> The legacy `./scripts/linux/deploy-config.sh` still exists for the service's own
-> config, but the shared `morfsystem.json` is no longer deployed through morfMonitor
-> - use `config.py shared` for it.
-
 ### The other tools, and when they help
 
-`deploy-config.sh` **overwrites**, which is not always what you want:
+`config push --force` **overwrites** (after a dated backup), which is not always
+what you want:
 
 | Need | Tool |
 |---|---|
-| Push my files as they are | `deploy-config.sh` ← the common case |
+| Push my own config as it is | `./service.py config push --force` ← the common case |
+| Push the shared `morfsystem.json` as it is | `./config.py shared apply` (morfTools) |
 | Add new keys **without** touching my settings | `service.py update` |
 | Find out why the service collects nothing | `config-tool.sh check` |
 | Compare deployed against repository | `config-tool.sh diff` |
@@ -219,28 +228,29 @@ so on a fresh machine you do not run it by hand. The source is your real file
 the diagnosis stays correct as the factory evolves, and `service.py update` runs
 it after every update.
 
-**`install` and `update` follow the same source rule** as `deploy`: your real
-file when it exists, the example otherwise. All three now handle **both**
-configurations - `install` used to place only the service one, so a fresh
-install started up supervising nothing.
+**`install`, `update` and `config push` follow the same source rule**: your real
+file when it exists, the example otherwise.
 
 `install` never replaces an existing file: it only puts down what is missing.
 
 **One limit worth knowing**: `update` adds new **keys**, never new **list
 entries**. A service added to `systemd_services`, or an application added to
 `beacon_apps`, will not arrive through `update` - that would switch on
-monitoring you never asked for. Use `deploy-config.sh`, which overwrites.
+monitoring you never asked for. Push the file instead (`config push --force` for
+the service config, `config.py shared apply` for the shared one): both overwrite.
 
-From morfTools, `python3 ./morfTools/config.py deploy morfMonitor` calls the very same
-script - useful to drive several projects from one place, pointless if you are
-already inside morfMonitor.
+From morfTools, `./config.py deploy morfMonitor` runs the very same
+`service.py config push --force` - useful to drive several projects from one
+place, pointless if you are already inside morfMonitor.
 
 ### Linux and Windows parity
 
 Service installation no longer needs a counterpart: `./service.py` is one
 implementation for Linux, Windows and the Raspberry Pi, and only the service
-manager it drives differs. The remaining `scripts/linux/` and `scripts/windows/`
-pairs (`deploy-config`, `config-tool`) still work and are unchanged.
+manager it drives differs, and configuration pushes go through it too. Two
+`scripts/linux/` and `scripts/windows/` pairs remain: `config-tool`, and the legacy
+`deploy-config`, superseded by `service.py config push --force` and kept only until
+it is retired.
 
 The **JSON logic stays in Python** (`merge-config.py`, `check-config.py`), called
 unchanged by both sides. Python is the only one of the three languages in this

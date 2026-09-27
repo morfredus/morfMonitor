@@ -205,12 +205,12 @@ bool MonitorModule::start() {
 
     // Amorce la mesure CPU : /proc/stat ne donne que des compteurs cumules, si
     // bien que la premiere lecture ne peut produire aucun taux. Sans cette
-    // amorce, la toute premiere requete a l'API renverrait un CPU absent — que
+    // amorce, la toute premiere requete a l'API renverrait un CPU absent - que
     // les clients afficheraient comme 0 %, une valeur FAUSSE et non « inconnue ».
     m_resources.collect();
 
     // Alerte de panne fonctionnelle : evaluation periodique (en memoire, non
-    // bloquante). 30 s suffisent — l'anti-rebond (voir evaluateFunctionalAlerts)
+    // bloquante). 30 s suffisent - l'anti-rebond (voir evaluateFunctionalAlerts)
     // exige de toute facon une panne SOUTENUE avant d'alerter.
     m_alertTimer = new QTimer(this);
     m_alertTimer->setInterval(30 * 1000);
@@ -610,13 +610,13 @@ QString MonitorModule::logsText(const QString& source) const {
 
 QString MonitorModule::diagnosticText(const QString& source) const {
     const auto fmtBytes = [](int b) -> QString {
-        if (b < 0) return QStringLiteral("—");
+        if (b < 0) return QStringLiteral("-");
         if (b >= 1024 * 1024) return QString::number(b / 1048576.0, 'f', 2) + QStringLiteral(" MiB");
         if (b >= 1024)        return QString::number(b / 1024.0, 'f', 1) + QStringLiteral(" KiB");
         return QString::number(b) + QStringLiteral(" B");
     };
     const auto fmtDur = [](int s) -> QString {
-        if (s < 0) return QStringLiteral("—");
+        if (s < 0) return QStringLiteral("-");
         const int d = s / 86400, h = (s % 86400) / 3600, m = (s % 3600) / 60;
         QString r;
         if (d)       r += QString::number(d) + QStringLiteral("j ");
@@ -639,7 +639,7 @@ QString MonitorModule::diagnosticText(const QString& source) const {
     out += QStringLiteral("=== morfMonitor diagnostic ===\n");
     out += QStringLiteral("Date : %1\n").arg(QDateTime::currentDateTime().toString(Qt::ISODate));
     out += QStringLiteral("Service : %1\n").arg(source);
-    out += QStringLiteral("IP : %1\n").arg(ip.isEmpty() ? QStringLiteral("—") : ip);
+    out += QStringLiteral("IP : %1\n").arg(ip.isEmpty() ? QStringLiteral("-") : ip);
     if (hs && !hs->samples.isEmpty()) {
         const HealthSample& last = hs->samples.last();
         int minHeap = -1;
@@ -694,7 +694,7 @@ QJsonArray MonitorModule::activitiesJson(qint64 nowSecs) const {
 // --- Choix de l'adresse d'un emetteur multi-domicilie ------------------------
 //
 // Un service diffuse sur TOUTES les interfaces de sa machine. Un poste Windows
-// avec WSL ou Hyper-V, un portable sous VPN, en ont plusieurs — et le dernier
+// avec WSL ou Hyper-V, un portable sous VPN, en ont plusieurs - et le dernier
 // datagramme recu gagnait, si bien que morfMonitor retenait volontiers
 // « 172.24.224.1 » (reseau virtuel) pour une machine joignable en
 // « 192.168.1.14 ». L'adresse restait exacte du point de vue de la couche
@@ -787,14 +787,14 @@ void MonitorModule::onBeaconDatagram() {
         // La clef est l'IDENTITE D'INSTANCE, pas le nom : deux machines qui font
         // tourner le meme service sont deux entrees, et chacune vit sa vie. Un
         // emetteur qui n'annonce pas `instance` (version anterieure du
-        // protocole) en recoit une derivee de son adresse — moins stable qu'un
+        // protocole) en recoit une derivee de son adresse - moins stable qu'un
         // nom d'hote, mais qui distingue tout autant les machines.
         const QString key = s.instance.isEmpty()
             ? app + QLatin1Char('@') + s.sourceIp : s.instance;
 
         // Une entree deja connue conserve le detail deja recupere : inutile de
         // reinterroger /status a chaque heartbeat. C'est le sens de
-        // « push presence / pull detail » — la presence est bavarde, le detail
+        // « push presence / pull detail » - la presence est bavarde, le detail
         // ne se demande qu'une fois.
         if (const auto it = m_beaconSeen.constFind(key); it != m_beaconSeen.constEnd()) {
             s.webUi         = it->webUi;
@@ -834,13 +834,13 @@ void MonitorModule::onBeaconDatagram() {
 
 // Les instances entendues sont conservees pour la DECOUVERTE : brancher un
 // service et le voir apparaitre indique quoi ajouter a la configuration. Passe
-// un certain temps, cet interet disparait et l'entree devient du bruit — une
+// un certain temps, cet interet disparait et l'entree devient du bruit - une
 // application lancee une fois puis fermee serait listee « hors ligne »
 // indefiniment, et la table ne cesserait de croitre.
 //
 // Les instances des applications DECLAREES sont purgees comme les autres : ce
 // n'est plus l'entree entendue qui garantit la visibilite d'une absence, c'est
-// la DECLARATION elle-meme — beaconAppsJson emet une ligne « hors ligne » pour
+// la DECLARATION elle-meme - beaconAppsJson emet une ligne « hors ligne » pour
 // toute application declaree dont aucune instance ne se fait entendre. Une
 // machine d'essai eteinte pour de bon finit donc par disparaitre de la liste,
 // au lieu d'y rester en panne perpetuelle.
@@ -1303,7 +1303,7 @@ QJsonObject MonitorModule::servicesJson() {
     // Nouvelle tentative de chargement si la configuration manquait au
     // demarrage. Un service lance avant que le fichier partage existe (ordre de
     // demarrage, installation en cours) restait sinon aveugle jusqu'a son
-    // prochain redemarrage — en repondant correctement, mais sans rien
+    // prochain redemarrage - en repondant correctement, mais sans rien
     // superviser, ce qui est le pire des deux mondes.
     if (!m_config.isLoaded()) {
         if (m_config.load(m_configPath)) {

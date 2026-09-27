@@ -1,5 +1,5 @@
 /*
- * morfMonitor — demon de service
+ * morfMonitor - demon de service
  * Copyright (C) 2026 morfredus
  * SPDX-License-Identifier: GPL-3.0-only
  *
@@ -30,7 +30,7 @@ QTextStream& out() { static QTextStream s(stdout); return s; }
 // err() est VIDE a chaque appel via errLine(). Un QTextStream bufferise, et un
 // demon systemd ne se termine jamais : sans vidage explicite, les
 // avertissements et les erreurs restent dans le tampon et n'atteignent JAMAIS
-// journalctl. Le service paraissait alors mystérieusement silencieux — un type
+// journalctl. Le service paraissait alors mystérieusement silencieux - un type
 // de module inconnu, une configuration introuvable, tout passait inaperçu.
 QTextStream& err() { static QTextStream s(stderr); return s; }
 
@@ -63,7 +63,7 @@ QString findDefaultConfig() {
 //
 // Il declarait un module « example », heritage du gabarit : un type que la
 // fabrique de morfMonitor ne connait pas. Le service demarrait donc, annoncait
-// sa presence sur le LAN, et repondait 503 sur TOUTES les routes /api/ — sans
+// sa presence sur le LAN, et repondait 503 sur TOUTES les routes /api/ - sans
 // aucun module de supervision. Un repli doit donner un service qui fonctionne,
 // pas un service qui a l'air vivant.
 //
@@ -104,7 +104,7 @@ int main(int argc, char** argv) {
 
     QCommandLineParser parser;
     parser.setApplicationDescription(
-        QStringLiteral("morfMonitor — squelette de service morfSystem "
+        QStringLiteral("morfMonitor - squelette de service morfSystem "
                        "(API HTTP + annonce LAN, modules enfichables)."));
     parser.addHelpOption();
     parser.addVersionOption();

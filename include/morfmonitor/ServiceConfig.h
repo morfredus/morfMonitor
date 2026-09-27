@@ -39,7 +39,7 @@ struct ServiceConfig {
     QString instanceId;                              // defaut = appName@hostname
 
     // 8790 : port attribue a morfMonitor dans le parc. 8799 appartient a
-    // morfAnalytics — le clone du modele en avait herite, ce qui empechait
+    // morfAnalytics - le clone du modele en avait herite, ce qui empechait
     // les deux services de tourner ensemble.
     quint16 httpPort    = 8790;                      // 0 => pas de serveur HTTP
     QString bindAddress = QStringLiteral("0.0.0.0");

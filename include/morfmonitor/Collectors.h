@@ -101,7 +101,7 @@ private:
 // notification, ce qui rend l'information inexploitable.
 //
 // La determination est FAILLIBLE par nature : il n'existe aucune source unique
-// et fiable. On croise plusieurs indices, et quand rien ne tranche, on le dit —
+// et fiable. On croise plusieurs indices, et quand rien ne tranche, on le dit -
 // « cause inconnue » est une reponse honnete, contrairement a un « demarrage
 // normal » affirme par defaut, qui masquerait une coupure.
 class RebootCauseDetector {

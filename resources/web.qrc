@@ -8,7 +8,7 @@
 
   Les sources vivent dans web_src/, conformement a la convention de l'ecosysteme
   (GatewayLab, MeteoHub) : web_src/ contient ce qui est ECRIT, web/ ce qui est
-  GENERE. Le .gitignore exclut d'ailleurs web/ — y placer les sources les
+  GENERE. Le .gitignore exclut d'ailleurs web/ - y placer les sources les
   ferait disparaitre au premier clone. morfMonitor n'a pas d'etape de
   minification : il n'y a donc pas de web/ du tout, et le .qrc lit directement
   les sources.

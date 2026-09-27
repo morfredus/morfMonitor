@@ -37,7 +37,7 @@ namespace morfmonitor {
 // L'API est faite pour être interrogée souvent, et par plusieurs clients à la
 // fois (le Dashboard local, un futur dashboard web, une application Qt…). Sans
 // cache, dix clients rafraîchissant chacun toutes les secondes provoqueraient
-// dix lectures de /proc et dix lancements de systemctl par seconde — l'inverse
+// dix lectures de /proc et dix lancements de systemctl par seconde - l'inverse
 // exact du but recherché, qui est de SOULAGER la machine en centralisant.
 //
 // Chaque catégorie a sa propre fraîcheur, parce que leurs coûts et leurs
@@ -76,7 +76,7 @@ public:
     QJsonObject lifeJson() const;
 
     // Historique de sante FIFO (48 h) des services sondes : un echantillon par
-    // minute, releve a chaque interrogation /status. Sert au diagnostic — voir la
+    // minute, releve a chaque interrogation /status. Sert au diagnostic - voir la
     // heap declinante d'un service avant un figeage, et l'instant ou il cesse de
     // repondre (trou dans la serie, ou uptime_s qui repart de zero apres reboot).
     // `service` filtre par nom d'application (vide = tous).
@@ -144,7 +144,7 @@ private:
     // --- Alerte de panne FONCTIONNELLE (chemin morfMonitor -> morfNotify) ------
     // Chemin complementaire de l'alerte systemd (morf-alert@, panne FRANCHE, process
     // mort) : ici on detecte un service DECLARE qui n'annonce plus alors que sa
-    // machine, elle, est en ligne — donc bloque/muet plutot que mort (le cas que
+    // machine, elle, est en ligne - donc bloque/muet plutot que mort (le cas que
     // systemd ne voit pas : le process peut etre encore vivant). Evaluation
     // periodique, en memoire (jamais bloquante), avec anti-rebond et anti-spam, et
     // une notification de retour a la normale. morfMonitor n'agit pas : il previent.
@@ -223,8 +223,8 @@ private:
     //
     // Seule exception, et elle est bornée : dès qu'un service annonce un port
     // /status, celui-ci est interrogé UNE fois par version pour obtenir le
-    // détail qu'il publie — son interface web et sa liste d'API. C'est le
-    // « pull detail » du protocole, pas une sonde périodique — et cela ne fait
+    // détail qu'il publie - son interface web et sa liste d'API. C'est le
+    // « pull detail » du protocole, pas une sonde périodique - et cela ne fait
     // de morfMonitor l'intermédiaire de rien : il lit une description, il ne
     // relaie aucun trafic. L'API n'étant pas une capacité (le heartbeat reste
     // maigre), elle ne se découvre que par ce détail : c'est pourquoi le pull
@@ -233,7 +233,7 @@ private:
     QNetworkAccessManager* m_http = nullptr;
     struct BeaconSeen {
         qint64  lastSeen = 0;   // secondes Unix
-        QString app;            // nom annonce — plusieurs entrees peuvent le partager
+        QString app;            // nom annonce - plusieurs entrees peuvent le partager
         QString instance;       // identite « app@host » du protocole, si annoncee
         QString version;
         QString host;
@@ -249,7 +249,7 @@ private:
         // Adresse REELLE de l'emetteur, relevee a la reception du datagramme, et
         // port de son serveur /status. Sans ces deux valeurs, morfMonitor sait
         // qu'un service vit mais pas ou le joindre : aucune navigation n'est
-        // possible. `host` ne suffit pas — c'est un nom annonce, qui ne resout
+        // possible. `host` ne suffit pas - c'est un nom annonce, qui ne resout
         // pas forcement depuis la machine qui observe.
         QString sourceIp;
         quint16 statusPort = 0;
@@ -257,7 +257,7 @@ private:
         // Qualite de `sourceIp` : 2 quand elle appartient au meme reseau que
         // nous, 1 sinon. Un emetteur multi-domicilie diffuse sur TOUTES ses
         // interfaces ; sans ce classement, le dernier datagramme recu gagnait,
-        // souvent celui d'un reseau virtuel (WSL, Hyper-V, VPN) — une adresse
+        // souvent celui d'un reseau virtuel (WSL, Hyper-V, VPN) - une adresse
         // injoignable depuis n'importe quelle autre machine.
         int addressScore = 0;
 
@@ -304,7 +304,7 @@ private:
     // Clé = identité d'INSTANCE (champ « instance » du protocole, ou app@ip à
     // défaut), jamais le seul nom « app » : le même service tournant sur deux
     // machines est deux instances, et les indexer par nom les faisait s'écraser
-    // l'une l'autre à chaque heartbeat — l'affichage alternait entre les hôtes
+    // l'une l'autre à chaque heartbeat - l'affichage alternait entre les hôtes
     // toutes les quinze secondes. PROTOCOL.md avait prévu le champ pour ça.
     QHash<QString, BeaconSeen> m_beaconSeen;
 
