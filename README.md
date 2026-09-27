@@ -2,7 +2,7 @@
 
 *Read in another language: **English** (this document) · [Français](README.fr.md).*
 
-[![Version](https://img.shields.io/badge/version-0.24.5-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.24.6-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![License](https://img.shields.io/badge/License-GPL--3.0--only-blue)
@@ -247,10 +247,10 @@ place, pointless if you are already inside morfMonitor.
 
 Service installation no longer needs a counterpart: `./service.py` is one
 implementation for Linux, Windows and the Raspberry Pi, and only the service
-manager it drives differs, and configuration pushes go through it too. Two
-`scripts/linux/` and `scripts/windows/` pairs remain: `config-tool`, and the legacy
-`deploy-config`, superseded by `service.py config push --force` and kept only until
-it is retired.
+manager it drives differs, and configuration pushes go through it too. The only
+remaining `scripts/linux/` and `scripts/windows/` pair is `config-tool`. The legacy
+`deploy-config` has been retired: `service.py config push --force` replaces it on
+every platform.
 
 The **JSON logic stays in Python** (`merge-config.py`, `check-config.py`), called
 unchanged by both sides. Python is the only one of the three languages in this

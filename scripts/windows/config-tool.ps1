@@ -55,7 +55,7 @@ function Get-Python {
         $cmd = Get-Command $c -ErrorAction SilentlyContinue
         if ($cmd) { return $cmd.Source }
     }
-    throw "Python introuvable. Les verifications de configuration en dependent.`nInstaller Python, ou utiliser deploy-config.ps1 qui n'en a pas besoin."
+    throw "Python introuvable. Les verifications de configuration en dependent.`nInstaller Python : config-tool comme service.py en ont besoin."
 }
 
 function Assert-Config {

@@ -3,6 +3,16 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.24.6] - 2026-09-27
+
+### Removed
+
+- **Legacy `scripts/linux/deploy-config.sh` and `scripts/windows/deploy-config.ps1`.**
+  `service.py config push --force` replaces them on every platform (own config), and
+  morfTools `config.py shared` owns the shared `morfsystem.json`. The READMEs no
+  longer present them as remaining, and the `config-tool.ps1` "Python not found"
+  message no longer suggests them.
+
 ## [0.24.5] - 2026-09-27
 
 ### Changed

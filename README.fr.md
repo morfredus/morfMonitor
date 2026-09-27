@@ -2,7 +2,7 @@
 
 *Lire dans une autre langue : [English](README.md) · **Français** (ce document).*
 
-[![Version](https://img.shields.io/badge/version-0.24.5-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.24.6-blue)](CHANGELOG.md)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
 ![Qt](https://img.shields.io/badge/Qt-6-41CD52?logo=qt)
 ![Build](https://img.shields.io/badge/CMake-3.21+-064F8C?logo=cmake)
@@ -317,12 +317,11 @@ ses configurations - est declare dans `service.json` a cote. Les quatre etapes
 d'installation vivent une seule fois pour tout le parc ; seul le gestionnaire
 de services change selon la plateforme.
 
-Deux paires `scripts/linux/` et `scripts/windows/` subsistent : `config-tool`, et
-l'ancien `deploy-config`, remplacé par `service.py config push --force` et conservé
-seulement jusqu'à son retrait.
+Le seul outil qui garde deux versions (`scripts/linux/` et `scripts/windows/`) est
+`config-tool`. L'ancien `deploy-config` a été retiré : `service.py config push
+--force` le remplace sur toutes les plateformes.
 
-Chaque script a son équivalent Windows dans `scripts/windows/` (tâche
-planifiée) :
+Les mêmes gestes sous Linux et sous Windows :
 
 | Tâche | Linux | Windows |
 |---|---|---|
