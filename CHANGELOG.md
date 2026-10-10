@@ -3,6 +3,17 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.24.8] - 2026-10-10
+
+### Changed
+
+- **State directory aligned on the parc doctrine**: the unit now declares
+  `StateDirectory=morfsystem/morfmonitor` (state under `/var/lib/morfsystem/morfmonitor`,
+  like every other service) instead of `morfmonitor` (`/var/lib/morfmonitor`). An
+  `ExecStartPre` one-liner migrates the previous directory once (copy only if the new state
+  is empty, then remove the old one); with no old directory it does nothing. No code change:
+  the service already honours `$STATE_DIRECTORY`.
+
 ## [0.24.7] - 2026-09-29
 
 ### Changed

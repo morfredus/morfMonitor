@@ -177,7 +177,7 @@ bool MonitorModule::start() {
 
     // Memoire temporelle : chargee au demarrage (rattrapage, purge du brut > 48 h,
     // monitor_started/monitor_gap). Elle vit sous le meme dossier d'etat editable
-    // que le registre des machines (/var/lib/morfmonitor via StateDirectory).
+    // que le registre des machines (/var/lib/morfsystem/morfmonitor via StateDirectory).
     m_memory.load(resolveStateDir(), m_config.beaconOfflineAfterS());
 
     // Historique de sante FIFO : recharge les points des 48 dernieres heures (un
@@ -244,8 +244,8 @@ void MonitorModule::stop() {
     }
 }
 
-// Dossier d'etat inscriptible. Sous systemd, `StateDirectory=morfmonitor` fournit
-// /var/lib/morfmonitor et exporte STATE_DIRECTORY : on l'honore en priorite, dans
+// Dossier d'etat inscriptible. Sous systemd, `StateDirectory=morfsystem/morfmonitor` fournit
+// /var/lib/morfsystem/morfmonitor et exporte STATE_DIRECTORY : on l'honore en priorite, dans
 // le respect de la doctrine du parc (config en lecture seule sous /etc, etat
 // editable sous /var/lib). A defaut (execution hors service, developpement,
 // Windows), on retombe sur l'emplacement de donnees applicatif standard.

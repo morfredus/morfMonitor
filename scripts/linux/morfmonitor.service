@@ -19,9 +19,15 @@ ExecStart=__APP_DIR__/morfmonitor --config __CONFIG_DIR__/morfmonitor.json
 Restart=always
 RestartSec=5
 # Etat editable du service (registre persistant des machines connues du parc).
-# systemd cree /var/lib/morfmonitor, l'attribue au compte du service et exporte
-# STATE_DIRECTORY : la config reste en lecture seule sous /etc, l'etat vit ici.
-StateDirectory=morfmonitor
+# systemd cree /var/lib/morfsystem/morfmonitor (doctrine du parc), l'attribue au
+# compte du service et exporte STATE_DIRECTORY : la config reste en lecture seule
+# sous /etc, l'etat vit ici.
+StateDirectory=morfsystem/morfmonitor
+# Migration unique depuis l'ancien emplacement /var/lib/morfmonitor (avant 0.24.8) :
+# recopie seulement si le nouvel etat est vide, puis suppression de l'ancien. Le « + »
+# l'execute en root (suppression sous /var/lib). Pas de « $ » : systemd les
+# interprete. Sans ancien dossier, la ligne ne fait rien.
+ExecStartPre=+/bin/sh -c '[ -d /var/lib/morfmonitor ] && ! ls -A /var/lib/morfsystem/morfmonitor | grep -q . && cp -a /var/lib/morfmonitor/. /var/lib/morfsystem/morfmonitor/ && rm -rf /var/lib/morfmonitor; true'
 StandardOutput=journal
 StandardError=journal
 
