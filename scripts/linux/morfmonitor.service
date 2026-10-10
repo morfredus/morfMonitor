@@ -31,5 +31,16 @@ ExecStartPre=+/bin/sh -c '[ -d /var/lib/morfmonitor ] && ! ls -A /var/lib/morfsy
 StandardOutput=journal
 StandardError=journal
 
+# Durcissement (valide sur morfNotify, 2026-10-10) : systeme de fichiers en lecture
+# seule. morfMonitor n'ecrit que sous son StateDirectory (memoire, registre des machines,
+# health.json). Il lit /proc, /sys et /etc, interroge systemd (systemctl, en lecture) et
+# lance vcgencmd (/dev reste accessible). ProtectHome=read-only (et non yes) : il lit les
+# fichiers VERSION des clones sous le home pour comparer les versions. Le « + » de
+# l'ExecStartPre de migration l'execute hors sandbox.
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+NoNewPrivileges=yes
+
 [Install]
 WantedBy=multi-user.target

@@ -3,6 +3,15 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.24.13] - 2026-10-10
+
+### Changed
+
+- **Hardened systemd unit**: `ProtectSystem=strict`, `ProtectHome=read-only`, `PrivateTmp=yes`,
+  `NoNewPrivileges=yes`. The service writes only under its `StateDirectory`; it reads `/proc`,
+  `/sys`, `/etc`, runs `systemctl` (read-only queries) and `vcgencmd`, and reads clone `VERSION`
+  files under the home (hence read-only, not `yes`).
+
 ## [0.24.12] - 2026-10-10
 
 ### Changed
