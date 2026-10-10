@@ -3,6 +3,12 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.24.12] - 2026-10-10
+
+### Changed
+
+- Resync the vendored morfUpdate (0.8.6).
+
 ## [0.24.11] - 2026-10-10
 
 ### Changed
