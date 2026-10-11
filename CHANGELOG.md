@@ -3,6 +3,22 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.24.16] - 2026-10-11
+
+### Changed
+
+- Diagnostic page: the memory curve now has context: legend (free heap and largest block), value
+  axis (max, middle, min), time axis ("x h ago" to "now"), a dot on the current value and a short
+  hint on how to read a leak, fragmentation or reboot.
+
+## [0.24.15] - 2026-10-11
+
+### Changed
+
+- Diagnostic page: each device card now has an "Open the logs" button (full-page view), the download
+  buttons, and a collapsible log preview. Log capture is unchanged: still one ring per source,
+  400 lines each.
+
 ## [0.24.14] - 2026-10-11
 
 ### Changed

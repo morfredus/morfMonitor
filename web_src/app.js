@@ -1261,20 +1261,6 @@ function showServiceProblem(title, detail) {
 // Panneau secondaire de l'onglet Diagnostic : on ne le charge que lorsqu'il est
 // visible, et ses echecs sont silencieux (il ne doit jamais casser la page).
 
-// Mini-courbe SVG d'une serie de valeurs (les null = trous, ignores).
-function sparkline(vals, w = 320, h = 40) {
-  const nums = vals.filter((v) => typeof v === 'number');
-  if (nums.length < 2) return '';
-  const min = Math.min(...nums), max = Math.max(...nums), span = (max - min) || 1;
-  const step = w / (vals.length - 1);
-  const pts = vals
-    .map((v, i) => (typeof v === 'number'
-      ? `${(i * step).toFixed(1)},${(h - ((v - min) / span) * h).toFixed(1)}` : null))
-    .filter(Boolean).join(' ');
-  return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" `
-    + `preserveAspectRatio="none"><polyline points="${pts}"/></svg>`;
-}
-
 // Equipements retenus dans le Diagnostic (noms). null = tous ceux qui ont des donnees.
 // Memorise dans le navigateur : le choix survit aux rechargements.
 let diagSel = null;
@@ -1306,6 +1292,54 @@ function mergeDiag(series, sources) {
   });
 }
 
+// Courbe de mémoire d'un équipement : heap libre + plus gros bloc contigu, sur une
+// échelle commune, avec axes (valeurs min/médiane/max, temps écoulé), légende et
+// valeur courante. Sans ces repères une courbe seule ne dit pas ce qu'elle mesure.
+function heapChart(samples) {
+  const pts = samples.filter((p) => typeof p.free_heap_b === 'number');
+  if (pts.length < 2) return '<p class="muted">Historique en cours de constitution (au moins 2 points, 1 par minute).</p>';
+  const W = 640, H = 190, L = 62, R = 14, T = 12, B = 28;
+  const t0 = pts[0].ts, t1 = pts[pts.length - 1].ts, dt = (t1 - t0) || 1;
+  const vals = pts.flatMap((p) => [p.free_heap_b, p.free_block_b]).filter((v) => typeof v === 'number');
+  let min = Math.min(...vals), max = Math.max(...vals);
+  const pad = ((max - min) || max * 0.1 || 1) * 0.08;   // marge pour ne pas coller aux bords
+  min = Math.max(0, min - pad); max += pad;
+  const x = (ts) => L + ((ts - t0) / dt) * (W - L - R);
+  const y = (v) => T + (1 - (v - min) / (max - min)) * (H - T - B);
+  const line = (key, cls) => {
+    let d = '', pen = false;
+    pts.forEach((p) => {
+      if (typeof p[key] !== 'number') { pen = false; return; }
+      d += `${pen ? 'L' : 'M'}${x(p.ts).toFixed(1)},${y(p[key]).toFixed(1)}`;
+      pen = true;
+    });
+    return `<path class="${cls}" d="${d}"/>`;
+  };
+  const grid = [max, (max + min) / 2, min].map((v) =>
+    `<line class="ch-grid" x1="${L}" x2="${W - R}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}"/>`
+    + `<text class="ch-lbl" x="${L - 6}" y="${(y(v) + 4).toFixed(1)}" text-anchor="end">${bytes(Math.round(v))}</text>`).join('');
+  // Axe du temps : « il y a Xh » du plus ancien point jusqu'à « maintenant ».
+  const ago = (s) => (s < 90 ? 'maintenant' : s < 5400 ? `il y a ${Math.round(s / 60)} min` : `il y a ${Math.round(s / 3600)} h`);
+  const ticks = [0, 0.5, 1].map((f, i) =>
+    `<text class="ch-lbl" x="${(L + f * (W - L - R)).toFixed(1)}" y="${H - 8}" text-anchor="${['start', 'middle', 'end'][i]}">${ago((1 - f) * dt)}</text>`).join('');
+  const last = pts[pts.length - 1];
+  const dot = (key, cls) => (typeof last[key] === 'number'
+    ? `<circle class="${cls}" cx="${x(last.ts).toFixed(1)}" cy="${y(last[key]).toFixed(1)}" r="3.5"/>` : '');
+  const hasBlock = pts.some((p) => typeof p.free_block_b === 'number');
+  return `<div class="chart">
+    <div class="ch-legend"><span class="ch-key k-heap"></span>Heap libre : mémoire totale disponible
+      ${hasBlock ? '<span class="ch-key k-block"></span>Plus gros bloc : plus grande allocation possible d’un seul tenant' : ''}</div>
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Évolution de la mémoire libre">
+      ${grid}${ticks}${hasBlock ? line('free_block_b', 'ch-block') : ''}${line('free_heap_b', 'ch-heap')}
+      ${dot('free_block_b', 'ch-block-dot')}${dot('free_heap_b', 'ch-heap-dot')}
+    </svg>
+    <div class="muted ch-note">Une baisse continue du heap annonce une fuite mémoire ; un plus gros bloc qui s’effondre
+      alors que le heap reste stable signale une fragmentation. Un saut brutal vers le haut = redémarrage.</div></div>`;
+}
+
+// Sources dont le panneau de logs est déplié.
+let logsOpen = new Set();
+
 function diagBlock(e) {
   const heaps = e.samples.map((p) => (typeof p.free_heap_b === 'number' ? p.free_heap_b : null));
   const nums = heaps.filter((v) => typeof v === 'number');
@@ -1319,7 +1353,7 @@ function diagBlock(e) {
       ${stat('Plus gros bloc', l.free_block_b != null ? bytes(l.free_block_b) : '-')}
       ${stat('Heap min 48 h', min != null ? bytes(min) : '-')}
       ${stat('Uptime', l.uptime_s != null ? duration(l.uptime_s) : '-')}</div>
-      <div class="esp-spark">${sparkline(heaps)}</div>`;
+      ${heapChart(e.samples)}`;
   } else if (l.uptime_s != null) {
     html += `<div class="esp-stats">${stat('Uptime', duration(l.uptime_s))}</div>`;
   }
@@ -1328,11 +1362,15 @@ function diagBlock(e) {
     const lines = e.log.lines.map((x) =>
       `${new Date(x.ts * 1000).toLocaleTimeString('fr-FR')}  ${esc(x.line)}`).join('\n');
     const total = (typeof e.log.count === 'number') ? e.log.count : e.log.lines.length;
-    html += `<pre class="esp-log" data-src="${esc(e.log.source)}">${lines}</pre>
+    // Logs repliés par défaut (le cartouche reste lisible) ; l'état ouvert est
+    // retenu par renderEspDiag, qui reconstruit tout à chaque cycle.
+    html += `<details class="esp-logs" data-src="${esc(e.log.source)}"${logsOpen.has(e.log.source) ? ' open' : ''}>
+        <summary>Logs (${e.log.lines.length} dernières lignes)</summary>
+        <pre class="esp-log" data-src="${esc(e.log.source)}">${lines}</pre></details>
       <div class="esp-actions">
-        <a class="btn" href="/api/logs/download?source=${src}">Télécharger les logs (${total})</a>
-        <a class="btn" href="/api/logs/diagnostic?source=${src}">Télécharger diagnostic</a>
-        <button class="btn ghost" data-open="${esc(e.log.source)}">Ouvrir en grand</button></div>`;
+        <button class="btn" data-open="${esc(e.log.source)}">Ouvrir les logs</button>
+        <a class="btn" href="/api/logs/download?source=${src}">Télécharger (${total})</a>
+        <a class="btn" href="/api/logs/diagnostic?source=${src}">Télécharger diagnostic</a></div>`;
   }
   return html + '</div>';
 }
@@ -1351,6 +1389,7 @@ async function renderEspDiag() {
 
     const container = el('c-esp');
     const st = captureLogScroll(container);
+    logsOpen = new Set([...container.querySelectorAll('details.esp-logs[open]')].map((d) => d.dataset.src));
     // Les <details> sont reconstruits toutes les 5 s : on retient leur etat ouvert.
     const emptyOpen = !!container.querySelector('details.esp-empty[open]');
 
