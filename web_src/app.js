@@ -1275,6 +1275,68 @@ function sparkline(vals, w = 320, h = 40) {
     + `preserveAspectRatio="none"><polyline points="${pts}"/></svg>`;
 }
 
+// Equipements retenus dans le Diagnostic (noms). null = tous ceux qui ont des donnees.
+// Memorise dans le navigateur : le choix survit aux rechargements.
+let diagSel = null;
+try { diagSel = JSON.parse(localStorage.getItem('diagSel')); } catch (_) { /* ignore */ }
+
+// Un equipement = sa sante (heap/uptime via /status) + ses logs UDP, fusionnes par nom
+// pour presenter UN cartouche par equipement au lieu de deux listes paralleles.
+function mergeDiag(series, sources) {
+  const map = new Map();
+  const get = (name, host) => {
+    if (!map.has(name)) map.set(name, { name, host: host || '', samples: [], log: null });
+    return map.get(name);
+  };
+  series.forEach((s) => {
+    const e = get(s.service || s.instance, s.host);
+    e.samples = s.samples || [];
+  });
+  sources.forEach((l) => {
+    const e = get(l.source, l.host);
+    e.log = l;
+  });
+  return [...map.values()].map((e) => {
+    const last = e.samples.length ? e.samples[e.samples.length - 1] : {};
+    e.last = last;
+    e.hasHeap = e.samples.some((p) => typeof p.free_heap_b === 'number');
+    e.hasLog = !!(e.log && (e.log.lines || []).length);
+    e.hasData = e.hasHeap || e.hasLog;
+    return e;
+  });
+}
+
+function diagBlock(e) {
+  const heaps = e.samples.map((p) => (typeof p.free_heap_b === 'number' ? p.free_heap_b : null));
+  const nums = heaps.filter((v) => typeof v === 'number');
+  const min = nums.length ? Math.min(...nums) : null;
+  const l = e.last;
+  const stat = (k, v) => `<div class="esp-stat"><span class="muted">${k}</span><b>${v}</b></div>`;
+  let html = `<div class="esp-block"><div class="esp-title">${esc(e.name)} <span class="muted">${esc(e.host)}</span></div>`;
+  if (e.hasHeap) {
+    html += `<div class="esp-stats">
+      ${stat('Heap libre', l.free_heap_b != null ? bytes(l.free_heap_b) : '-')}
+      ${stat('Plus gros bloc', l.free_block_b != null ? bytes(l.free_block_b) : '-')}
+      ${stat('Heap min 48 h', min != null ? bytes(min) : '-')}
+      ${stat('Uptime', l.uptime_s != null ? duration(l.uptime_s) : '-')}</div>
+      <div class="esp-spark">${sparkline(heaps)}</div>`;
+  } else if (l.uptime_s != null) {
+    html += `<div class="esp-stats">${stat('Uptime', duration(l.uptime_s))}</div>`;
+  }
+  if (e.hasLog) {
+    const src = encodeURIComponent(e.log.source);
+    const lines = e.log.lines.map((x) =>
+      `${new Date(x.ts * 1000).toLocaleTimeString('fr-FR')}  ${esc(x.line)}`).join('\n');
+    const total = (typeof e.log.count === 'number') ? e.log.count : e.log.lines.length;
+    html += `<pre class="esp-log" data-src="${esc(e.log.source)}">${lines}</pre>
+      <div class="esp-actions">
+        <a class="btn" href="/api/logs/download?source=${src}">Télécharger les logs (${total})</a>
+        <a class="btn" href="/api/logs/diagnostic?source=${src}">Télécharger diagnostic</a>
+        <button class="btn ghost" data-open="${esc(e.log.source)}">Ouvrir en grand</button></div>`;
+  }
+  return html + '</div>';
+}
+
 async function renderEspDiag() {
   try {
     const [hR, lR] = await Promise.all([
@@ -1282,65 +1344,43 @@ async function renderEspDiag() {
     ]);
     const health = hR.ok ? await hR.json() : { series: [] };
     const logs = lR.ok ? await lR.json() : { sources: [] };
+    const all = mergeDiag(health.series || [], logs.sources || []);
+    const withData = all.filter((e) => e.hasData);
+    const empty = all.filter((e) => !e.hasData);
+    const shown = withData.filter((e) => !diagSel || diagSel.includes(e.name));
 
-    // Sante : heap + uptime, une courbe par equipement.
-    const series = health.series || [];
-    if (!series.length) {
-      el('c-esp-sante').innerHTML = header('Santé des équipements')
-        + '<p class="muted">Aucun équipement supervisé n’a encore rapporté sa santé (heap/uptime via /status).</p>';
-    } else {
-      const blocks = series.map((s) => {
-        const samples = s.samples || [];
-        const heaps = samples.map((p) => (typeof p.free_heap_b === 'number' ? p.free_heap_b : null));
-        const heapNums = heaps.filter((v) => typeof v === 'number');
-        const minHeap = heapNums.length ? Math.min(...heapNums) : null;
-        const last = samples.length ? samples[samples.length - 1] : {};
-        return `<div class="esp-block">
-          <div class="esp-title">${esc(s.service || s.instance)} <span class="muted">${esc(s.host || '')}</span></div>
-          ${row('Heap libre', last.free_heap_b != null ? bytes(last.free_heap_b) : '-')}
-          ${row('Plus gros bloc', last.free_block_b != null ? bytes(last.free_block_b) : '-')}
-          ${row('Heap min (48 h)', minHeap != null ? bytes(minHeap) : '-')}
-          ${row('Uptime', last.uptime_s != null ? duration(last.uptime_s) : '-')}
-          <div class="esp-spark">${sparkline(heaps)}</div>
-        </div>`;
-      }).join('');
-      el('c-esp-sante').innerHTML =
-        header('Santé des équipements', `${series.length} suivi(s) · heap sur 48 h`) + blocks;
-    }
+    const container = el('c-esp');
+    const st = captureLogScroll(container);
+    // Les <details> sont reconstruits toutes les 5 s : on retient leur etat ouvert.
+    const emptyOpen = !!container.querySelector('details.esp-empty[open]');
 
-    // Logs UDP recents, un bloc par source.
-    const sources = logs.sources || [];
-    if (!sources.length) {
-      el('c-esp-logs').innerHTML = header('Logs des équipements (UDP)')
-        + '<p class="muted">Aucun log reçu. Les équipements ESP32 diffusent leurs logs en broadcast UDP (port 5005) : ils doivent être sur le même réseau que morfMonitor.</p>';
-    } else {
-      const blocks = sources.map((s) => {
-        const lines = (s.lines || []).map((l) =>
-          `${new Date(l.ts * 1000).toLocaleTimeString('fr-FR')}  ${esc(l.line)}`).join('\n');
-        const src = encodeURIComponent(s.source);
-        const total = (typeof s.count === 'number') ? s.count : (s.lines || []).length;
-        return `<div class="esp-block">
-          <div class="esp-title">
-            <a href="#" class="esp-open" data-src="${esc(s.source)}">${esc(s.source)}</a>
-            <span class="muted">${esc(s.host || '')}</span>
-          </div>
-          <pre class="esp-log" data-src="${esc(s.source)}">${lines}</pre>
-          <div class="esp-actions">
-            <a class="btn" href="/api/logs/download?source=${src}">Télécharger les logs (${total})</a>
-            <a class="btn" href="/api/logs/diagnostic?source=${src}">Télécharger diagnostic</a>
-            <button class="btn ghost" data-open="${esc(s.source)}">Ouvrir en grand</button>
-          </div></div>`;
-      }).join('');
-      // Rebuild puis restauration du défilement : sinon chaque cycle (5 s)
-      // renverrait les logs en haut, alors qu'on veut suivre le flux (tail).
-      const container = el('c-esp-logs');
-      const st = captureLogScroll(container);
-      container.innerHTML =
-        header('Logs des équipements (UDP)', `${sources.length} source(s)`) + blocks;
-      restoreLogScroll(container, st);
-    }
+    const chips = withData.map((e) =>
+      `<button class="chip${shown.includes(e) ? ' on' : ''}" data-diag="${esc(e.name)}">${esc(e.name)}</button>`).join('');
+    const emptyList = empty.map((e) =>
+      row(`${e.name} ${e.host}`.trim(), e.last.uptime_s != null ? duration(e.last.uptime_s) : '-')).join('');
+
+    container.innerHTML =
+      header('Équipements', `${withData.length} avec données · ${empty.length} sans`)
+      + (chips ? `<div class="chips">${chips}</div>` : '<p class="muted">Aucun équipement n’a encore rapporté de heap ni de logs (via /status ou UDP 5005).</p>')
+      + shown.map(diagBlock).join('')
+      + (empty.length
+        ? `<details class="esp-empty"${emptyOpen ? ' open' : ''}><summary>Sans heap ni logs (${empty.length})</summary>${emptyList}</details>`
+        : '');
+    restoreLogScroll(container, st);
   } catch (_) { /* panneau secondaire : echec silencieux */ }
 }
+
+// Selection : un clic bascule l'equipement ; au premier clic on part de « tous ».
+document.addEventListener('click', (ev) => {
+  const c = ev.target.closest('.chip[data-diag]');
+  if (!c) return;
+  const all = [...document.querySelectorAll('.chip[data-diag]')].map((x) => x.dataset.diag);
+  const cur = new Set(diagSel || all);
+  if (cur.has(c.dataset.diag)) cur.delete(c.dataset.diag); else cur.add(c.dataset.diag);
+  diagSel = [...cur];
+  try { localStorage.setItem('diagSel', JSON.stringify(diagSel)); } catch (_) { /* ignore */ }
+  renderEspDiag();
+});
 
 function diagVisible() {
   const p = el('page-diagnostic');

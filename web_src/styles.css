@@ -271,3 +271,11 @@ footer a:hover { text-decoration: underline; }
 .esp-open { color: var(--accent); text-decoration: none; }
 .esp-open:hover { text-decoration: underline; }
 .esp-log-full { max-height: 68vh; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px; }
+.chip { background: transparent; color: var(--muted, #8a94a6); border: 1px solid var(--line);
+  border-radius: 999px; padding: 3px 12px; cursor: pointer; font: inherit; }
+.chip.on { color: var(--text-hi); border-color: var(--accent); }
+.esp-stats { display: flex; flex-wrap: wrap; gap: 4px 24px; }
+.esp-stat { display: flex; gap: 8px; }
+.esp-empty { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
+.esp-empty summary { cursor: pointer; color: var(--muted, #8a94a6); }

@@ -3,6 +3,14 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.24.14] - 2026-10-11
+
+### Changed
+
+- Diagnostic page: health and UDP logs are merged into one card per device, with a chip selector
+  to choose which devices to show (choice remembered in the browser). Devices that report neither
+  heap nor logs are folded into a single collapsed "no heap nor logs" list.
+
 ## [0.24.13] - 2026-10-10
 
 ### Changed
