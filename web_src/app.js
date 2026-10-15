@@ -380,7 +380,9 @@ function renderEtat(all, status) {
         `Services supervisés en ligne, ressources sous les seuils.</div>`);
 
   // Activites en cours declarees par les services du parc (temps reel).
-  const acts = Array.isArray(all.activities) ? all.activities : [];
+  // Les activites sont assemblees par servicesJson : elles vivent sous `services`, pas a la racine.
+  const actsRaw = (all.services || {}).activities;
+  const acts = Array.isArray(actsRaw) ? actsRaw : [];
   el('c-activites').innerHTML =
     header('Activités en cours', acts.length ? `${acts.length} en cours` : 'aucune') +
     (acts.length ? activitesTable(acts)

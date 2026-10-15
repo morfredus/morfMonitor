@@ -423,7 +423,11 @@ void MonitorModule::recordHealth(const QString& key, const QString& app,
         smp.freeHeapB = metrics.value(QStringLiteral("free_heap_b")).toInt(-1);
     if (metrics.contains(QStringLiteral("free_block_b")))
         smp.freeBlockB = metrics.value(QStringLiteral("free_block_b")).toInt(-1);
-    smp.memB = m_latestMem.value(app, -1);
+    // La memoire vient de l'etat systemd LOCAL : elle ne vaut que pour les instances
+    // de CETTE machine (sinon un service vu par beacon sur un autre hote recevrait la
+    // memoire du service local de meme nom).
+    if (host.compare(QHostInfo::localHostName(), Qt::CaseInsensitive) == 0)
+        smp.memB = m_latestMem.value(app, -1);
     s.samples.append(smp);
 
     // Purge au-dela de 48 h.

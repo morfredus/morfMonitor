@@ -3,6 +3,20 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.25.2] - 2026-10-15
+
+### Fixed
+
+- "Activités en cours" (État page) was always empty: the page read `all.activities` while the
+  API serves them under `services.activities`.
+
+## [0.25.1] - 2026-10-15
+
+### Fixed
+
+- Diagnostic: the memory of the local systemd service is no longer attributed to instances
+  of the same name seen by beacon on another host.
+
 ## [0.25.0] - 2026-10-15
 
 ### Added
