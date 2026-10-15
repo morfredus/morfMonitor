@@ -3,6 +3,22 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.25.0] - 2026-10-15
+
+### Added
+
+- Diagnostic: Linux services now fill the memory chart like an ESP32 does. The used memory
+  of the service cgroup (systemd `MemoryCurrent`) is sampled once a minute with the health
+  series (`mem_b` in `/api/health/history`) and plotted as "Mémoire utilisée", with the
+  48 h peak.
+- Diagnostic: the logs of local systemd services are read from journald (`journalctl`, one
+  unit at a time, asynchronous, once a minute) into the same log ring as the UDP logs of
+  the devices, so they appear in the same panel and downloads.
+
+### Changed
+
+- Resync the vendored morfBeacon (0.8.0).
+
 ## [0.24.16] - 2026-10-11
 
 ### Changed

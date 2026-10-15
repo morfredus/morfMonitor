@@ -318,6 +318,7 @@ private:
         int    uptimeS   = -1;  // /status uptime_s (-1 si absent)
         int    freeHeapB = -1;  // metrics.free_heap_b (-1 si absent)
         int    freeBlockB = -1; // metrics.free_block_b (-1 si absent)
+        qint64 memB      = -1;  // memoire UTILISEE du service (cgroup systemd), -1 si absente
     };
     struct HealthSeries {
         QString app;
@@ -325,6 +326,19 @@ private:
         QVector<HealthSample> samples;
     };
     QHash<QString, HealthSeries> m_health;
+    // Derniere memoire utilisee (octets) par application, relevee sur l'etat systemd
+    // LOCAL. Les services Linux n'ont pas de « heap libre » comme un ESP32 : leur
+    // courbe de Diagnostic est la memoire consommee (une hausse continue = fuite).
+    QHash<QString, qint64> m_latestMem;
+
+    // Logs journald des services systemd LOCAUX : un ESP32 diffuse ses logs en UDP, un
+    // service Linux ecrit dans le journal. On le relit (journalctl, une unite a la fois,
+    // sans bloquer) pour alimenter le MEME anneau de logs que les equipements.
+    QVector<QPair<QString, QString>> m_journalTodo;   // (unite, app) restant a lire
+    QElapsedTimer m_journalAge;
+    bool m_journalBusy = false;
+    void pollJournal(const QVector<QPair<QString, QString>>& unitApp);
+    void readNextJournal();
     qint64  m_healthLastSaveMs = 0;
 
     // Enregistre un point de sante depuis un /status fraichement lu (sous-echantillonne

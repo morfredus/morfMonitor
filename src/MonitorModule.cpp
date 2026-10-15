@@ -28,6 +28,8 @@
 #include <QTimer>
 #include <QRegularExpression>
 #include <QCoreApplication>
+#include <QProcess>
+#include <QPointer>
 
 #ifndef MORFBEACON_VENDORED_VERSION
 #  define MORFBEACON_VENDORED_VERSION ""
@@ -421,6 +423,7 @@ void MonitorModule::recordHealth(const QString& key, const QString& app,
         smp.freeHeapB = metrics.value(QStringLiteral("free_heap_b")).toInt(-1);
     if (metrics.contains(QStringLiteral("free_block_b")))
         smp.freeBlockB = metrics.value(QStringLiteral("free_block_b")).toInt(-1);
+    smp.memB = m_latestMem.value(app, -1);
     s.samples.append(smp);
 
     // Purge au-dela de 48 h.
@@ -453,6 +456,7 @@ void MonitorModule::saveHealth() const {
             p.append(smp.uptimeS);
             p.append(smp.freeHeapB);
             p.append(smp.freeBlockB);
+            p.append(static_cast<double>(smp.memB));
             arr.append(p);
         }
         so[QStringLiteral("samples")] = arr;
@@ -489,6 +493,7 @@ void MonitorModule::loadHealth() {
             smp.uptimeS    = p.at(1).toInt(-1);
             smp.freeHeapB  = p.at(2).toInt(-1);
             smp.freeBlockB = p.at(3).toInt(-1);
+            smp.memB       = p.size() >= 5 ? static_cast<qint64>(p.at(4).toDouble(-1)) : -1;
             if (smp.ts >= cutoff)      // on jette au chargement ce qui a plus de 48 h
                 s.samples.append(smp);
         }
@@ -513,6 +518,7 @@ QJsonObject MonitorModule::healthHistoryJson(const QString& service) const {
             if (smp.uptimeS >= 0)    o[QStringLiteral("uptime_s")]    = smp.uptimeS;
             if (smp.freeHeapB >= 0)  o[QStringLiteral("free_heap_b")] = smp.freeHeapB;
             if (smp.freeBlockB >= 0) o[QStringLiteral("free_block_b")] = smp.freeBlockB;
+            if (smp.memB >= 0)       o[QStringLiteral("mem_b")]        = static_cast<double>(smp.memB);
             arr.append(o);
         }
         so[QStringLiteral("samples")] = arr;
@@ -659,8 +665,8 @@ QString MonitorModule::diagnosticText(const QString& source) const {
         for (const auto& s : hs->samples) {
             out += QDateTime::fromSecsSinceEpoch(s.ts)
                        .toString(QStringLiteral("yyyy-MM-dd HH:mm:ss"));
-            out += QStringLiteral("  heap=%1  bloc=%2  uptime=%3s\n")
-                       .arg(s.freeHeapB).arg(s.freeBlockB).arg(s.uptimeS);
+            out += QStringLiteral("  heap=%1  bloc=%2  mem=%3  uptime=%4s\n")
+                       .arg(s.freeHeapB).arg(s.freeBlockB).arg(s.memB).arg(s.uptimeS);
         }
     }
 
@@ -1152,6 +1158,70 @@ void MonitorModule::evaluateFunctionalAlerts() {
     }
 }
 
+// --- Logs journald des services locaux ---------------------------------------
+
+void MonitorModule::pollJournal(const QVector<QPair<QString, QString>>& unitApp) {
+#ifdef Q_OS_WIN
+    Q_UNUSED(unitApp);                  // pas de journald sous Windows
+#else
+    if (m_journalBusy || unitApp.isEmpty())
+        return;
+    if (m_journalAge.isValid() && m_journalAge.elapsed() < 60 * 1000)
+        return;                         // une relecture par minute suffit pour un diagnostic
+    m_journalAge.restart();
+    m_journalTodo = unitApp;
+    m_journalBusy = true;
+    readNextJournal();
+#endif
+}
+
+void MonitorModule::readNextJournal() {
+    if (m_journalTodo.isEmpty()) {
+        m_journalBusy = false;
+        return;
+    }
+    const auto [unit, app] = m_journalTodo.takeFirst();
+
+    // Une unite a la fois, de facon ASYNCHRONE : lancer journalctl en bloquant gelerait
+    // la boucle d'evenements (donc /status et le heartbeat) le temps de la lecture.
+    auto* p = new QProcess(this);
+    QPointer<QProcess> guard(p);
+    connect(p, &QProcess::finished, this, [this, p, app]() {
+        const QString text = QString::fromUtf8(p->readAllStandardOutput());
+        p->deleteLater();
+        LogRing ring;
+        ring.host = QHostInfo::localHostName();
+        for (const QString& raw : text.split(QLatin1Char('\n'))) {
+            if (raw.trimmed().isEmpty())
+                continue;
+            const QJsonObject e = QJsonDocument::fromJson(raw.toUtf8()).object();
+            const QJsonValue msg = e.value(QStringLiteral("MESSAGE"));
+            if (!msg.isString())
+                continue;               // message binaire (tableau d'octets) : ignore
+            const qint64 ts = e.value(QStringLiteral("__REALTIME_TIMESTAMP")).toString().toLongLong() / 1000000;
+            ring.lines.append({ts, msg.toString().trimmed()});
+        }
+        // Le journal est la verite : on remplace l'anneau (journalctl -n renvoie deja les
+        // lignes precedentes), sauf s'il n'a rien rendu (acces refuse) pour ne rien effacer.
+        if (!ring.lines.isEmpty())
+            m_logs.insert(app, ring);
+        readNextJournal();
+    });
+    // journalctl introuvable : `finished` ne sera jamais emis, on passe a l'unite suivante.
+    connect(p, &QProcess::errorOccurred, this, [this, p](QProcess::ProcessError err) {
+        if (err != QProcess::FailedToStart)
+            return;
+        p->deleteLater();
+        readNextJournal();
+    });
+    // Filet de securite : un journalctl qui ne rend pas la main ne doit pas bloquer la chaine.
+    QTimer::singleShot(8000, p, [guard]() { if (guard) guard->kill(); });
+    p->start(QStringLiteral("journalctl"),
+             {QStringLiteral("-u"), unit + QStringLiteral(".service"), QStringLiteral("-n"),
+              QStringLiteral("200"), QStringLiteral("-o"), QStringLiteral("json"),
+              QStringLiteral("--no-pager")});
+}
+
 // --- Alimentation de la memoire temporelle -----------------------------------
 
 void MonitorModule::feedMemory() {
@@ -1198,6 +1268,29 @@ void MonitorModule::feedMemory() {
         if (si.active && beaconAge.contains(app))
             si.stuck = beaconAge.value(app) >= offlineAfter;   // actif mais muet
         sysByApp.insert(app, si);
+
+        // Memoire utilisee (cgroup) : alimente la courbe du Diagnostic. Un service
+        // arrete n'a pas de consommation (bloc `resources` absent) : on oublie la valeur.
+        const QJsonObject res = o.value(QStringLiteral("resources")).toObject();
+        if (res.contains(QStringLiteral("memory_bytes")))
+            m_latestMem.insert(app, static_cast<qint64>(res.value(QStringLiteral("memory_bytes")).toDouble()));
+        else
+            m_latestMem.remove(app);
+    }
+
+    // Logs journald des services locaux actifs (au plus une relecture par minute).
+    {
+        QVector<QPair<QString, QString>> units;
+        for (const QJsonValue& v : sysArr) {
+            const QJsonObject o = v.toObject();
+            if (!o.value(QStringLiteral("active")).toBool())
+                continue;
+            const QString unit = o.value(QStringLiteral("unit")).toString();
+            const QString app  = appByUnit.value(unit);
+            if (!unit.isEmpty() && !app.isEmpty())
+                units.append({unit, app});
+        }
+        pollJournal(units);
     }
 
     // Instantane par service DECLARE, a partir de la vue beacon deja assemblee

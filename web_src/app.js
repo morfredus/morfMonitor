@@ -1286,8 +1286,10 @@ function mergeDiag(series, sources) {
     const last = e.samples.length ? e.samples[e.samples.length - 1] : {};
     e.last = last;
     e.hasHeap = e.samples.some((p) => typeof p.free_heap_b === 'number');
+    // Service Linux : pas de heap libre, mais la memoire utilisee de son cgroup systemd.
+    e.hasMem = !e.hasHeap && e.samples.some((p) => typeof p.mem_b === 'number');
     e.hasLog = !!(e.log && (e.log.lines || []).length);
-    e.hasData = e.hasHeap || e.hasLog;
+    e.hasData = e.hasHeap || e.hasMem || e.hasLog;
     return e;
   });
 }
@@ -1295,12 +1297,14 @@ function mergeDiag(series, sources) {
 // Courbe de mémoire d'un équipement : heap libre + plus gros bloc contigu, sur une
 // échelle commune, avec axes (valeurs min/médiane/max, temps écoulé), légende et
 // valeur courante. Sans ces repères une courbe seule ne dit pas ce qu'elle mesure.
-function heapChart(samples) {
-  const pts = samples.filter((p) => typeof p.free_heap_b === 'number');
+function heapChart(samples, used) {
+  // `used` : courbe de memoire UTILISEE (service Linux) au lieu du heap libre d'un ESP32.
+  const mainKey = used ? 'mem_b' : 'free_heap_b';
+  const pts = samples.filter((p) => typeof p[mainKey] === 'number');
   if (pts.length < 2) return '<p class="muted">Historique en cours de constitution (au moins 2 points, 1 par minute).</p>';
   const W = 640, H = 190, L = 62, R = 14, T = 12, B = 28;
   const t0 = pts[0].ts, t1 = pts[pts.length - 1].ts, dt = (t1 - t0) || 1;
-  const vals = pts.flatMap((p) => [p.free_heap_b, p.free_block_b]).filter((v) => typeof v === 'number');
+  const vals = pts.flatMap((p) => [p[mainKey], used ? null : p.free_block_b]).filter((v) => typeof v === 'number');
   let min = Math.min(...vals), max = Math.max(...vals);
   const pad = ((max - min) || max * 0.1 || 1) * 0.08;   // marge pour ne pas coller aux bords
   min = Math.max(0, min - pad); max += pad;
@@ -1325,16 +1329,17 @@ function heapChart(samples) {
   const last = pts[pts.length - 1];
   const dot = (key, cls) => (typeof last[key] === 'number'
     ? `<circle class="${cls}" cx="${x(last.ts).toFixed(1)}" cy="${y(last[key]).toFixed(1)}" r="3.5"/>` : '');
-  const hasBlock = pts.some((p) => typeof p.free_block_b === 'number');
+  const hasBlock = !used && pts.some((p) => typeof p.free_block_b === 'number');
   return `<div class="chart">
-    <div class="ch-legend"><span class="ch-key k-heap"></span>Heap libre : mémoire totale disponible
+    <div class="ch-legend"><span class="ch-key k-heap"></span>${used ? 'Mémoire utilisée : consommation du service (cgroup systemd)' : 'Heap libre : mémoire totale disponible'}
       ${hasBlock ? '<span class="ch-key k-block"></span>Plus gros bloc : plus grande allocation possible d’un seul tenant' : ''}</div>
     <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Évolution de la mémoire libre">
-      ${grid}${ticks}${hasBlock ? line('free_block_b', 'ch-block') : ''}${line('free_heap_b', 'ch-heap')}
-      ${dot('free_block_b', 'ch-block-dot')}${dot('free_heap_b', 'ch-heap-dot')}
+      ${grid}${ticks}${hasBlock ? line('free_block_b', 'ch-block') : ''}${line(mainKey, 'ch-heap')}
+      ${hasBlock ? dot('free_block_b', 'ch-block-dot') : ''}${dot(mainKey, 'ch-heap-dot')}
     </svg>
-    <div class="muted ch-note">Une baisse continue du heap annonce une fuite mémoire ; un plus gros bloc qui s’effondre
-      alors que le heap reste stable signale une fragmentation. Un saut brutal vers le haut = redémarrage.</div></div>`;
+    <div class="muted ch-note">${used
+      ? 'Une hausse continue de la mémoire utilisée annonce une fuite ; une chute brutale = redémarrage du service.'
+      : 'Une baisse continue du heap annonce une fuite mémoire ; un plus gros bloc qui s’effondre alors que le heap reste stable signale une fragmentation. Un saut brutal vers le haut = redémarrage.'}</div></div>`;
 }
 
 // Sources dont le panneau de logs est déplié.
@@ -1354,6 +1359,13 @@ function diagBlock(e) {
       ${stat('Heap min 48 h', min != null ? bytes(min) : '-')}
       ${stat('Uptime', l.uptime_s != null ? duration(l.uptime_s) : '-')}</div>
       ${heapChart(e.samples)}`;
+  } else if (e.hasMem) {
+    const memVals = e.samples.map((p) => p.mem_b).filter((v) => typeof v === 'number');
+    html += `<div class="esp-stats">
+      ${stat('Mémoire utilisée', l.mem_b != null ? bytes(l.mem_b) : '-')}
+      ${stat('Pic 48 h', bytes(Math.max(...memVals)))}
+      ${stat('Uptime', l.uptime_s != null ? duration(l.uptime_s) : '-')}</div>
+      ${heapChart(e.samples, true)}`;
   } else if (l.uptime_s != null) {
     html += `<div class="esp-stats">${stat('Uptime', duration(l.uptime_s))}</div>`;
   }
