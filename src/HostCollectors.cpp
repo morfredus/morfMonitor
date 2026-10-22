@@ -68,6 +68,34 @@ QString runCommand(const QString& program, const QStringList& args, int timeoutM
     return QString::fromUtf8(p.readAllStandardOutput());
 }
 
+// vcgencmd passe par le mailbox firmware du Pi. Quand celui-ci cale (constate le
+// 2026-10-22 : mutex vcio tenu par un kworker), l'appel reste en etat D, que kill()
+// ne peut pas terminer. Relancer vcgencmd a chaque collecte empilerait alors des
+// processus coinces, la charge monterait jusqu'au gel de la machine. On garde donc
+// UN SEUL vcgencmd a la fois : tant que le precedent n'est pas termine, on s'abstient
+// (valeur absente de la reponse) et on ne bloque jamais, ni sur lui ni dans le
+// destructeur. Le QProcess est volontairement alloue sur le tas et fuit s'il reste coince.
+QString runVcgencmd(const QStringList& args, int timeoutMs = 2000) {
+    static QProcess* pending = nullptr;
+    if (pending) {
+        pending->waitForFinished(1); // laisse Qt constater une fin eventuelle
+        if (pending->state() != QProcess::NotRunning)
+            return QString();        // toujours coince : ne rien relancer
+        delete pending;
+        pending = nullptr;
+    }
+    pending = new QProcess;
+    pending->start(QStringLiteral("/usr/bin/vcgencmd"), args);
+    if (!pending->waitForFinished(timeoutMs)) {
+        pending->kill();             // sans attente : peut ne jamais aboutir
+        return QString();
+    }
+    const QString out = QString::fromUtf8(pending->readAllStandardOutput());
+    delete pending;
+    pending = nullptr;
+    return out;
+}
+
 // /etc/os-release : format « CLE="valeur" », guillemets facultatifs.
 QString osReleaseValue(const QString& content, const QString& key) {
     for (const QString& line : content.split(QLatin1Char('\n'))) {
@@ -416,8 +444,7 @@ QJsonObject ResourceCollector::collect() {
         // paie ce lancement de processus que si l'outil existe.
         static const bool hasVcgencmd = QFile::exists(QStringLiteral("/usr/bin/vcgencmd"));
         if (hasVcgencmd) {
-            const QString out = runCommand(QStringLiteral("/usr/bin/vcgencmd"),
-                                           {QStringLiteral("measure_temp")});
+            const QString out = runVcgencmd({QStringLiteral("measure_temp")});
             // Format : temp=42.8'C
             const QRegularExpression re(QStringLiteral("temp=([0-9.]+)"));
             const auto m = re.match(out);
@@ -427,8 +454,7 @@ QJsonObject ResourceCollector::collect() {
             // Bits de bridage : sous-tension, limite thermique... 0x0 = tout va
             // bien. C'est le diagnostic le plus utile d'un Pi instable, et il
             // n'apparait nulle part ailleurs.
-            const QString thr = runCommand(QStringLiteral("/usr/bin/vcgencmd"),
-                                           {QStringLiteral("get_throttled")});
+            const QString thr = runVcgencmd({QStringLiteral("get_throttled")});
             const QRegularExpression rt(QStringLiteral("throttled=0x([0-9a-fA-F]+)"));
             const auto mt = rt.match(thr);
             if (mt.hasMatch()) {

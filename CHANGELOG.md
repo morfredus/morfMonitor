@@ -3,6 +3,14 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.25.3] - 2026-10-22
+
+### Fixed
+
+- A stalled Raspberry Pi firmware mailbox left every `vcgencmd` call stuck (uninterruptible), and
+  one new call per collection piled up until the load froze the host. Only one `vcgencmd` runs at
+  a time now: while the previous one is stuck, GPU temperature and throttling are simply omitted.
+
 ## [0.25.2] - 2026-10-15
 
 ### Fixed
