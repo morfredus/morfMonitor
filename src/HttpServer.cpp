@@ -5,6 +5,7 @@
  */
 
 #include "morfmonitor/HttpServer.h"
+#include "morfmonitor/OriginCheck.h"
 #include "morfmonitor/ModuleRegistry.h"
 #include "morfmonitor/MonitorModule.h"
 #include "morfmonitor/Version.h"
@@ -63,6 +64,20 @@ int contentLength(const QByteArray& headerBlock) {
 // absent. Sert aux routes de la memoire temporelle (fenetre, bornes de jours,
 // filtre par service), les seules a exploiter la query -- le reste de l'API n'en
 // a pas besoin.
+// Nom de fichier sur pour Content-Disposition : le parametre `source` vient de la query
+// string, donc d'un tiers. Guillemets, CR/LF ou « ; » permettraient d'injecter des
+// en-tetes ; tout caractere hors [A-Za-z0-9._-] devient « _ ».
+QByteArray safeFileName(const QString& raw, const QByteArray& fallback) {
+    QByteArray out;
+    for (const QChar c : raw) {
+        const ushort u = c.unicode();
+        const bool ok = (u >= 'a' && u <= 'z') || (u >= 'A' && u <= 'Z') || (u >= '0' && u <= '9')
+                        || u == '.' || u == '_' || u == '-';
+        out += ok ? char(u) : '_';
+    }
+    return out.isEmpty() ? fallback : out;
+}
+
 QString queryParam(const QByteArray& query, const char* key) {
     const QByteArray k = QByteArray(key) + "=";
     for (const QByteArray& part : query.split('&')) {
@@ -131,6 +146,14 @@ void HttpServer::onSocketReadyRead(QTcpSocket* sock) {
     const QByteArray method = parts.value(0);
     const QByteArray path   = parts.value(1);
     const QByteArray body   = buf.mid(bodyStart, needed);
+
+    // Garde CSRF : une ecriture venue d'une autre origine web est refusee avant tout routage.
+    sock->setProperty("cors", allowsCors(method));
+    if (isCrossOriginWrite(method, headerBlock)) {
+        sock->setProperty("buf", QByteArray());
+        reply(sock, 403, "Forbidden", "{\"error\":\"cross_origin_forbidden\"}");
+        return;
+    }
 
     sock->setProperty("buf", QByteArray());
     handleRequest(sock, method, path, body);
@@ -303,8 +326,7 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
         // Telechargement des lignes d'un equipement.
         else if (path == "/api/logs/download") {
             const QString src = queryParam(query, "source");
-            const QByteArray fn = (src.isEmpty() ? QByteArray("equipements") : src.toUtf8())
-                                  + "-logs.txt";
+            const QByteArray fn = safeFileName(src, "equipements") + "-logs.txt";
             reply(sock, 200, "OK", mon->logsText(src).toUtf8(), "text/plain; charset=utf-8",
                   "Content-Disposition: attachment; filename=\"" + fn + "\"\r\n");
             return;
@@ -313,8 +335,7 @@ void HttpServer::handleRequest(QTcpSocket* sock, const QByteArray& method,
         // logs, dans un seul fichier texte a joindre au rapport d'un incident.
         else if (path == "/api/logs/diagnostic") {
             const QString src = queryParam(query, "source");
-            const QByteArray fn = (src.isEmpty() ? QByteArray("equipement") : src.toUtf8())
-                                  + "-diagnostic.txt";
+            const QByteArray fn = safeFileName(src, "equipement") + "-diagnostic.txt";
             reply(sock, 200, "OK", mon->diagnosticText(src).toUtf8(), "text/plain; charset=utf-8",
                   "Content-Disposition: attachment; filename=\"" + fn + "\"\r\n");
             return;
@@ -565,7 +586,9 @@ void HttpServer::reply(QTcpSocket* sock, int code, const QByteArray& reason, con
     // deroutante que le service, lui, a bien ete mis a jour.
     resp += "Cache-Control: no-store\r\n";
     resp += "Content-Length: " + QByteArray::number(body.size()) + "\r\n";
-    resp += "Access-Control-Allow-Origin: *\r\n";
+    // Jamais d'ACAO sur une ecriture (garde CSRF) ; conserve sur GET/HEAD pour les clients web.
+    if (sock->property("cors").toBool())
+        resp += "Access-Control-Allow-Origin: *\r\n";
     if (code == 405)
         resp += "Allow: GET, HEAD\r\n";
     resp += "Connection: close\r\n\r\n";

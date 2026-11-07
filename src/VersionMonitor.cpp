@@ -12,6 +12,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QSaveFile>
 #include <QJsonObject>
 #include <QJsonDocument>
 #include <QJsonArray>
@@ -26,6 +27,11 @@ namespace morfmonitor {
 
 namespace {
 qint64 nowMs() { return QDateTime::currentMSecsSinceEpoch(); }
+
+// Apres un echec (reseau coupe, limite GitHub), reessayer au bout de quelques minutes
+// et non apres le TTL complet (6 h) : sinon un incident passager laisse l'onglet
+// « Verification impossible » pendant des heures.
+constexpr qint64 kRetryAfterFailureMs = 5 * 60 * 1000;
 }
 
 VersionMonitor::VersionMonitor(QString stateDir, int ttlMs, QObject* parent)
@@ -45,7 +51,8 @@ void VersionMonitor::checkNow(bool force) {
     for (const Target& t : m_targets) {
         const Entry cached = m_entries.value(t.label);
         const bool never   = cached.lastCheckMs == 0;
-        const bool expired = (now - cached.lastCheckMs) > m_ttlMs;
+        const qint64 ttl   = cached.error.isEmpty() ? m_ttlMs : kRetryAfterFailureMs;
+        const bool expired = (now - cached.lastCheckMs) > ttl;
         if (!force && !never && !expired)
             continue;
         startCheck(t);
@@ -131,6 +138,7 @@ void VersionMonitor::startSemverTags(const Target& target) {
     req.setRawHeader("Accept", "application/vnd.github+json");
     req.setRawHeader("X-GitHub-Api-Version", "2022-11-28");
     req.setRawHeader("User-Agent", "morfMonitor-version");
+    req.setTransferTimeout(10000);   // un GitHub muet ne doit pas laisser la verification en vol indefiniment
     QNetworkReply* reply = nam->get(req);
     connect(reply, &QNetworkReply::finished, this, [this, label, owner, repo = target.repo, nam, reply]() {
         reply->deleteLater();
@@ -261,9 +269,14 @@ void VersionMonitor::save() const {
             {"error", e.error},
         };
     }
-    QFile f(versionsFile(m_stateDir));
-    if (f.open(QIODevice::WriteOnly | QIODevice::Truncate))
-        f.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
+    // QSaveFile : ecriture dans un fichier temporaire puis renommage atomique. Un disque
+    // plein ou un arret en plein write laisse l'ancien versions.json intact au lieu
+    // d'un fichier tronque relu comme vide au demarrage suivant.
+    QSaveFile f(versionsFile(m_stateDir));
+    if (!f.open(QIODevice::WriteOnly))
+        return;
+    f.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
+    f.commit();
 }
 
 void VersionMonitor::load() {

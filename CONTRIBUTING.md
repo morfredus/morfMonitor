@@ -1,7 +1,7 @@
 # Contribuer à morfMonitor
 
 morfMonitor supervise la machine hôte et expose son état en JSON. Il est bâti sur
-la mécanique commune des services morfSystem (issue de morfTemplateService) :
+la mécanique commune des services morfSystem :
 config, registre de modules, serveur HTTP, annonce LAN.
 
 ## 1. Philosophie
@@ -13,9 +13,8 @@ config, registre de modules, serveur HTTP, annonce LAN.
   modification.
 - **Qt Core + Network uniquement.** morfBeacon reste vendoré. Portable Windows /
   Linux x64 / Raspberry Pi.
-- **Renommable.** Tout nom propre au template doit rester l'un des trois jetons
-  gérés par les scripts de clonage : `morfMonitor`, `morfmonitor`,
-  `MORFMONITOR`. Ne pas introduire d'autre variante de nom.
+- **Nommage stable.** Un nom propre au projet reste l'un des trois jetons
+  `morfMonitor`, `morfmonitor`, `MORFMONITOR`. Ne pas introduire d'autre variante.
 
 ## 2. Faire évoluer morfMonitor
 
@@ -32,6 +31,5 @@ curl http://127.0.0.1:8790/api/all
 ## 3. Style
 
 - C++17, conventions des projets frères : en-tête de licence SPDX, namespace
-  `morfmonitor`, commentaires en français expliquant le **pourquoi**, marqueurs
-  `>>> A ADAPTER <<<` aux endroits que le développeur doit personnaliser.
+  `morfmonitor`, commentaires en français expliquant le **pourquoi**.
 - Fins de ligne : voir `.gitattributes` (LF dans le dépôt ; `.ps1` en CRLF).

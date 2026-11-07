@@ -1,18 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 # =============================================================================
-#  morfMonitor - squelette reutilisable de service morfSystem.
-#
-#  POUR CREER UN NOUVEAU SERVICE : le plus simple est le script de clonage
-#      scripts/new-service.sh   morfmonservice MorfMonService   (Linux/macOS)
-#      scripts/new-service.ps1  morfmonservice MorfMonService   (Windows)
-#  qui copie ce projet en remplacant les noms. Sinon, remplacer a la main :
-#      morfMonitor  (nom du projet / bibliotheque)
-#      morfmonitor         (namespace, dossier include, binaire, unite systemd)
-#      MORFMONITOR         (prefixe de macro)
-#
-#  Ensuite : coder le metier dans src/ExampleModule.* (ou de nouveaux modules),
-#  adapter la fabrique (src/ModuleFactory.cpp) et la liste de sources ci-dessous.
+#  morfMonitor - supervision de la machine hote et de ses services (morfSystem).
 # =============================================================================
 
 # Version pilotee par le fichier VERSION (convention morfSystem).
@@ -64,7 +53,6 @@ if(NOT TARGET morfUpdate::morfUpdate)
 endif()
 
 # --- Bibliotheque ---------------------------------------------------------
-# >>> A ADAPTER : ajouter/retirer ici les sources de VOS modules metier. <<<
 add_library(morfMonitor STATIC
     resources/web.qrc                     # interface Web (assets embarques)
     src/ModuleRegistry.cpp
@@ -141,4 +129,13 @@ option(MORFMONITOR_BUILD_EXAMPLES "Compiler l'exemple de demonstration" ${_morfm
 
 if(MORFMONITOR_BUILD_EXAMPLES)
     add_subdirectory(examples/minimal)
+endif()
+
+# --- Test du controle d'origine (garde CSRF) : en-tete seul, sans reseau ----
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    enable_testing()
+    add_executable(morfmonitor_origin_test test/origin-check-test.cpp)
+    target_include_directories(morfmonitor_origin_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(morfmonitor_origin_test PRIVATE Qt6::Core)
+    add_test(NAME origin-check COMMAND morfmonitor_origin_test)
 endif()

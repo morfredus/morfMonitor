@@ -16,7 +16,7 @@ namespace morfmonitor {
 
 inline QString version() { return QStringLiteral(MORFMONITOR_VERSION); }
 
-// Version du protocole HTTP/JSON expose. >>> A ADAPTER si l'API change. <<<
+// Version du protocole HTTP/JSON expose (a incrementer si l'API change).
 inline constexpr const char* kProtocol = "morfmonitor/1";
 
 } // namespace morfmonitor

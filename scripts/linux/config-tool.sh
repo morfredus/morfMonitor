@@ -10,7 +10,7 @@
 # APPARUES depuis l'installation ; il ne corrige pas une valeur DEJA PRESENTE
 # devenue invalide.
 #
-# C'est ce qui est arrive au module `example`, herite du gabarit : la cle
+# C'est ce qui est arrive au module `example`, ancien module de demonstration retire : la cle
 # `modules` existait, la fusion n'y touchait pas, et le service tournait en
 # repondant 503 sur toutes les routes /api/ faute de module de supervision.
 #

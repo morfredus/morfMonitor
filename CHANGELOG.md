@@ -3,6 +3,37 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.26.2] - 2026-11-07
+
+### Changed
+
+- Removed leftover references to the service skeleton (docs, comments, scripts).
+
+## [0.26.1] - 2026-11-07
+
+### Changed
+
+- Resync the vendored morfUpdate core to 0.9.0: loopback health URL parsed with `QUrl`, `Host` and `Origin` checks on the local API, downgrade refused unless explicitly allowed, subprocess timeouts and a minimal environment, archives with links refused. Update checks are unchanged.
+
+## [0.26.0] - 2026-11-07
+
+### Security
+
+- CSRF guard: a write whose `Origin` names another host:port than `Host` is refused with
+  `403 {"error":"cross_origin_forbidden"}`; `Access-Control-Allow-Origin: *` is no longer sent on
+  writes (kept on GET/HEAD). New `origin-check` ctest.
+- `Content-Disposition` of `/api/logs/download` and `/api/logs/diagnostic`: the file name is
+  reduced to `[A-Za-z0-9._-]`, so a crafted `source` cannot inject header content.
+
+### Fixed
+
+- TCP probes, the systemd collection and the reboot-cause detection no longer run on the main
+  thread: they execute in the thread pool and the last result is served meanwhile (eight offline
+  targets froze the event loop, HTTP and the beacon heartbeat for about eight seconds).
+- SIGTERM and SIGINT stop the event loop cleanly, so `stop()` runs on every systemd stop or update.
+- Version checks: retried after 5 minutes (not the full 6 h TTL) following a failure, GitHub tag
+  requests time out after 10 s, and `versions.json` is written atomically with `QSaveFile`.
+
 ## [0.25.3] - 2026-10-22
 
 ### Fixed

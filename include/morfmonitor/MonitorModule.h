@@ -18,6 +18,7 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QStringList>
+#include <functional>
 #include <memory>
 
 class QTimer;
@@ -202,7 +203,12 @@ private:
     SystemCollector     m_system;
     ResourceCollector   m_resources;
     NetworkCollector    m_network;
-    RebootCauseDetector m_reboot;
+    // Cause du redemarrage : determinee UNE fois, hors du thread principal (journalctl
+    // peut prendre jusqu'a 5 s). Tant que le resultat n'est pas la, rebootJson() publie
+    // « inconnue + pending » plutot que de geler l'event-loop (HTTP, heartbeat beacon).
+    QJsonObject m_rebootValue;
+    bool        m_rebootReady = false;
+    bool        m_rebootBusy  = false;
     std::unique_ptr<Supervisor>     m_supervisor;
     std::unique_ptr<VersionMonitor> m_versions;   // versions de services (via morfUpdate)
 
@@ -211,10 +217,17 @@ private:
         QJsonObject value;
         QElapsedTimer age;
         bool valid = false;
+        bool busy  = false;   // un releve asynchrone est deja en vol pour ce cache
     };
     Cached m_cResources, m_cNetwork, m_cSystemd, m_cProbes;
 
     bool isFresh(const Cached& c, int maxAgeMs) const;
+
+    // Releve lent (systemctl, sondes TCP) execute dans le QThreadPool, jamais dans le
+    // thread principal : 8 cibles hors ligne gelaient auparavant l'event-loop ~8 s. Au
+    // plus un releve a la fois par cache ; le resultat est publie dans le thread
+    // principal, et les appelants lisent entre-temps la derniere valeur connue.
+    void refreshAsync(Cached& cache, std::function<QJsonObject()> job);
 
     // --- Écoute des heartbeats morfBeacon ------------------------------------
     // On ÉCOUTE, on ne sonde pas : les applications de bureau annoncent leur

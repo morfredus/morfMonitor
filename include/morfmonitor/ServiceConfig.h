@@ -32,7 +32,7 @@ struct ModuleDef {
 // ServiceConfig : configuration complete du service. Charge depuis un fichier
 // JSON (voir config/morfmonitor.example.json).
 //
-// >>> A ADAPTER : ajoutez ici les reglages globaux propres a votre service. <<<
+// Reglages globaux propres au service.
 // -----------------------------------------------------------------------------
 struct ServiceConfig {
     QString appName    = QStringLiteral("morfMonitor");

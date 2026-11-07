@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * Charge une configuration JSON, demarre les modules, ouvre l'API HTTP et
- * annonce sa presence sur le LAN (morfBeacon). Squelette reutilisable : le
- * comportement propre au service vit dans les modules (voir IModule).
+ * annonce sa presence sur le LAN (morfBeacon). Le comportement propre
+ * au service vit dans les modules (voir IModule).
  */
 
 #include <QCoreApplication>
@@ -58,10 +58,9 @@ QString findDefaultConfig() {
     return {};
 }
 
-// Config de repli : un module 'example', pour tester le squelette sans config.
 // Repli utilise quand AUCUNE configuration n'est trouvee.
 //
-// Il declarait un module « example », heritage du gabarit : un type que la
+// Il declarait un module « example » (ancien module de demonstration, retire) : un type que la
 // fabrique de morfMonitor ne connait pas. Le service demarrait donc, annoncait
 // sa presence sur le LAN, et repondait 503 sur TOUTES les routes /api/ - sans
 // aucun module de supervision. Un repli doit donner un service qui fonctionne,
@@ -104,7 +103,7 @@ int main(int argc, char** argv) {
 
     QCommandLineParser parser;
     parser.setApplicationDescription(
-        QStringLiteral("morfMonitor - squelette de service morfSystem "
+        QStringLiteral("morfMonitor - supervision de la machine hote "
                        "(API HTTP + annonce LAN, modules enfichables)."));
     parser.addHelpOption();
     parser.addVersionOption();
@@ -158,6 +157,13 @@ int main(int argc, char** argv) {
           << config.bindAddress << ':' << service.httpPort()
           << "/  (GET /status /healthz /modules /api/... ; POST /api/machines/forget)\n";
     out().flush();
+
+    // Arret propre (SIGTERM/SIGINT -> quit) : stop() du service ferme le serveur HTTP et
+    // laisse les modules persister leur etat avant la sortie.
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, &service, [&service]() { service.stop(); });
+#ifdef Q_OS_UNIX
+    installSignalBridge(app);
+#endif
 
     return app.exec();
 }

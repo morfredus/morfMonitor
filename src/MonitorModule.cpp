@@ -30,6 +30,7 @@
 #include <QCoreApplication>
 #include <QProcess>
 #include <QPointer>
+#include <QThreadPool>
 
 #ifndef MORFBEACON_VENDORED_VERSION
 #  define MORFBEACON_VENDORED_VERSION ""
@@ -156,7 +157,11 @@ MonitorModule::MonitorModule(const QString& id, QString configPath, QObject* par
     : IModule(id, QStringLiteral("monitor"), parent),
       m_configPath(std::move(configPath)) {}
 
-MonitorModule::~MonitorModule() = default;
+MonitorModule::~MonitorModule() {
+    // Attend les releves asynchrones en vol : ils referencent le superviseur et les caches
+    // de ce module, qui ne doivent pas disparaitre sous leurs pieds.
+    QThreadPool::globalInstance()->waitForDone(10000);
+}
 
 bool MonitorModule::start() {
     // Un échec de chargement n'empêche PAS le démarrage : le service doit
@@ -185,6 +190,14 @@ bool MonitorModule::start() {
     // Historique de sante FIFO : recharge les points des 48 dernieres heures (un
     // redemarrage de morfMonitor ne perd donc pas la tendance heap deja captee).
     loadHealth();
+
+    // Prechauffage des releves lents (hors thread principal) : la premiere requete HTTP
+    // ne trouve ainsi pas des caches vides.
+    rebootJson();
+    if (m_config.isLoaded()) {
+        Supervisor* sup = m_supervisor.get();
+        refreshAsync(m_cSystemd, [sup]() { return sup->collectSystemd(); });
+    }
 
     m_beaconSocket = new QUdpSocket(this);
     // ShareAddress : d'autres programmes de la machine (le Dashboard en mode
@@ -279,6 +292,26 @@ qint64 MonitorModule::uptimeSeconds() const {
 
 bool MonitorModule::isFresh(const Cached& c, int maxAgeMs) const {
     return c.valid && c.age.isValid() && c.age.elapsed() < maxAgeMs;
+}
+
+void MonitorModule::refreshAsync(Cached& cache, std::function<QJsonObject()> job) {
+    if (cache.busy)
+        return;
+    cache.busy = true;
+    Cached* target = &cache;   // membre de ce module : vit aussi longtemps que lui (cf. destructeur)
+    QPointer<MonitorModule> self(this);
+    QThreadPool::globalInstance()->start([self, target, job = std::move(job)]() {
+        const QJsonObject value = job();
+        // Publication dans le thread principal (propriétaire des caches).
+        if (!self)
+            return;
+        QMetaObject::invokeMethod(self.data(), [target, value]() {
+            target->value = value;
+            target->age.restart();
+            target->valid = true;
+            target->busy  = false;
+        }, Qt::QueuedConnection);
+    });
 }
 
 // --- Heartbeats morfBeacon ---------------------------------------------------
@@ -1243,10 +1276,11 @@ void MonitorModule::feedMemory() {
 
     // Etat systemd LOCAL (preuve de vie/cycle de vie OS). Reutilise le cache ; ne
     // relance systemctl qu'a l'expiration, exactement comme servicesJson.
-    if (!isFresh(m_cSystemd, m_config.systemdRefreshMs())) {
-        m_cSystemd.value = m_supervisor ? m_supervisor->collectSystemd() : QJsonObject{};
-        m_cSystemd.age.restart();
-        m_cSystemd.valid = true;
+    // Config chargee exigee : le releve tourne hors du thread principal et lit la config,
+    // que seul le rechargement initial (thread principal) modifie.
+    if (m_supervisor && m_config.isLoaded() && !isFresh(m_cSystemd, m_config.systemdRefreshMs())) {
+        Supervisor* sup = m_supervisor.get();
+        refreshAsync(m_cSystemd, [sup]() { return sup->collectSystemd(); });
     }
     const QJsonArray sysArr = m_cSystemd.value.value(QStringLiteral("services")).toArray();
     const QHash<QString, qint64> beaconAge = beaconAgeByLocalApp(now);
@@ -1411,10 +1445,11 @@ QJsonObject MonitorModule::servicesJson() {
         }
     }
 
-    if (!isFresh(m_cSystemd, m_config.systemdRefreshMs())) {
-        m_cSystemd.value = m_supervisor ? m_supervisor->collectSystemd() : QJsonObject{};
-        m_cSystemd.age.restart();
-        m_cSystemd.valid = true;
+    // Config chargee exigee : le releve tourne hors du thread principal et lit la config,
+    // que seul le rechargement initial (thread principal) modifie.
+    if (m_supervisor && m_config.isLoaded() && !isFresh(m_cSystemd, m_config.systemdRefreshMs())) {
+        Supervisor* sup = m_supervisor.get();
+        refreshAsync(m_cSystemd, [sup]() { return sup->collectSystemd(); });
     }
     // Croise l'etat systemd (preuve de VIE) avec la fraicheur du heartbeat beacon
     // (preuve de SANTE). Un service que systemd voit « active » mais dont le beacon
@@ -1452,11 +1487,11 @@ QJsonObject MonitorModule::servicesJson() {
         o["systemd"] = services;
     }
 
-    if (!isFresh(m_cProbes, m_config.probesRefreshMs())) {
-        m_cProbes.value = m_supervisor ? m_supervisor->collectProbes(uptimeSeconds())
-                                       : QJsonObject{};
-        m_cProbes.age.restart();
-        m_cProbes.valid = true;
+    if (m_supervisor && m_config.isLoaded() && !isFresh(m_cProbes, m_config.probesRefreshMs())) {
+        // Sondes TCP lentes (jusqu'a timeout_ms par cible hors ligne) : hors thread principal.
+        Supervisor* sup = m_supervisor.get();
+        const qint64 up = uptimeSeconds();
+        refreshAsync(m_cProbes, [sup, up]() { return sup->collectProbes(up); });
     }
     o["network"] = m_cProbes.value.value(QStringLiteral("probes"));
     o["network_grace"] = m_cProbes.value.value(QStringLiteral("grace"));
@@ -1612,7 +1647,30 @@ void MonitorModule::triggerVersionCheck() {
 }
 
 QJsonObject MonitorModule::rebootJson() {
-    return m_reboot.detect();
+    if (m_rebootReady)
+        return m_rebootValue;
+    if (!m_rebootBusy) {
+        m_rebootBusy = true;
+        QPointer<MonitorModule> self(this);
+        QThreadPool::globalInstance()->start([self]() {
+            RebootCauseDetector detector;   // instance locale : aucun etat partage avec le thread principal
+            const QJsonObject value = detector.detect();
+            if (!self)
+                return;
+            QMetaObject::invokeMethod(self.data(), [self, value]() {
+                if (!self)
+                    return;
+                self->m_rebootValue = value;
+                self->m_rebootReady = true;
+                self->m_rebootBusy  = false;
+            }, Qt::QueuedConnection);
+        });
+    }
+    // Pas encore determinee : on le dit (« inconnue » est une reponse honnete) sans bloquer.
+    return QJsonObject{{"cause", QStringLiteral("unknown")},
+                       {"label", QStringLiteral("Cause du redémarrage en cours de détermination")},
+                       {"confidence", 0.0},
+                       {"pending", true}};
 }
 
 QJsonObject MonitorModule::allJson() {
