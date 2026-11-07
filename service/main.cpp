@@ -20,6 +20,12 @@
 #include <morfmonitor/Service.h>
 #include <morfmonitor/ModuleFactory.h>
 #include <morfmonitor/Version.h>
+#ifdef Q_OS_UNIX
+#include <QSocketNotifier>
+#include <csignal>
+#include <sys/socket.h>
+#include <unistd.h>
+#endif
 
 using morfmonitor::ServiceConfig;
 
@@ -93,6 +99,40 @@ bool loadConfig(const QString& path, ServiceConfig* outCfg, QString* error) {
     *outCfg = ServiceConfig::fromJson(doc.object());
     return true;
 }
+
+#ifdef Q_OS_UNIX
+// Pont signal -> boucle Qt (technique « self-pipe »). Un gestionnaire de signal ne peut appeler
+// que du code async-signal-safe : il écrit donc un octet dans une paire de sockets, et un
+// QSocketNotifier le lit côté boucle d'événements pour appeler quit(). Ainsi SIGTERM (arrêt
+// systemd) et SIGINT (Ctrl+C) déclenchent aboutToQuit, donc l'arrêt propre du service, au lieu
+// d'une mort brutale qui laisserait l'état et le serveur HTTP en plan.
+int g_signalFd[2] = {-1, -1};
+
+void onTerminationSignal(int) {
+    const char byte = 1;
+    const ssize_t ignored = ::write(g_signalFd[0], &byte, 1);   // seul appel permis ici
+    (void)ignored;
+}
+
+void installSignalBridge(QCoreApplication& app) {
+    if (::socketpair(AF_UNIX, SOCK_STREAM, 0, g_signalFd) != 0)
+        return;   // pas de pont : le service garde le comportement par défaut du signal
+    auto* notifier = new QSocketNotifier(g_signalFd[1], QSocketNotifier::Read, &app);
+    QObject::connect(notifier, &QSocketNotifier::activated, &app, [notifier]() {
+        notifier->setEnabled(false);   // un seul quit() suffit, même si le signal est répété
+        char byte = 0;
+        const ssize_t ignored = ::read(g_signalFd[1], &byte, 1);
+        (void)ignored;
+        QCoreApplication::quit();
+    });
+    struct sigaction action {};
+    action.sa_handler = onTerminationSignal;
+    sigemptyset(&action.sa_mask);
+    action.sa_flags = SA_RESTART;
+    ::sigaction(SIGTERM, &action, nullptr);
+    ::sigaction(SIGINT, &action, nullptr);
+}
+#endif
 
 } // namespace
 
