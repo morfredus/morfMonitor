@@ -3,6 +3,18 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.26.6] - 2026-11-10
+
+### Added
+
+- `.github/FUNDING.yml` (GitHub Sponsors button).
+
+## [0.26.5] - 2026-11-10
+
+### Changed
+
+- Vendored morfUpdate resynchronised to 0.9.2: on Windows the update dialog now offers the installer (`*-setup.exe`) before the portable ZIP.
+
 ## [0.26.4] - 2026-11-10
 
 ### Changed
