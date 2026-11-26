@@ -3,6 +3,13 @@
 Le format s'inspire de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et du [versionnage sémantique](https://semver.org/lang/fr/). 
 
+## [0.27.1] - 2026-11-26
+
+### Fixed
+
+- Windows package workflow: `git` is installed in the MSYS2 environment and the checkout is declared safe, so the packaging can prove the state of the sources ("build provenance is dirty=None ... Refusing to package").
+- Vendored morfUpdate resynchronised to 0.10.1 (version file only; no behaviour change).
+
 ## [0.27.0] - 2026-11-26
 
 ### Added
